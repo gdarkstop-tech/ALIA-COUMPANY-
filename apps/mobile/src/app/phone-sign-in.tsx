@@ -1,6 +1,4 @@
-import { spacing } from '@ghayarly/tokens';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { authErrorKey, EG_PHONE_RE, normalizeEgyptPhone } from '@/features/auth/authErrors';
 import { api } from '@/lib/api';
@@ -10,7 +8,6 @@ import { useResetTo } from '@/providers/session';
 import { Button, Header, Notice, Screen, TextField } from '@/ui';
 
 export default function PhoneSignIn() {
-  const router = useRouter();
   const resetTo = useResetTo();
   const qc = useQueryClient();
   const { t } = useI18n();

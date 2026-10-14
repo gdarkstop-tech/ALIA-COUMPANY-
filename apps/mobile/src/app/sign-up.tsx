@@ -1,6 +1,6 @@
 import { spacing } from '@ghayarly/tokens';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { authErrorKey, EMAIL_RE } from '@/features/auth/authErrors';
@@ -11,7 +11,6 @@ import { useResetTo } from '@/providers/session';
 import { Button, Header, Notice, Screen, Text, TextField } from '@/ui';
 
 export default function SignUp() {
-  const router = useRouter();
   const resetTo = useResetTo();
   const qc = useQueryClient();
   const { t } = useI18n();

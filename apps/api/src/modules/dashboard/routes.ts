@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { Tx } from '../../db/client';
 import { patientHealthEntries, providerProfiles, providerServices, providerWorkingHours, userProfiles } from '../../db/schema';
 import { AppError } from '../../lib/errors';
-import { inContext, requirePrincipal, requireRole } from '../../lib/principal';
+import { inContext, requireRole } from '../../lib/principal';
 import { parse } from '../../lib/validate';
 import { listMyPatients } from '../patients/routes';
 import { earningsSummary, searchProviders } from '../providers/routes';

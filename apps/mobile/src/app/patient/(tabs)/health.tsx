@@ -12,7 +12,7 @@ import { api, errorKey } from '@/lib/api';
 import { ltr } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Header, Icon, LoadingScreen, PressableScale, Screen, Section, Text, type IconName, type Tone } from '@/ui';
+import { Avatar, Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, PressableScale, Screen, Section, Text, type IconName, type Tone } from '@/ui';
 
 const SECTION: Record<HealthEntryKind, { title: 'health.allergies' | 'health.conditions' | 'health.medications' | 'health.surgeries'; empty: 'health.emptyAllergies' | 'health.emptyConditions' | 'health.emptyMedications' | 'health.emptySurgeries'; icon: IconName }> = {
   ALLERGY: { title: 'health.allergies', empty: 'health.emptyAllergies', icon: 'mci:allergy' },

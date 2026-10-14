@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Bootstrap database roles (owner / app / auth)
+        run: PSQL="psql -h localhost -U postgres" GHAYARLY_DATABASES=ghayarly_test bash scripts/db-bootstrap.sh
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - name: Unit, API, migration, auth and RLS tests
+        run: pnpm test
+      - name: Verify native bundles compile (Android + iOS)
+        run: pnpm --filter @ghayarly/mobile exec expo export --platform android --platform ios --output-dir ../../dist/native
+        env:
+          CI: '1'
+      - name: Build admin console
+        run: pnpm --filter @ghayarly/admin build

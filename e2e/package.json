@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "report": "playwright show-report"
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "lint": "eslint tests playwright.config.ts --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

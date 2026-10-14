@@ -10,7 +10,7 @@
     "db:seed": "tsx --env-file-if-exists=.env src/db/seed.ts",
     "db:reset": "tsx --env-file-if-exists=.env src/db/reset.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint src test",
+    "lint": "eslint src test --max-warnings=0",
     "test": "vitest run"
   },
   "dependencies": {

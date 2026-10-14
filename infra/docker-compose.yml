@@ -1,0 +1,50 @@
+# Local backend services for Ghayarly. Usage:  docker compose -f infra/docker-compose.yml up -d
+# Then:  pnpm db:migrate && pnpm db:seed   (see README.md)
+name: ghayarly
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      # Read by infra/postgres/init/01-bootstrap.sh (dev-only credentials)
+      GHAYARLY_OWNER_PASSWORD: ghayarly_owner_dev
+      GHAYARLY_APP_PASSWORD: ghayarly_app_dev
+      GHAYARLY_AUTH_PASSWORD: ghayarly_auth_dev
+    ports: ['5432:5432']
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ../scripts/db-bootstrap.sh:/opt/ghayarly/db-bootstrap.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports: ['6379:6379']
+    volumes: [redisdata:/data]
+
+  # Private S3-compatible object storage for medical documents (wired in Milestone 2/3).
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ghayarly
+      MINIO_ROOT_PASSWORD: ghayarly-dev-secret
+    ports: ['9000:9000', '9001:9001']
+    volumes: [miniodata:/data]
+
+  # Catches development email (wired when the email adapter lands).
+  mailpit:
+    image: axllent/mailpit:v1.24
+    ports: ['8025:8025', '1025:1025']
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

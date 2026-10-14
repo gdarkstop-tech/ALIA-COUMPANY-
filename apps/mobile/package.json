@@ -10,7 +10,8 @@
     "web": "expo start --web --port 8081",
     "export:web": "expo export --platform web",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint src"
+    "lint": "eslint src --max-warnings=0",
+    "dev": "expo start --port 8081"
   },
   "dependencies": {
     "@better-auth/expo": "1.7.7",

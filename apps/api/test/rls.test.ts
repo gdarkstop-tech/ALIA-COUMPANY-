@@ -3,7 +3,7 @@
  * (`ghayarly_app`) — exactly what the API uses — and prove that Row Level Security, column
  * privileges and guard triggers hold even if application code forgets a WHERE clause.
  */
-import { ROLE_PERMISSIONS, ROLES, PERMISSIONS } from '@ghayarly/shared';
+import { PERMISSIONS, REQUIRED_CREDENTIALS, ROLE_PERMISSIONS, ROLES } from '@ghayarly/shared';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -167,6 +167,13 @@ describe('roles and permissions', () => {
       }
     }
     expect(mismatches).toEqual([]);
+  });
+
+  it('SQL required-credential lists match the shared TypeScript constants', async () => {
+    for (const type of ['DOCTOR', 'NURSE'] as const) {
+      const { rows } = await owner.query<{ kinds: string }>("select array_to_string(app.required_credential_kinds($1::app.provider_type), ',') as kinds", [type]);
+      expect(rows[0]!.kinds.split(',')).toEqual([...REQUIRED_CREDENTIALS[type]]);
+    }
   });
 
   it('audit log is append-only and readable only with audit.read', async () => {

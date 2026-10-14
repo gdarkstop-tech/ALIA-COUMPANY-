@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { authErrorKey } from '@/features/auth/authErrors';
 import { authClient } from '@/lib/auth-client';
@@ -8,7 +7,6 @@ import { useResetTo } from '@/providers/session';
 import { Button, Header, Notice, Screen, TextField } from '@/ui';
 
 export default function TwoFactor() {
-  const router = useRouter();
   const resetTo = useResetTo();
   const qc = useQueryClient();
   const { t } = useI18n();
