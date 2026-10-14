@@ -37,6 +37,9 @@ const schema = z.object({
   /** `required`: staff/clinician endpoints reject sessions without 2FA. `warn`: allowed with a warning (dev only). */
   MFA_ENFORCEMENT: z.enum(['required', 'warn']).default('warn'),
 
+  /** Sign-in attempts per minute per IP. Defaults to 5 (production); development may raise it for E2E runs. */
+  AUTH_SIGNIN_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).optional(),
+
   DEMO_MODE: bool(false),
   DEV_TOOLS_ENABLED: bool(false),
 
@@ -68,6 +71,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (env.DEV_TOOLS_ENABLED) problems.push('DEV_TOOLS_ENABLED must be false in production');
     if (env.MFA_ENFORCEMENT !== 'required') problems.push('MFA_ENFORCEMENT must be "required" in production');
     if (!env.AUTH_REQUIRE_EMAIL_VERIFICATION) problems.push('AUTH_REQUIRE_EMAIL_VERIFICATION must be true in production');
+    if (env.AUTH_SIGNIN_RATE_LIMIT && env.AUTH_SIGNIN_RATE_LIMIT > 10) problems.push('AUTH_SIGNIN_RATE_LIMIT must be ≤ 10 in production');
     if (env.DATABASE_URL_OWNER) problems.push('DATABASE_URL_OWNER must not be provided to the production server process');
     if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
     if (problems.length) throw new Error(`Refusing to start with unsafe production configuration:\n  - ${problems.join('\n  - ')}`);

@@ -1,0 +1,30 @@
+{
+  "name": "@ghayarly/admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ghayarly/api-client": "workspace:*",
+    "@ghayarly/i18n": "workspace:*",
+    "@ghayarly/shared": "workspace:*",
+    "@ghayarly/tokens": "workspace:*",
+    "@tanstack/react-query": "5.104.2",
+    "better-auth": "1.7.7",
+    "next": "16.4.0",
+    "qrcode.react": "4.2.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "~19.2.2",
+    "@types/react-dom": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}

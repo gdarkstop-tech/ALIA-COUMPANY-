@@ -1,0 +1,121 @@
+import { layout, spacing } from '@ghayarly/tokens';
+import { useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useI18n } from '@/providers/i18n';
+import { useTheme } from '@/providers/theme';
+import { DemoBanner } from './DemoBanner';
+import { Icon } from './Icon';
+import { PressableScale } from './Pressable';
+import { Text } from './Text';
+
+type ScreenProps = {
+  children: ReactNode;
+  scroll?: boolean;
+  header?: ReactNode;
+  footer?: ReactNode;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  contentStyle?: StyleProp<ViewStyle>;
+  edges?: ('top' | 'bottom')[];
+  testID?: string;
+};
+
+/** Page container: safe areas, warm background, centred max-width column on large screens. */
+export function Screen({ children, scroll = true, header, footer, refreshing, onRefresh, contentStyle, edges = ['top'], testID }: ScreenProps) {
+  const { colors } = useTheme();
+  const content = (
+    <View style={[{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center', paddingHorizontal: layout.screenPadding, gap: spacing.xl, paddingBottom: spacing['4xl'] }, contentStyle]}>
+      {children}
+    </View>
+  );
+  return (
+    <SafeAreaView testID={testID} edges={edges} style={{ flex: 1, backgroundColor: colors.background }}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <DemoBanner />
+        {header ? <View style={{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center', paddingHorizontal: layout.screenPadding }}>{header}</View> : null}
+        {scroll ? (
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingTop: spacing.sm }}
+            refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
+          >
+            {content}
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1 }}>{content}</View>
+        )}
+        {footer ? (
+          <View style={{ borderTopWidth: 1, borderTopColor: colors.divider, backgroundColor: colors.backgroundElevated }}>
+            <View style={{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center', padding: layout.screenPadding }}>{footer}</View>
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+type HeaderProps = { title: string; subtitle?: string; back?: boolean; right?: ReactNode; large?: boolean; eyebrow?: string };
+
+export function Header({ title, subtitle, back, right, large = true, eyebrow }: HeaderProps) {
+  const router = useRouter();
+  const { t } = useI18n();
+  return (
+    <View style={{ paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.md }}>
+      {back || right ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 }}>
+          {back ? (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={t('common.back')}
+              testID="header-back"
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginStart: -8 }}
+            >
+              <Icon name="chevron-left" size={26} />
+            </PressableScale>
+          ) : (
+            <View />
+          )}
+          {right ?? <View />}
+        </View>
+      ) : null}
+      <View style={{ gap: spacing.xs }}>
+        {eyebrow ? (
+          <Text variant="footnote" weight="semibold" color="primary">
+            {eyebrow}
+          </Text>
+        ) : null}
+        <Text variant={large ? 'title1' : 'title2'} accessibilityRole="header">
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text variant="callout" color="textSecondary">
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+export function Section({ title, action, children, testID }: { title?: string; action?: ReactNode; children: ReactNode; testID?: string }) {
+  return (
+    <View style={{ gap: spacing.md }} testID={testID}>
+      {title || action ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          {title ? (
+            <Text variant="title3" accessibilityRole="header">
+              {title}
+            </Text>
+          ) : (
+            <View />
+          )}
+          {action}
+        </View>
+      ) : null}
+      {children}
+    </View>
+  );
+}

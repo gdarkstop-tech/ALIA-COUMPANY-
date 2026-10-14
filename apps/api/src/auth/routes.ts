@@ -37,8 +37,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   app.route({
     method: ['GET', 'POST'],
     url: '/api/auth/*',
-    // Authentication endpoints get a stricter global ceiling on top of Better Auth's own per-route limits.
-    config: { rateLimit: { max: env.NODE_ENV === 'test' ? 10_000 : 60, timeWindow: '1 minute' } },
+    // Per-endpoint brute-force limits (sign-in, OTP, password reset, 2FA) are enforced by Better
+    // Auth itself (see auth.ts); the global API ceiling still applies here.
     handler,
   });
 }

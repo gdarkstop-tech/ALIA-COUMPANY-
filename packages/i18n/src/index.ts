@@ -58,3 +58,8 @@ export function pick<T extends Record<string, unknown>>(obj: T, base: string, lo
   const value = obj[`${base}${suffix}`] ?? obj[`${base}${locale === 'ar' ? 'En' : 'Ar'}`];
   return typeof value === 'string' ? value : '';
 }
+
+/** Locale-appropriate list separator ("، " in Arabic, ", " in English). */
+export function listSeparator(locale: Locale): string {
+  return locale === 'ar' ? '، ' : ', ';
+}

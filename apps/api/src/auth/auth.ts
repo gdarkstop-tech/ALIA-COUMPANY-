@@ -14,6 +14,7 @@ export const PHONE_ONLY_EMAIL_DOMAIN = 'phone.ghayarly.invalid';
  */
 export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
   const isProd = env.NODE_ENV === 'production';
+  const signInLimit = env.AUTH_SIGNIN_RATE_LIMIT ?? 5;
   return betterAuth({
     appName: 'Ghayarly',
     baseURL: env.API_PUBLIC_URL,
@@ -64,7 +65,7 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
       window: 60,
       max: 100,
       customRules: {
-        '/sign-in/email': { window: 60, max: 5 },
+        '/sign-in/email': { window: 60, max: signInLimit },
         '/sign-up/email': { window: 60, max: 5 },
         '/phone-number/send-otp': { window: 60, max: 3 },
         '/phone-number/verify': { window: 60, max: 5 },

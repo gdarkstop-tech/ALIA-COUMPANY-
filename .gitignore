@@ -21,3 +21,4 @@ test-results/
 e2e/artifacts/
 .DS_Store
 *.tsbuildinfo
+next-env.d.ts

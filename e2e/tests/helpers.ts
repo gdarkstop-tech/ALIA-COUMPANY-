@@ -1,0 +1,38 @@
+import { expect, request, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+
+export const DEMO_PASSWORD = 'Ghayarly-Demo-2026';
+export const API_URL = process.env.E2E_API_URL ?? 'http://localhost:4000';
+const SHOTS = 'artifacts';
+mkdirSync(SHOTS, { recursive: true });
+
+export async function shot(page: Page, name: string) {
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS}/${name}.png` });
+}
+
+/** Signs in through the real sign-in screen of the app. */
+export async function signInMobile(page: Page, email: string, password = DEMO_PASSWORD) {
+  await page.goto('/sign-in');
+  await byId(page, 'sign-in-email').fill(email);
+  await byId(page, 'sign-in-password').fill(password);
+  await byId(page, 'sign-in-submit').click();
+}
+
+/** Talks to the API directly (setup only) with a trusted Origin, keeping cookies per context. */
+export async function apiSession(email: string, password: string, opts: { signUp?: boolean; name?: string } = {}) {
+  const ctx = await request.newContext({ baseURL: API_URL, extraHTTPHeaders: { origin: 'http://localhost:8081' } });
+  const path = opts.signUp ? '/api/auth/sign-up/email' : '/api/auth/sign-in/email';
+  const res = await ctx.post(path, { data: opts.signUp ? { email, password, name: opts.name ?? 'E2E User' } : { email, password } });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return ctx;
+}
+
+export function unique(prefix: string) {
+  return `${prefix}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@e2e.ghayarly.test`;
+}
+
+/** React Navigation keeps inactive tab/stack screens mounted on web; target only what is visible. */
+export function byId(page: Page, id: string) {
+  return page.getByTestId(id).filter({ visible: true }).first();
+}
