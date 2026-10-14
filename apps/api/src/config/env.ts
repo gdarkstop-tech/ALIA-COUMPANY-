@@ -1,0 +1,82 @@
+import { z } from 'zod';
+
+/**
+ * Environment configuration. Validated once at boot; the process refuses to start with an
+ * unsafe production configuration (demo mode, MFA in warn mode, dev tools, weak secrets).
+ */
+const bool = (fallback: boolean) =>
+  z
+    .enum(['true', 'false', '1', '0'])
+    .optional()
+    .transform((v) => (v === undefined ? fallback : v === 'true' || v === '1'));
+
+const schema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  HOST: z.string().default('0.0.0.0'),
+  PORT: z.coerce.number().int().default(4000),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+
+  /** Public base URL of this API (used by Better Auth for callbacks). */
+  API_PUBLIC_URL: z.string().url().default('http://localhost:4000'),
+  /** Comma-separated browser origins allowed to call the API with credentials. */
+  WEB_ORIGINS: z.string().default('http://localhost:8081,http://localhost:3001,http://127.0.0.1:3001'),
+  /** Deep-link scheme of the mobile app (trusted by Better Auth's Expo plugin). */
+  MOBILE_SCHEME: z.string().default('ghayarly'),
+
+  /** Connection for domain queries — role WITHOUT ownership / BYPASSRLS. RLS applies. */
+  DATABASE_URL_APP: z.string().min(1),
+  /** Connection for Better Auth — role limited to the `auth` schema. */
+  DATABASE_URL_AUTH: z.string().min(1),
+  /** Schema owner. Used ONLY by the migration and seed scripts, never by the server. */
+  DATABASE_URL_OWNER: z.string().optional(),
+
+  REDIS_URL: z.string().optional(),
+
+  BETTER_AUTH_SECRET: z.string().min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
+  AUTH_REQUIRE_EMAIL_VERIFICATION: bool(false),
+  /** `required`: staff/clinician endpoints reject sessions without 2FA. `warn`: allowed with a warning (dev only). */
+  MFA_ENFORCEMENT: z.enum(['required', 'warn']).default('warn'),
+
+  DEMO_MODE: bool(false),
+  DEV_TOOLS_ENABLED: bool(false),
+
+  PAYMOB_API_KEY: z.string().optional(),
+  PAYMOB_HMAC_SECRET: z.string().optional(),
+  PAYMOB_INTEGRATION_ID: z.string().optional(),
+  SMS_PROVIDER_API_KEY: z.string().optional(),
+  EMAIL_PROVIDER_API_KEY: z.string().optional(),
+  S3_ENDPOINT: z.string().optional(),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  AI_PROVIDER: z.string().optional(),
+  AI_API_KEY: z.string().optional(),
+});
+
+export type Env = z.infer<typeof schema>;
+
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  const parsed = schema.safeParse(source);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+    throw new Error(`Invalid environment configuration:\n${issues}`);
+  }
+  const env = parsed.data;
+  if (env.NODE_ENV === 'production') {
+    const problems: string[] = [];
+    if (env.DEMO_MODE) problems.push('DEMO_MODE must be false in production');
+    if (env.DEV_TOOLS_ENABLED) problems.push('DEV_TOOLS_ENABLED must be false in production');
+    if (env.MFA_ENFORCEMENT !== 'required') problems.push('MFA_ENFORCEMENT must be "required" in production');
+    if (!env.AUTH_REQUIRE_EMAIL_VERIFICATION) problems.push('AUTH_REQUIRE_EMAIL_VERIFICATION must be true in production');
+    if (env.DATABASE_URL_OWNER) problems.push('DATABASE_URL_OWNER must not be provided to the production server process');
+    if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
+    if (problems.length) throw new Error(`Refusing to start with unsafe production configuration:\n  - ${problems.join('\n  - ')}`);
+  }
+  return env;
+}
+
+export function webOrigins(env: Env): string[] {
+  return env.WEB_ORIGINS.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}

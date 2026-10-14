@@ -1,0 +1,29 @@
+{
+  "name": "ghayarly",
+  "private": true,
+  "description": "Dress My Wound (Ghayarly) — premium healthcare & home-care platform. Monorepo.",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel --filter=@ghayarly/api --filter=@ghayarly/admin --filter=@ghayarly/mobile",
+    "dev:api": "pnpm --filter @ghayarly/api dev",
+    "dev:admin": "pnpm --filter @ghayarly/admin dev",
+    "dev:mobile": "pnpm --filter @ghayarly/mobile start",
+    "dev:web": "pnpm --filter @ghayarly/mobile web",
+    "db:bootstrap": "bash scripts/db-bootstrap.sh",
+    "db:migrate": "pnpm --filter @ghayarly/api db:migrate",
+    "db:seed": "pnpm --filter @ghayarly/api db:seed",
+    "db:reset": "pnpm --filter @ghayarly/api db:reset",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "e2e": "pnpm --filter @ghayarly/e2e test",
+    "check": "pnpm typecheck && pnpm lint && pnpm test"
+  },
+  "devDependencies": {
+    "turbo": "2.11.8",
+    "typescript": "~6.0.3"
+  }
+}

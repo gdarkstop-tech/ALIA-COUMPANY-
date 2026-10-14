@@ -1,0 +1,134 @@
+import { randomUUID } from 'node:crypto';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { Redis } from 'ioredis';
+import { ZodError } from 'zod';
+import { createAuth, type Auth } from './auth/auth';
+import { registerAuthRoutes } from './auth/routes';
+import { webOrigins, type Env } from './config/env';
+import { assertRlsEffective, createDb, createPools, type Db, type Pools } from './db/client';
+import { createMessaging, type Messaging } from './integrations/messaging';
+import { createPaymentGateway, type PaymentGateway } from './integrations/payments';
+import { AppError, fromPgError } from './lib/errors';
+import { registerPrincipal } from './lib/principal';
+import { adminRoutes } from './modules/admin/routes';
+import { dashboardRoutes } from './modules/dashboard/routes';
+import { devRoutes } from './modules/dev/routes';
+import { meRoutes } from './modules/me/routes';
+import { patientRoutes } from './modules/patients/routes';
+import { providerRoutes } from './modules/providers/routes';
+import { serviceRoutes } from './modules/services/routes';
+import { storeRoutes } from './modules/store/routes';
+import { systemRoutes } from './modules/system/routes';
+
+export type Services = {
+  env: Env;
+  db: Db;
+  pools: Pools;
+  auth: Auth;
+  messaging: Messaging;
+  payments: PaymentGateway;
+};
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    services: Services;
+  }
+}
+
+export async function buildServer(env: Env): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger:
+      env.LOG_LEVEL === 'silent'
+        ? false
+        : {
+            level: env.LOG_LEVEL,
+            // Never log credentials, cookies or authorization material.
+            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'], remove: true },
+            ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } } : {}),
+          },
+    trustProxy: env.NODE_ENV === 'production',
+    genReqId: () => randomUUID(),
+    bodyLimit: 1024 * 1024,
+  });
+
+  const pools = createPools(env);
+  await assertRlsEffective(pools.appPool);
+  const db = createDb(pools.appPool);
+  const messaging = createMessaging(env, (line) => app.log.info(line));
+  const payments = createPaymentGateway(env);
+  const auth = createAuth(env, pools.authPool, messaging);
+  app.decorate('services', { env, db, pools, auth, messaging, payments });
+
+  const redis = env.REDIS_URL && env.NODE_ENV !== 'test' ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false, lazyConnect: false }) : null;
+  redis?.on('error', (err) => app.log.warn({ err: err.message }, 'redis unavailable — rate limiting falls back per request'));
+
+  app.addHook('onClose', async () => {
+    await Promise.allSettled([pools.appPool.end(), pools.authPool.end(), redis?.quit()]);
+  });
+
+  await app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'same-site' } });
+  const origins = webOrigins(env);
+  await app.register(cors, {
+    origin: (origin, cb) => cb(null, !origin || origins.includes(origin)),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['content-type', 'authorization', 'x-request-id', 'expo-origin', 'cookie'],
+    maxAge: 600,
+  });
+  await app.register(rateLimit, {
+    global: true,
+    max: env.NODE_ENV === 'test' ? 10_000 : 300,
+    timeWindow: '1 minute',
+    ...(redis ? { redis, nameSpace: 'ghayarly-rl:', skipOnError: true } : {}),
+    errorResponseBuilder: () => ({ statusCode: 429, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }),
+  });
+
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof ZodError) {
+      return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Invalid request', details: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) } });
+    }
+    if (error instanceof AppError) {
+      return reply.status(error.statusCode).send({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } });
+    }
+    const mapped = fromPgError(error);
+    if (mapped) {
+      request.log.info({ code: mapped.code }, 'database rule rejected request');
+      return reply.status(mapped.statusCode).send({ error: { code: mapped.code, message: mapped.message, ...(mapped.details ? { details: mapped.details } : {}) } });
+    }
+    const status = (error as { statusCode?: number }).statusCode;
+    if (status && status >= 400 && status < 500) {
+      return reply.status(status).send({ error: { code: (error as { code?: string }).code ?? 'BAD_REQUEST', message: (error as Error).message } });
+    }
+    request.log.error({ err: error }, 'unhandled error');
+    return reply.status(500).send({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' } });
+  });
+  app.setNotFoundHandler((_request, reply) => reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Route not found' } }));
+
+  // CSRF defence in depth for cookie-authenticated, state-changing domain requests (on top of
+  // SameSite=Lax cookies and CORS). Native clients send no Origin header and are unaffected.
+  app.addHook('onRequest', async (request, reply) => {
+    if (!request.url.startsWith('/v1/') || ['GET', 'HEAD', 'OPTIONS'].includes(request.method) || !request.headers.cookie) return;
+    const origin = request.headers.origin;
+    const site = request.headers['sec-fetch-site'];
+    if ((origin && !origins.includes(origin)) || site === 'cross-site') {
+      return reply.status(403).send({ error: { code: 'INVALID_ORIGIN', message: 'Request origin is not allowed' } });
+    }
+  });
+
+  registerPrincipal(app);
+  await registerAuthRoutes(app);
+  await app.register(systemRoutes);
+  await app.register(meRoutes, { prefix: '/v1' });
+  await app.register(patientRoutes, { prefix: '/v1' });
+  await app.register(providerRoutes, { prefix: '/v1' });
+  await app.register(serviceRoutes, { prefix: '/v1' });
+  await app.register(storeRoutes, { prefix: '/v1' });
+  await app.register(dashboardRoutes, { prefix: '/v1' });
+  await app.register(adminRoutes, { prefix: '/v1/admin' });
+  if (env.DEV_TOOLS_ENABLED && env.NODE_ENV !== 'production') await app.register(devRoutes, { prefix: '/dev' });
+
+  return app;
+}
