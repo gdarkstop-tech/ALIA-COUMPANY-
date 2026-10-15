@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["<APPLE_TEAM_ID>.com.aliagroup.dressmywound"],
+        "components": [{ "/": "/app/*", "comment": "Only /app/* opens the app; legal and support pages stay on the web." }]
+      }
+    ]
+  }
+}

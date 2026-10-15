@@ -1,21 +1,35 @@
 /**
- * Ghayarly design tokens — the single source of visual truth for mobile and admin.
+ * Dress My Wound (غير لي) design tokens — the single source of visual truth for iOS, Android
+ * and the admin console.
  *
- * Palette intent: warm-white canvas, calm teal for primary action and care, deep navy for
- * trust and structure, a very restrained warm sand accent for warmth. Components consume
- * semantic tokens (`color.surface`, `color.textSecondary`) — never raw palette values — so
- * the look can evolve without rewriting components.
+ * Visual system: Alia Group × TetraSol (provisional values, see ./brand.ts).
+ *   - Deep navy carries structure (headers, primary actions, active navigation).
+ *   - Signature orange is reserved for deliberate highlights: hero calls-to-action, selections,
+ *     progress and brand accents — never as a clinical warning colour.
+ *   - Warm stone surfaces and brass hairlines bring the Alia Group architectural character.
+ *   - Clinical status colours (success / warning / danger / info) are a SEPARATE scale so a
+ *     medical warning always reads as a warning, never as branding.
+ *
+ * Components consume semantic tokens only (`colors.surface`, `semantic.brand.accent`), so the
+ * look can evolve without rewriting components. Contrast pairs are verified by
+ * packages/tokens/test/contrast.test.ts (WCAG 2.2 AA).
  */
+import { brandConfig } from './brand';
+
+export { brandConfig } from './brand';
+export type { BrandConfig } from './brand';
 
 export const palette = {
-  teal: { 50: '#EEF8F7', 100: '#D5EFEC', 200: '#AADDD8', 300: '#72C4BC', 400: '#3DA89F', 500: '#1E8C84', 600: '#16746E', 700: '#145D59', 800: '#134B48', 900: '#123E3C' },
-  navy: { 50: '#EFF3F8', 100: '#D8E1EC', 200: '#B3C3D7', 300: '#8AA1BD', 400: '#5F7C9E', 500: '#3E5C80', 600: '#2B4767', 700: '#1D3654', 800: '#142A44', 900: '#0C1E33', 950: '#071423' },
-  sand: { 50: '#FCF7F1', 100: '#F6EADB', 200: '#ECD4B6', 300: '#DFB88C', 400: '#CF9A66', 500: '#B97F4B' },
-  warmWhite: { 0: '#FFFFFF', 25: '#FDFCFA', 50: '#FAF8F4', 100: '#F3F0EA', 200: '#E9E4DB' },
-  ink: { 900: '#0C1E33', 700: '#33465C', 500: '#5E6E80', 400: '#7D8A99', 300: '#A3ADB8' },
-  green: { 50: '#ECF7F1', 500: '#2F8A5F', 600: '#257050', 300: '#6CC49A' },
-  amber: { 50: '#FDF5E6', 500: '#B7791F', 600: '#975F12', 300: '#E7B866' },
-  red: { 50: '#FDF0EE', 500: '#C0392B', 600: '#A02D22', 300: '#EE8A7E' },
+  navy: { 950: '#07152A', 900: '#0A1F3D', 800: '#102A4C', 700: '#18375F', 600: '#234673', 500: '#355B8C', 400: '#5578A6', 300: '#87A0C2', 200: '#B9C8DC', 100: '#DDE5EF', 50: '#F0F4F9' },
+  orange: { 700: '#9A3D0C', 600: '#C24E16', 500: brandConfig.hues.orange, 400: '#F5863F', 300: '#F9A66E', 200: '#FCC9A3', 100: '#FDE3D0', 50: '#FEF3EA' },
+  stone: { 0: '#FFFFFF', 50: brandConfig.hues.stone, 100: '#F3EEE5', 200: '#E7DFD2', 300: '#D6CAB7', 400: '#BFAF96' },
+  brass: { 700: '#6F5530', 600: '#8A6A3B', 500: brandConfig.hues.brass, 400: '#C2A16A', 300: '#D9C29A', 100: '#F2EADB' },
+  ink: { 900: '#0A1F3D', 700: '#3A4A60', 500: '#5A6779', 400: '#7D8898', 300: '#A3ACB8' },
+  // Clinical status scale — independent of brand hues.
+  green: { 50: '#EAF6EF', 600: '#1D6E46', 300: '#7CCB9F' },
+  amber: { 50: '#FFF4D6', 600: '#8A5A00', 300: '#F2C14E' },
+  red: { 50: '#FEF0EE', 600: '#B42318', 300: '#F28B7D' },
+  blue: { 50: '#EEF3FA', 600: '#2B5A9E', 300: '#8FB2E3' },
 } as const;
 
 export type ColorTokens = {
@@ -32,16 +46,26 @@ export type ColorTokens = {
   textSecondary: string;
   textTertiary: string;
   textInverse: string;
-  textOnPrimary: string;
+  /** Structural primary (navy). */
   primary: string;
   primaryPressed: string;
+  textOnPrimary: string;
   primarySoft: string;
   primarySoftText: string;
   navy: string;
   navySoft: string;
+  /** Brand accent (TetraSol orange) — highlights, hero CTAs, selections. */
   accent: string;
+  accentPressed: string;
+  textOnAccent: string;
   accentSoft: string;
   accentText: string;
+  /** Alia Group brass — hairlines, ornament, endorsement. */
+  brass: string;
+  brassSoft: string;
+  ornament: string;
+  heroBackground: string;
+  heroText: string;
   success: string;
   successSoft: string;
   warning: string;
@@ -60,86 +84,115 @@ export type ColorTokens = {
 };
 
 export const lightColors: ColorTokens = {
-  background: palette.warmWhite[50],
-  backgroundElevated: palette.warmWhite[25],
-  surface: palette.warmWhite[0],
-  surfaceMuted: palette.warmWhite[100],
-  surfaceSunken: '#F0ECE4',
+  background: palette.stone[50],
+  backgroundElevated: '#FDFBF8',
+  surface: palette.stone[0],
+  surfaceMuted: palette.stone[100],
+  surfaceSunken: '#EFE9DF',
   surfaceInverse: palette.navy[900],
-  border: '#E6E1D8',
-  borderStrong: '#D3CCC0',
-  divider: '#EEEAE3',
+  border: '#E5DDD0',
+  borderStrong: palette.stone[300],
+  divider: '#EEE8DE',
   text: palette.ink[900],
   textSecondary: palette.ink[700],
   textTertiary: palette.ink[500],
-  textInverse: '#F4F7FA',
+  textInverse: '#F4F6FA',
+  primary: palette.navy[800],
+  primaryPressed: palette.navy[900],
   textOnPrimary: '#FFFFFF',
-  primary: palette.teal[600],
-  primaryPressed: palette.teal[700],
-  primarySoft: palette.teal[50],
-  primarySoftText: palette.teal[800],
+  primarySoft: palette.navy[50],
+  primarySoftText: palette.navy[700],
   navy: palette.navy[800],
   navySoft: palette.navy[50],
-  accent: palette.sand[400],
-  accentSoft: palette.sand[50],
-  accentText: '#7A532E',
+  accent: palette.orange[500],
+  accentPressed: palette.orange[600],
+  textOnAccent: palette.navy[900],
+  accentSoft: palette.orange[50],
+  accentText: palette.orange[700],
+  brass: palette.brass[600],
+  brassSoft: palette.brass[100],
+  ornament: palette.brass[400],
+  heroBackground: palette.navy[900],
+  heroText: '#F7F3EC',
   success: palette.green[600],
   successSoft: palette.green[50],
   warning: palette.amber[600],
   warningSoft: palette.amber[50],
   danger: palette.red[600],
   dangerSoft: palette.red[50],
-  info: palette.navy[500],
-  infoSoft: palette.navy[50],
-  demo: '#6B4FA0',
-  demoSoft: '#F3EFFA',
-  focusRing: palette.teal[400],
-  overlay: 'rgba(7, 20, 35, 0.45)',
-  shadow: 'rgba(12, 30, 51, 0.08)',
-  skeleton: '#EFEBE4',
-  skeletonHighlight: '#F7F4EF',
+  info: palette.blue[600],
+  infoSoft: palette.blue[50],
+  demo: '#5B3F8F',
+  demoSoft: '#F2EEF9',
+  focusRing: palette.orange[500],
+  overlay: 'rgba(7, 21, 42, 0.5)',
+  shadow: 'rgba(10, 31, 61, 0.08)',
+  skeleton: '#EDE6DB',
+  skeletonHighlight: '#F6F1EA',
 };
 
 export const darkColors: ColorTokens = {
-  background: '#08131F',
-  backgroundElevated: '#0B1928',
-  surface: '#0F1F30',
-  surfaceMuted: '#132638',
-  surfaceSunken: '#0A1724',
-  surfaceInverse: '#EEF2F6',
-  border: '#1C3247',
-  borderStrong: '#284259',
-  divider: '#172A3D',
-  text: '#ECF1F6',
-  textSecondary: '#B4C1CF',
-  textTertiary: '#8395A8',
+  background: palette.navy[950],
+  backgroundElevated: '#0A1B33',
+  surface: '#0D2140',
+  surfaceMuted: '#132B4F',
+  surfaceSunken: '#091830',
+  surfaceInverse: '#F0F4F9',
+  border: '#1F3A63',
+  borderStrong: '#2C4B78',
+  divider: '#18305A',
+  text: '#EEF2F8',
+  textSecondary: '#B7C3D6',
+  textTertiary: '#8E9DB4',
   textInverse: palette.navy[900],
-  textOnPrimary: '#04201E',
-  primary: palette.teal[300],
-  primaryPressed: palette.teal[200],
-  primarySoft: '#10302F',
-  primarySoftText: palette.teal[200],
-  navy: palette.navy[200],
-  navySoft: '#14273B',
-  accent: palette.sand[300],
-  accentSoft: '#2A2118',
-  accentText: palette.sand[200],
+  primary: '#C9D7EC',
+  primaryPressed: '#DDE5EF',
+  textOnPrimary: palette.navy[950],
+  primarySoft: '#132B4F',
+  primarySoftText: '#C9D7EC',
+  navy: '#C9D7EC',
+  navySoft: '#132B4F',
+  accent: palette.orange[400],
+  accentPressed: palette.orange[300],
+  textOnAccent: palette.navy[950],
+  accentSoft: '#2A1A10',
+  accentText: palette.orange[300],
+  brass: palette.brass[300],
+  brassSoft: '#231C12',
+  ornament: palette.brass[500],
+  heroBackground: '#0A1B33',
+  heroText: '#F7F3EC',
   success: palette.green[300],
-  successSoft: '#11291E',
+  successSoft: '#10291D',
   warning: palette.amber[300],
-  warningSoft: '#2C2210',
+  warningSoft: '#2B220C',
   danger: palette.red[300],
-  dangerSoft: '#311816',
-  info: palette.navy[300],
-  infoSoft: '#14273B',
-  demo: '#B9A3E3',
+  dangerSoft: '#33140F',
+  info: palette.blue[300],
+  infoSoft: '#132B4F',
+  demo: '#C2AEE8',
   demoSoft: '#221A33',
-  focusRing: palette.teal[300],
+  focusRing: palette.orange[400],
   overlay: 'rgba(0, 0, 0, 0.6)',
   shadow: 'rgba(0, 0, 0, 0.35)',
-  skeleton: '#15283A',
-  skeletonHighlight: '#1B3247',
+  skeleton: '#15305A',
+  skeletonHighlight: '#1B3A68',
 };
+
+/**
+ * Semantic token view using the corporate naming scheme (brand.* / surface.* / text.* /
+ * border.* / status.*). Prefer these names in new components.
+ */
+export function semanticColors(c: ColorTokens) {
+  return {
+    brand: { primary: c.primary, secondary: c.brass, accent: c.accent, onPrimary: c.textOnPrimary, onAccent: c.textOnAccent },
+    surface: { default: c.surface, elevated: c.backgroundElevated, muted: c.surfaceMuted, canvas: c.background, inverse: c.surfaceInverse, hero: c.heroBackground },
+    text: { primary: c.text, secondary: c.textSecondary, tertiary: c.textTertiary, inverse: c.textInverse },
+    border: { subtle: c.border, strong: c.borderStrong, divider: c.divider },
+    status: { success: c.success, warning: c.warning, danger: c.danger, info: c.info },
+  } as const;
+}
+export type SemanticColors = ReturnType<typeof semanticColors>;
 
 export const spacing = { none: 0, xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, '3xl': 32, '4xl': 40, '5xl': 56, '6xl': 72 } as const;
 export type SpacingToken = keyof typeof spacing;
@@ -157,7 +210,9 @@ export const typography = {
   },
   size: { display: 32, title1: 26, title2: 21, title3: 18, body: 16, callout: 15, footnote: 13, caption: 12, micro: 11 },
   lineHeight: { display: 44, title1: 38, title2: 31, title3: 27, body: 25, callout: 23, footnote: 20, caption: 18, micro: 16 },
-  letterSpacing: { tight: -0.3, normal: 0, wide: 0.4 },
+  letterSpacing: { tight: -0.3, normal: 0, wide: 0.4, eyebrow: 1.2 },
+  /** Dynamic Type: text scales with the OS setting up to this multiplier (layouts are tested at it). */
+  maxFontSizeMultiplier: 1.8,
 } as const;
 export type TextVariant = keyof typeof typography.size;
 
@@ -177,6 +232,22 @@ export const elevation = {
 export const touchTarget = { min: 48, comfortable: 56 } as const;
 
 export const layout = { maxContentWidth: 720, maxWideWidth: 1200, screenPadding: 20 } as const;
+
+/**
+ * Alia Group architectural language — EXTREMELY subtle by design: a near-invisible texture on the
+ * welcome hero only. Never behind clinical content, forms, lists or data. Modern healthcare UX first.
+ */
+export const ornament = {
+  /** Mashrabiya lattice opacity on the welcome hero and (rarely) on light canvases. */
+  latticeOpacityHero: 0.05,
+  latticeOpacityCanvas: 0.03,
+  /** Opacity of the pointed-arch hairline frame on the welcome hero. */
+  archStrokeOpacity: 0.35,
+  latticeCell: 28,
+  /** Pointed (Mamluk) arch: height of the pointed crown relative to the arch width. */
+  archCrownRatio: 0.42,
+  hairline: 1,
+} as const;
 
 export const theme = { light: lightColors, dark: darkColors } as const;
 export type ThemeName = keyof typeof theme;

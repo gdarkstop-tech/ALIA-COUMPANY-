@@ -1,7 +1,7 @@
 import { typography } from '@ghayarly/tokens';
 import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
-import type { ColorValue } from 'react-native';
+import { View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/providers/theme';
 import { Icon, type IconName } from '@/ui';
@@ -26,6 +26,17 @@ export function useTabScreenOptions(): ComponentProps<typeof Tabs>['screenOption
   };
 }
 
+/** Tab icon with the TetraSol orange active indicator (navy tint carries the structure). */
+function TabIcon({ name, color, size, focused }: { name: IconName; color: ColorValue; size: number; focused: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <View style={{ position: 'absolute', top: -8, width: 16, height: 3, borderRadius: 2, backgroundColor: focused ? colors.accent : 'transparent' }} />
+      <Icon name={name} size={size - 2} tint={String(color)} />
+    </View>
+  );
+}
+
 export function tabIcon(name: IconName) {
-  return ({ color, size }: { color: ColorValue; size: number }) => <Icon name={name} size={size - 2} tint={String(color)} />;
+  return ({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) => <TabIcon name={name} color={color} size={size} focused={focused} />;
 }

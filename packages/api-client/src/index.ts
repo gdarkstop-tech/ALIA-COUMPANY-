@@ -5,6 +5,15 @@ import type {
   AuditLogEntry,
   CartResponse,
   CheckoutPreview,
+  ClientErrorReport,
+  ConsentsResponse,
+  DeleteAccountBody,
+  EntitlementsResponse,
+  PlanForClient,
+  DeleteAccountResponse,
+  FeatureFlagAdmin,
+  FeatureFlags,
+  RecordConsentBody,
   ClinicianDashboard,
   CreateHealthEntryBody,
   CreatePatientBody,
@@ -127,12 +136,27 @@ export function createApiClient(options: ApiClientOptions) {
 
   return {
     request,
-    system: { status: () => get<SystemStatus>('/v1/system/status') },
+    system: {
+      status: () => get<SystemStatus>('/v1/system/status'),
+      features: () => get<FeatureFlags>('/v1/system/features'),
+      reportError: (body: ClientErrorReport) => post<{ ok: true }>('/v1/telemetry/client-errors', body),
+    },
     me: {
       get: () => get<MeResponse>('/v1/me'),
       update: (body: UpdateMeBody) => patch<MeResponse>('/v1/me', body),
       assignRole: (body: AssignRoleBody) => post<MeResponse>('/v1/me/roles', body),
       completeOnboarding: () => post<{ ok: true }>('/v1/me/onboarding/complete'),
+      consents: () => get<ConsentsResponse>('/v1/me/consents'),
+      recordConsents: (body: RecordConsentBody) => post<ConsentsResponse>('/v1/me/consents', body),
+      deleteAccount: (body: DeleteAccountBody) => post<DeleteAccountResponse>('/v1/me/account-deletion', body),
+    },
+    billing: {
+      plans: (platform: 'ios' | 'android' | 'web') => get<PlanForClient[]>('/v1/billing/plans', { platform }),
+      entitlements: () => get<EntitlementsResponse>('/v1/billing/entitlements'),
+      accountToken: () => get<{ appAccountToken: string }>('/v1/billing/account-token'),
+      verifyApple: (body: { signedTransactionInfo: string }) => post<EntitlementsResponse>('/v1/billing/apple/verify', body),
+      verifyGoogle: (body: { productId: string; purchaseToken: string }) => post<EntitlementsResponse>('/v1/billing/google/verify', body),
+      restore: (body: { apple: string[]; google: { productId: string; purchaseToken: string }[] }) => post<EntitlementsResponse & { restoreErrors: string[] }>('/v1/billing/restore', body),
     },
     patients: {
       list: () => get<PatientSummary[]>('/v1/patients'),
@@ -183,6 +207,8 @@ export function createApiClient(options: ApiClientOptions) {
       decideCredential: (id: string, body: CredentialDecisionBody) => post<Credential>(`/v1/admin/credentials/${id}/decision`, body),
       auditLog: (limit = 100) => get<AuditLogEntry[]>('/v1/admin/audit-log', { limit }),
       users: () => get<AdminUser[]>('/v1/admin/users'),
+      features: () => get<FeatureFlagAdmin[]>('/v1/admin/features'),
+      setFeature: (key: string, body: { enabled: boolean; evidenceRef?: string | null }) => patch<FeatureFlagAdmin>(`/v1/admin/features/${encodeURIComponent(key)}`, body),
     },
     dev: {
       outbox: (q?: { to?: string; purpose?: string }) => get<{ notice: string; messages: OutboxMessage[] }>('/dev/outbox', q),

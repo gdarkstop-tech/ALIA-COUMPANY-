@@ -2,11 +2,12 @@ import { expo } from '@better-auth/expo';
 import { betterAuth } from 'better-auth';
 import { phoneNumber, twoFactor } from 'better-auth/plugins';
 import type { Pool } from 'pg';
+import { BRAND_NAME_AR, BRAND_NAME_EN, PHONE_ONLY_EMAIL_DOMAIN } from '@ghayarly/shared';
 import { webOrigins, type Env } from '../config/env';
 import type { Messaging } from '../integrations/messaging';
 
 const EGYPT_MOBILE = /^\+201[0125]\d{8}$/;
-export const PHONE_ONLY_EMAIL_DOMAIN = 'phone.ghayarly.invalid';
+export { PHONE_ONLY_EMAIL_DOMAIN };
 
 /**
  * Better Auth instance. It talks to PostgreSQL through `authPool`, a dedicated role that can
@@ -16,7 +17,7 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
   const isProd = env.NODE_ENV === 'production';
   const signInLimit = env.AUTH_SIGNIN_RATE_LIMIT ?? 5;
   return betterAuth({
-    appName: 'Ghayarly',
+    appName: BRAND_NAME_EN,
     baseURL: env.API_PUBLIC_URL,
     basePath: '/api/auth',
     secret: env.BETTER_AUTH_SECRET,
@@ -33,7 +34,7 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
         await messaging.email.send({
           channel: 'email',
           to: user.email,
-          subject: 'Reset your Ghayarly password',
+          subject: `Reset your ${BRAND_NAME_EN} password | إعادة تعيين كلمة مرور ${BRAND_NAME_AR}`,
           body: `Use this link to reset your password: ${url} (code: ${token}). It expires in 30 minutes.`,
           purpose: 'password-reset',
         });
@@ -48,7 +49,7 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
         await messaging.email.send({
           channel: 'email',
           to: user.email,
-          subject: 'Confirm your email for Ghayarly',
+          subject: `Confirm your email for ${BRAND_NAME_EN} | تأكيد بريدك في ${BRAND_NAME_AR}`,
           body: `Confirm your email address: ${url}`,
           purpose: 'email-verification',
         });
@@ -90,15 +91,15 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
         allowedAttempts: 5,
         phoneNumberValidator: (value) => EGYPT_MOBILE.test(value),
         sendOTP: async ({ phoneNumber: to, code }) => {
-          await messaging.sms.send({ channel: 'sms', to, body: `Your Ghayarly code is ${code}. It expires in 5 minutes.`, purpose: 'phone-otp' });
+          await messaging.sms.send({ channel: 'sms', to, body: `${BRAND_NAME_AR}: رمز التحقق ${code} — صالح لمدة ٥ دقائق.\n${BRAND_NAME_EN}: your code is ${code}. It expires in 5 minutes.`, purpose: 'phone-otp' });
         },
         signUpOnVerification: {
           getTempEmail: (phone) => `${phone.replace('+', '')}@${PHONE_ONLY_EMAIL_DOMAIN}`,
-          getTempName: () => 'Ghayarly user',
+          getTempName: () => `${BRAND_NAME_EN} user`,
         },
       }),
       twoFactor({
-        issuer: 'Ghayarly',
+        issuer: BRAND_NAME_EN,
         accountLockout: { enabled: true, maxFailedAttempts: 5, durationSeconds: 900 },
       }),
     ],

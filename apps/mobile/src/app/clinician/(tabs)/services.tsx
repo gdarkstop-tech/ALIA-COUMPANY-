@@ -56,9 +56,10 @@ export default function NurseServices() {
                   <View style={{ paddingTop: 2, borderRadius: radii.pill }}>
                     <Switch
                       testID={`service-toggle-${s.code}`}
+                      accessibilityLabel={pickL(s, 'name')}
                       value={on}
                       onValueChange={(v) => setSelected((prev) => { const n = new Set(prev); if (v) n.add(s.id); else n.delete(s.id); return n; })}
-                      trackColor={{ true: colors.primary, false: colors.border }}
+                      trackColor={{ true: colors.accent, false: colors.border }}
                     />
                   </View>
                 </View>

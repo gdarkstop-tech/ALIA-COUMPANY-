@@ -21,7 +21,7 @@ const schema = z.object({
   /** Comma-separated browser origins allowed to call the API with credentials. */
   WEB_ORIGINS: z.string().default('http://localhost:8081,http://localhost:3001,http://127.0.0.1:3001'),
   /** Deep-link scheme of the mobile app (trusted by Better Auth's Expo plugin). */
-  MOBILE_SCHEME: z.string().default('ghayarly'),
+  MOBILE_SCHEME: z.string().default('dressmywound'),
 
   /** Connection for domain queries — role WITHOUT ownership / BYPASSRLS. RLS applies. */
   DATABASE_URL_APP: z.string().min(1),
@@ -53,6 +53,20 @@ const schema = z.object({
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   AI_PROVIDER: z.string().optional(),
+
+  // Platform store billing (digital subscriptions). Unset → NOT_CONFIGURED, nothing purchasable.
+  APPLE_IAP_BUNDLE_ID: z.string().optional(),
+  /** Numeric App Store app id (App Store Connect → App Information). Required in production. */
+  APPLE_IAP_APP_APPLE_ID: z.coerce.number().int().positive().optional(),
+  /** Directory with Apple root certificates (AppleRootCA-G3.cer …) downloaded from apple.com/certificateauthority. */
+  APPLE_ROOT_CERTS_DIR: z.string().optional(),
+  APPLE_IAP_ONLINE_CHECKS: bool(true),
+  GOOGLE_PLAY_PACKAGE_NAME: z.string().optional(),
+  /** Service-account key JSON, base64-encoded. Supply from the secret manager — never commit. */
+  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: z.string().optional(),
+  /** Audience configured on the Pub/Sub push subscription for Real-time developer notifications. */
+  GOOGLE_RTDN_AUDIENCE: z.string().optional(),
+  GOOGLE_RTDN_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
   AI_API_KEY: z.string().optional(),
 });
 

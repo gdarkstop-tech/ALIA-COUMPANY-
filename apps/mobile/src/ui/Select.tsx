@@ -76,11 +76,11 @@ export function Select<T extends string>({ label, value, options, onChange, plac
                   minHeight: touchTarget.min,
                   paddingHorizontal: spacing.lg,
                   borderRadius: radii.md,
-                  backgroundColor: selected ? colors.primarySoft : 'transparent',
+                  backgroundColor: selected ? colors.accentSoft : 'transparent',
                 }}
               >
                 <View style={{ flex: 1, paddingVertical: spacing.sm }}>
-                  <Text weight={selected ? 'semibold' : 'regular'} color={selected ? 'primarySoftText' : 'text'}>
+                  <Text weight={selected ? 'semibold' : 'regular'} color={selected ? 'accentText' : 'text'}>
                     {o.label}
                   </Text>
                   {o.description ? (
@@ -89,7 +89,7 @@ export function Select<T extends string>({ label, value, options, onChange, plac
                     </Text>
                   ) : null}
                 </View>
-                {selected ? <Icon name="check" size={18} color="primary" /> : null}
+                {selected ? <Icon name="check" size={18} color="accentText" /> : null}
               </PressableScale>
             );
           })}

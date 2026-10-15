@@ -64,14 +64,14 @@ export function Header({ title, subtitle, back, right, large = true, eyebrow }: 
   return (
     <View style={{ paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.md }}>
       {back || right ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
           {back ? (
             <PressableScale
               accessibilityRole="button"
               accessibilityLabel={t('common.back')}
               testID="header-back"
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginStart: -8 }}
+              style={{ width: 44, height: 44, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}
             >
               <Icon name="chevron-left" size={26} />
             </PressableScale>

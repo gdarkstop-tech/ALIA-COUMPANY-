@@ -11,15 +11,34 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect, useState, type ReactNode } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '@/lib/api';
+import { installGlobalErrorHandler, reportError } from '@/lib/errorReporting';
 import { I18nProvider } from '@/providers/i18n';
 import { PreferencesProvider, usePreferences } from '@/providers/preferences';
 import { ThemeProvider, useTheme } from '@/providers/theme';
 import { ToastProvider } from '@/ui';
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+installGlobalErrorHandler();
+
+/** Route-level error boundary (Expo Router): reports anonymously and offers a calm retry. */
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  useEffect(() => {
+    reportError(error, { fatal: false });
+  }, [error]);
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16, backgroundColor: '#FAF7F2' }} accessibilityRole="alert">
+      <Text style={{ fontSize: 18, fontWeight: '600', color: '#0A1F3D', textAlign: 'center' }}>Something went wrong · حدث خطأ ما</Text>
+      <Pressable accessibilityRole="button" onPress={() => void retry()} style={{ minHeight: 48, paddingHorizontal: 24, borderRadius: 18, backgroundColor: '#102A4C', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Try again · حاول مرة أخرى</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 function Ready({ children, fontsLoaded }: { children: ReactNode; fontsLoaded: boolean }) {
   const { ready } = usePreferences();
@@ -61,6 +80,8 @@ export default function RootLayout() {
   );
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* Respect the OS "Reduce motion" setting for every Reanimated animation. */}
+      <ReducedMotionConfig mode={ReduceMotion.System} />
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <PreferencesProvider>

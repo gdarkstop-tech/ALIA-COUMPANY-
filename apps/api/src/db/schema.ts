@@ -53,6 +53,14 @@ export const stockStatusEnum = appSchema.enum('stock_status', ['IN_STOCK', 'LOW_
 export const contentApprovalStatusEnum = appSchema.enum('content_approval_status', ['PENDING_APPROVAL', 'APPROVED', 'RETIRED']);
 export const ledgerEntryTypeEnum = appSchema.enum('ledger_entry_type', ['VISIT_EARNING', 'PLATFORM_FEE', 'ADJUSTMENT', 'PAYOUT']);
 export const ledgerStatusEnum = appSchema.enum('ledger_status', ['PENDING', 'AVAILABLE', 'PAID_OUT']);
+export const accountKindEnum = appSchema.enum('account_kind', ['STANDARD', 'REVIEW', 'INTERNAL_TEST']);
+export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS']);
+export const featureRiskEnum = appSchema.enum('feature_risk', ['LOW', 'MEDIUM', 'HIGH']);
+export const planCodeEnum = appSchema.enum('plan_code', ['SILVER', 'GOLD', 'PLATINUM']);
+export const paymentClassEnum = appSchema.enum('payment_class', ['PHYSICAL_PRODUCT', 'PHYSICAL_SERVICE', 'ELIGIBLE_PERSON_TO_PERSON_SERVICE', 'DIGITAL_SUBSCRIPTION', 'DIGITAL_FEATURE']);
+export const billingPeriodEnum = appSchema.enum('billing_period', ['MONTHLY', 'YEARLY']);
+export const entitlementSourceEnum = appSchema.enum('entitlement_source', ['APPLE', 'GOOGLE', 'ADMIN_GRANT']);
+export const entitlementStatusEnum = appSchema.enum('entitlement_status', ['ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'EXPIRED', 'REVOKED', 'REFUNDED']);
 
 // ------------------------------------------------------------------ auth (read-only subset for the app role)
 export const authUsers = authSchema.table('user', {
@@ -87,6 +95,8 @@ export const userProfiles = appSchema.table('user_profiles', {
   assistantName: text('assistant_name'),
   onboardingCompletedAt: ts('onboarding_completed_at'),
   isDemo: boolean('is_demo').notNull().default(false),
+  /** STANDARD for everyone; REVIEW / INTERNAL_TEST only via the owner-run review seed (migration 0006). */
+  accountKind: accountKindEnum('account_kind').notNull().default('STANDARD'),
   createdAt: ts('created_at').notNull().default(sql`now()`),
   updatedAt: ts('updated_at').notNull().default(sql`now()`),
 });
@@ -107,6 +117,70 @@ export const auditLog = appSchema.table('audit_log', {
   patientId: uuid('patient_id'),
   requestId: text('request_id'),
   metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+});
+
+// ------------------------------------------------------------------ compliance (migration 0006)
+export const consentEvents = appSchema.table('consent_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  consentType: consentTypeEnum('consent_type').notNull(),
+  documentVersion: text('document_version').notNull(),
+  granted: boolean('granted').notNull(),
+  source: text('source').notNull(),
+  locale: localeEnum('locale').notNull().default('ar'),
+  occurredAt: ts('occurred_at').notNull().default(sql`clock_timestamp()`),
+});
+
+export const featureFlags = appSchema.table('feature_flags', {
+  key: text('key').primaryKey(),
+  enabled: boolean('enabled').notNull(),
+  risk: featureRiskEnum('risk').notNull(),
+  requiresRegulatoryEvidence: boolean('requires_regulatory_evidence').notNull(),
+  evidenceRef: text('evidence_ref'),
+  description: text('description').notNull(),
+  updatedByUserId: text('updated_by_user_id'),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+// ------------------------------------------------------------------ billing (migration 0007)
+export const billingPlans = appSchema.table('billing_plans', {
+  code: planCodeEnum('code').primaryKey(),
+  nameEn: text('name_en').notNull(),
+  nameAr: text('name_ar').notNull(),
+  paymentClass: paymentClassEnum('payment_class').notNull(),
+  benefits: jsonb('benefits').notNull(),
+  familyProfileLimit: integer('family_profile_limit'),
+  sortOrder: integer('sort_order').notNull(),
+  active: boolean('active').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+export const billingPlanOffers = appSchema.table(
+  'billing_plan_offers',
+  {
+    planCode: planCodeEnum('plan_code').notNull(),
+    period: billingPeriodEnum('period').notNull(),
+    referencePricePiasters: integer('reference_price_piasters').notNull(),
+    appleProductId: text('apple_product_id'),
+    googleProductId: text('google_product_id'),
+    googleBasePlanId: text('google_base_plan_id'),
+  },
+  (t) => [primaryKey({ columns: [t.planCode, t.period] })],
+);
+
+/** Read-only for the API role: rows are written exclusively by app.billing_apply_event(). */
+export const entitlements = appSchema.table('entitlements', {
+  id: uuid('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  planCode: planCodeEnum('plan_code').notNull(),
+  source: entitlementSourceEnum('source').notNull(),
+  status: entitlementStatusEnum('status').notNull(),
+  productId: text('product_id'),
+  externalRef: text('external_ref'),
+  expiresAt: ts('expires_at'),
+  autoRenew: boolean('auto_renew'),
+  lastEventAt: ts('last_event_at').notNull(),
+  lastVerifiedAt: ts('last_verified_at').notNull(),
 });
 
 // ------------------------------------------------------------------ patients

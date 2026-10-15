@@ -4,17 +4,19 @@ import { initials } from '@/lib/format';
 import { useTheme } from '@/providers/theme';
 import { Text } from './Text';
 
+// Initial avatars: calm brand-adjacent pairs (all ≥ 4.5:1 text contrast). Never orange — that is
+// reserved for selections and the hero action.
 const TINTS = [
-  [palette.teal[100], palette.teal[800]],
   [palette.navy[100], palette.navy[700]],
-  [palette.sand[100], '#7A532E'],
-  ['#E7EEF5', palette.navy[600]],
-  ['#E3F1EE', palette.teal[700]],
+  [palette.brass[100], palette.brass[700]],
+  [palette.blue[50], palette.blue[600]],
+  [palette.green[50], palette.green[600]],
+  [palette.stone[100], palette.ink[700]],
 ] as const;
 const DARK_TINTS = [
-  ['#10302F', palette.teal[200]],
   ['#14273B', palette.navy[200]],
-  ['#2A2118', palette.sand[200]],
+  ['#231C12', palette.brass[300]],
+  ['#10291D', palette.green[300]],
 ] as const;
 
 function hash(s: string) {

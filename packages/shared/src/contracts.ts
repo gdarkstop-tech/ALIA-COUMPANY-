@@ -35,6 +35,9 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const trimmed = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).optional().nullable();
 /** Egyptian mobile numbers in E.164 (+20 1x xxxx xxxx). */
+/** Placeholder email domain for accounts created by phone-OTP sign-up (they have no password). */
+export const PHONE_ONLY_EMAIL_DOMAIN = 'phone.ghayarly.invalid';
+
 export const egyptPhone = z.string().regex(/^\+201[0125]\d{8}$/, 'Expected an Egyptian mobile number in +201XXXXXXXXX format');
 
 // ---------------------------------------------------------------- identity / me

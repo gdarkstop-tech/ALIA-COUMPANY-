@@ -24,7 +24,7 @@ test('Flow B — doctor controls verification visibility and capacity', async ({
     await expect(byId(page, 'stop-new-patients')).toBeVisible();
   }
   // Edit availability: capacity per day.
-  await byId(page, 'max-daily').getByLabel('+').click();
+  await byId(page, 'max-daily').getByLabel('Increase').click();
   await byId(page, 'save-capacity').click();
   await expect(byId(page, 'toast')).toBeVisible();
   await shot(page, 'B03-availability');

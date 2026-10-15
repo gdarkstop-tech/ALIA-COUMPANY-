@@ -1,4 +1,4 @@
-# Dress My Wound (Ghayarly / غيّرلي) — Product Specification
+# Dress My Wound (غير لي) — Product Specification
 
 > **Status:** Source of truth for product scope. Preserved verbatim in substance from the
 > master build prompt (2026-10-14). Changes to scope must be made here first and recorded in

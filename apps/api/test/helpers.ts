@@ -56,7 +56,22 @@ export function clientFor(app: FastifyInstance, cookie: string, userId = '', ema
   };
 }
 
-export async function signUp(app: FastifyInstance, opts: { email?: string; name?: string; role?: 'PATIENT' | 'DOCTOR' | 'NURSE' } = {}): Promise<Client> {
+/** Accepts terms + privacy (and, optionally, explicit health-data processing) at the current versions. */
+export async function grantConsents(client: Client, healthData: boolean) {
+  const state = await client.req({ method: 'GET', url: '/v1/me/consents' });
+  if (state.status !== 200) throw new Error(`consent state failed: ${JSON.stringify(state.json)}`);
+  const wanted = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', ...(healthData ? ['HEALTH_DATA_PROCESSING'] : [])];
+  const consents = (state.json.consents as { type: string; currentVersion: string }[])
+    .filter((c) => wanted.includes(c.type))
+    .map((c) => ({ type: c.type, version: c.currentVersion, granted: true }));
+  const r = await client.req({ method: 'POST', url: '/v1/me/consents', body: { consents, source: 'web', locale: 'en' } });
+  if (r.status !== 200) throw new Error(`consent failed: ${JSON.stringify(r.json)}`);
+}
+
+export async function signUp(
+  app: FastifyInstance,
+  opts: { email?: string; name?: string; role?: 'PATIENT' | 'DOCTOR' | 'NURSE'; consents?: false | 'all' } = {},
+): Promise<Client> {
   const email = opts.email ?? uniqueEmail();
   const res = await app.inject({
     method: 'POST',
@@ -71,6 +86,7 @@ export async function signUp(app: FastifyInstance, opts: { email?: string; name?
     const r = await client.req({ method: 'POST', url: '/v1/me/roles', body: { role: opts.role } });
     if (r.status !== 200) throw new Error(`role assignment failed: ${JSON.stringify(r.json)}`);
   }
+  if (opts.consents !== false) await grantConsents(client, opts.role === 'PATIENT' || opts.consents === 'all');
   return client;
 }
 

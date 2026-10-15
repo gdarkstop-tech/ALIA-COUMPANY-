@@ -20,7 +20,7 @@ export function Segmented<T extends string>({ options, value, onChange, testID }
             scaleTo={0.98}
             style={{
               flex: 1,
-              minHeight: 42,
+              minHeight: 44,
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: radii.md,
@@ -32,6 +32,7 @@ export function Segmented<T extends string>({ options, value, onChange, testID }
             <Text variant="footnote" weight="semibold" color={active ? 'text' : 'textTertiary'}>
               {o.label}
             </Text>
+            {active ? <View style={{ position: 'absolute', bottom: 5, width: 18, height: 3, borderRadius: 2, backgroundColor: colors.accent }} /> : null}
           </PressableScale>
         );
       })}

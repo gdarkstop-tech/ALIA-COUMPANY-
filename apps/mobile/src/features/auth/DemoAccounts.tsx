@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/providers/i18n';
 import { Chip, Notice } from '@/ui';
 
-export const DEMO_PASSWORD = 'Ghayarly-Demo-2026';
+export const DEMO_PASSWORD = 'DressMyWound-Demo-2026';
 const ACCOUNTS = [
   { key: 'patient', email: 'patient.demo@demo.ghayarly.test', icon: 'heart' },
   { key: 'doctor', email: 'doctor.demo@demo.ghayarly.test', icon: 'mci:stethoscope' },

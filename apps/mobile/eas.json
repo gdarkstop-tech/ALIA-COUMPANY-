@@ -1,0 +1,57 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "base": {
+      "node": "22.22.0",
+      "pnpm": "10.28.0",
+      "android": { "image": "latest" },
+      "ios": { "image": "latest" }
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "env": { "APP_VARIANT": "development" },
+      "android": { "buildType": "apk" }
+    },
+    "development-simulator": {
+      "extends": "development",
+      "ios": { "simulator": true }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "environment": "preview",
+      "env": { "APP_VARIANT": "preview" },
+      "android": { "buildType": "apk" }
+    },
+    "preview-store": {
+      "extends": "base",
+      "distribution": "store",
+      "environment": "preview",
+      "autoIncrement": true,
+      "env": { "APP_VARIANT": "preview" },
+      "android": { "buildType": "app-bundle" }
+    },
+    "production": {
+      "extends": "base",
+      "distribution": "store",
+      "environment": "production",
+      "autoIncrement": true,
+      "env": { "APP_VARIANT": "production" },
+      "android": { "buildType": "app-bundle" }
+    }
+  },
+  "submit": {
+    "preview-store": {
+      "android": { "track": "internal", "releaseStatus": "draft" }
+    },
+    "production": {
+      "android": { "track": "internal", "releaseStatus": "draft" }
+    }
+  }
+}

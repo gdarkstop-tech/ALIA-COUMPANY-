@@ -22,3 +22,18 @@ e2e/artifacts/
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
+
+# Signing material and store credentials — never commit (see docs/release/SIGNING_AND_SECRETS.md)
+*.jks
+*.keystore
+!debug.keystore
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+*.cer
+credentials.json
+service-account*.json
+play-service-account*.json
+AuthKey_*.p8

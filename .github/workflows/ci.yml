@@ -44,3 +44,39 @@ jobs:
           CI: '1'
       - name: Build admin console
         run: pnpm --filter @ghayarly/admin build
+      - name: Store & release readiness checks (brand, metadata limits, icons, native config, no committed keys)
+        run: pnpm release:check
+      - name: Build public support / privacy / account-deletion site
+        run: pnpm --filter @ghayarly/site build
+
+  # Native compile of the Android release (AAB) with 16 KB page-size verification. Debug-signed:
+  # the result is a compile/packaging check only — store builds are produced and signed by EAS.
+  android-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: checks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - name: Generate native project (production variant)
+        run: pnpm --filter @ghayarly/mobile exec expo prebuild --platform android --clean --no-install
+        env:
+          APP_VARIANT: production
+          EXPO_PUBLIC_API_URL: https://api.ci-check.invalid
+      - name: Assemble release AAB
+        working-directory: apps/mobile/android
+        run: ./gradlew --no-daemon bundleRelease assembleRelease
+        env:
+          APP_VARIANT: production
+          EXPO_PUBLIC_API_URL: https://api.ci-check.invalid
+      - name: Verify targetSdk, permissions and 16 KB alignment
+        run: bash scripts/release/verify-android.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk

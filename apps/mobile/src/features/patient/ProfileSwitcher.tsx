@@ -17,13 +17,14 @@ export function ProfileSwitcher({ patients, activeId, onSelect }: { patients: Pa
   const router = useRouter();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: 2 }} accessibilityLabel={t('family.switchProfile')}>
+      <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: spacing.sm }}>
       {patients.map((p) => {
         const active = p.id === activeId;
         return (
           <PressableScale
             key={p.id}
             testID={`profile-chip-${p.relationship}`}
-            accessibilityRole="button"
+            accessibilityRole="tab"
             aria-selected={active}
             accessibilityLabel={`${p.displayName} — ${relationshipLabel(t, p)}`}
             onPress={() => onSelect(p.id)}
@@ -54,6 +55,8 @@ export function ProfileSwitcher({ patients, activeId, onSelect }: { patients: Pa
           </PressableScale>
         );
       })}
+      </View>
+      {/* The add action is a plain button OUTSIDE the tablist (a tablist may only contain tabs). */}
       <PressableScale
         testID="profile-chip-add"
         accessibilityRole="button"

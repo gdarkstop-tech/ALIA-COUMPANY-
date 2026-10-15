@@ -95,6 +95,14 @@ export function AccountScreen({ experience }: { experience: 'patient' | 'clinici
               <Divider />
             </>
           ) : null}
+          {experience === 'patient' ? (
+            <>
+              <ListRow icon="mci:crown-outline" title={t('billing.title')} subtitle={t('billing.subtitle')} onPress={() => router.push('/settings/subscription')} testID="open-subscription" />
+              <Divider />
+            </>
+          ) : null}
+          <ListRow icon="mci:shield-lock-outline" title={t('privacy.title')} subtitle={t('privacy.subtitle')} onPress={() => router.push('/settings/privacy')} testID="open-privacy" />
+          <Divider />
           <ListRow icon="lock" title={t('me.security')} subtitle={`${t('me.sessions')} · ${t('me.twoFactor')}`} onPress={() => router.push('/settings/security')} testID="open-security" />
           <Divider />
           <ListRow icon="activity" title={t('me.systemStatus')} onPress={() => router.push('/settings/system')} />

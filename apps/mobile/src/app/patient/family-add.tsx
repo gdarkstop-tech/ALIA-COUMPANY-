@@ -86,12 +86,12 @@ export default function AddFamilyMember() {
           {!minor ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
               <Text variant="footnote" color="textSecondary" style={{ flex: 1 }}>{t('family.useLegalAuthority')}</Text>
-              <Switch value={legalAuthority} onValueChange={(v) => { setLegalAuthority(v); setAttested(false); }} trackColor={{ true: colors.primary, false: colors.border }} />
+              <Switch accessibilityLabel={t('family.useLegalAuthority')} value={legalAuthority} onValueChange={(v) => { setLegalAuthority(v); setAttested(false); }} trackColor={{ true: colors.accent, false: colors.border }} />
             </View>
           ) : null}
           <PressableScale testID="family-consent" accessibilityRole="checkbox" aria-checked={attested} onPress={() => setAttested((v) => !v)} scaleTo={0.99} style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' }}>
-            <View style={{ width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: attested ? colors.primary : colors.borderStrong, backgroundColor: attested ? colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
-              {attested ? <Icon name="check" size={14} tint={colors.textOnPrimary} /> : null}
+            <View style={{ width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: attested ? colors.accent : colors.borderStrong, backgroundColor: attested ? colors.accent : 'transparent', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+              {attested ? <Icon name="check" size={14} tint={colors.textOnAccent} /> : null}
             </View>
             <Text variant="footnote" style={{ flex: 1 }}>{statement}</Text>
           </PressableScale>

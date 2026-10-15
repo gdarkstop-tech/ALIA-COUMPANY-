@@ -1,4 +1,4 @@
-# Ghayarly — Dress My Wound (غيّرلي)
+# Dress My Wound | غير لي
 
 Premium healthcare & home-care platform for Egypt: **One patient. One care team. One medical timeline.**
 
@@ -9,6 +9,7 @@ Premium healthcare & home-care platform for Egypt: **One patient. One care team.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture and module map |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Security & privacy model (RLS, roles, MFA, audit) |
 | [`docs/adr/`](docs/adr) | Architecture decision records |
+| [`docs/release/`](docs/release) | App Store / Google Play readiness: checklists, privacy, payments, healthcare, brand, signing, **release status** |
 
 ## Monorepo
 
@@ -22,6 +23,8 @@ packages/
   tokens/     Design tokens (colour, type, spacing, motion) for mobile and admin
   i18n/       Arabic + English dictionaries with type-safe keys
   api-client/ Typed API client used by mobile and admin
+apps/site/    Static public site: support, privacy, terms, web account deletion (store URLs)
+store/        Store listing metadata (EN/AR) and provisional store graphics
 e2e/          Playwright acceptance flows A–E against the running stack
 infra/        Docker Compose (PostGIS, Redis, MinIO, Mailpit)
 scripts/      Database role bootstrap
@@ -64,7 +67,7 @@ pnpm dev:mobile          # Expo dev server for iOS/Android (Expo Go / dev build)
 
 ### Demo accounts (synthetic — development showcase only)
 
-All use password `Ghayarly-Demo-2026`. Emails use the reserved `.test` TLD.
+All use password `DressMyWound-Demo-2026`. Emails use the reserved `.test` TLD.
 
 | Role | Email | Notes |
 | --- | --- | --- |
@@ -89,11 +92,34 @@ pnpm e2e          # Playwright flows A–E + Arabic RTL (needs the stack running
 If Playwright's bundled Chromium is not installed, point it at an existing build with
 `PW_CHROMIUM_PATH=/path/to/chrome pnpm e2e`.
 
+## Native builds (iOS & Android)
+
+The product ships as native apps built from `apps/mobile` (Expo SDK 57 / React Native 0.86).
+Variants are selected with `APP_VARIANT` (`development` | `preview` | `production`) in
+`apps/mobile/app.config.ts`; store builds run on EAS (`apps/mobile/eas.json`). See
+[`docs/release/SIGNING_AND_SECRETS.md`](docs/release/SIGNING_AND_SECRETS.md).
+
+```bash
+# Local Android verification build (debug-signed — not distributable)
+cd apps/mobile && APP_VARIANT=production EXPO_PUBLIC_API_URL=https://api.example.com \
+  npx expo prebuild --platform android --clean && (cd android && ./gradlew bundleRelease assembleRelease)
+bash scripts/release/verify-android.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+
+pnpm release:check        # brand spelling, store metadata limits, icons, native config, no committed keys
+pnpm brand:assets         # regenerate the PROVISIONAL icon / splash / store graphics
+pnpm --filter @ghayarly/api review:seed   # App Store / Play review accounts (isolated synthetic data)
+pnpm --filter @ghayarly/site build        # public support / privacy / delete-account pages
+```
+
 ## What is real vs. simulated in this build
 
 - **Real:** authentication (Better Auth), sessions, phone OTP flow, 2FA (TOTP), RLS-enforced
   persistence, family consent model, provider onboarding & verification workflow, capacity
   controls, discovery, cart and server-side totals, audit log.
+- **Real, but switched off by server-side feature flags until accounts/approvals exist:** store
+  subscriptions (server-verified Apple/Google entitlements; `NOT_CONFIGURED` without store
+  credentials), regulated clinical/AI features (cannot be enabled without a regulatory-evidence
+  reference — enforced by the database).
 - **Simulated / not configured (labelled in the UI):** payments (Paymob adapter reports
   `NOT_CONFIGURED`; checkout is a preview only — no order, no charge), SMS/email delivery (dev
   outbox), file storage, medical AI, push notifications, maps. Every TetraSol catalogue item,

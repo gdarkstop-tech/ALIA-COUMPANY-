@@ -5,7 +5,11 @@ import { Icon, type IconName } from './Icon';
 import { PressableScale } from './Pressable';
 import { Text } from './Text';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft';
+/**
+ * primary  — navy, the default structural action.
+ * accent   — TetraSol orange: reserve for the ONE hero call-to-action on a screen.
+ */
+type Variant = 'primary' | 'accent' | 'secondary' | 'ghost' | 'danger' | 'soft';
 
 export type ButtonProps = {
   label: string;
@@ -26,13 +30,15 @@ export function Button({ label, onPress, variant = 'primary', size = 'lg', icon,
   const { colors } = useTheme();
   const palette: Record<Variant, { bg: string; fg: keyof typeof colors; border?: string }> = {
     primary: { bg: colors.primary, fg: 'textOnPrimary' },
+    accent: { bg: colors.accent, fg: 'textOnAccent' },
     secondary: { bg: colors.surface, fg: 'text', border: colors.borderStrong },
     ghost: { bg: 'transparent', fg: 'primary' },
     danger: { bg: colors.dangerSoft, fg: 'danger' },
     soft: { bg: colors.primarySoft, fg: 'primarySoftText' },
   };
   const p = palette[variant];
-  const height = size === 'lg' ? touchTarget.comfortable : size === 'md' ? touchTarget.min : 40;
+  // Every size meets the 44 pt minimum (Apple HIG); md/lg follow the 48/56 dp tokens.
+  const height = size === 'lg' ? touchTarget.comfortable : size === 'md' ? touchTarget.min : 44;
   return (
     <PressableScale
       testID={testID}
@@ -42,7 +48,7 @@ export function Button({ label, onPress, variant = 'primary', size = 'lg', icon,
       aria-disabled={Boolean(disabled || loading)} aria-busy={Boolean(loading)}
       disabled={disabled || loading}
       onPress={onPress}
-      haptic={variant === 'primary'}
+      haptic={variant === 'primary' || variant === 'accent'}
       style={[
         {
           minHeight: height,

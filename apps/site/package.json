@@ -1,0 +1,10 @@
+{
+  "name": "@ghayarly/site",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public support, privacy, terms and account-deletion pages for Dress My Wound | غير لي (static HTML).",
+  "type": "module",
+  "scripts": {
+    "build": "node --experimental-strip-types build.ts"
+  }
+}

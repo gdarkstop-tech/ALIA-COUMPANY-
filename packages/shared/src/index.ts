@@ -5,3 +5,7 @@ export * from './contracts';
 export * from './money';
 export * from './age';
 export * from './dashboard';
+export * from './brand';
+export * from './compliance';
+export * from './legal';
+export * from './billing';

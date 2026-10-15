@@ -7,12 +7,14 @@ import { Alert, Platform, View } from 'react-native';
 import { AddEntrySheet } from '@/features/patient/AddEntrySheet';
 import { EmergencyContactSheet } from '@/features/patient/EmergencyContactSheet';
 import { useActivePatient } from '@/features/patient/hooks';
+import { useConsents } from '@/features/compliance/hooks';
+import { EmergencyNotice, MedicalDisclaimer } from '@/features/compliance/Safety';
 import { ProfileSwitcher, relationshipLabel } from '@/features/patient/ProfileSwitcher';
 import { api, errorKey } from '@/lib/api';
 import { ltr } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Avatar, Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, PressableScale, Screen, Section, Text, type IconName, type Tone } from '@/ui';
+import { Avatar, Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Text, type IconName, type Tone } from '@/ui';
 
 const SECTION: Record<HealthEntryKind, { title: 'health.allergies' | 'health.conditions' | 'health.medications' | 'health.surgeries'; empty: 'health.emptyAllergies' | 'health.emptyConditions' | 'health.emptyMedications' | 'health.emptySurgeries'; icon: IconName }> = {
   ALLERGY: { title: 'health.allergies', empty: 'health.emptyAllergies', icon: 'mci:allergy' },
@@ -25,12 +27,12 @@ export function provenanceTone(p: Provenance | null): Tone {
   return p === 'PROFESSIONALLY_VERIFIED' ? 'success' : p === 'IMPORTED_DOCUMENT' ? 'info' : 'neutral';
 }
 
-function confirm(message: string, onYes: () => void) {
+function confirm(message: string, labels: { cancel: string; confirm: string }, onYes: () => void) {
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.confirm(message)) onYes();
     return;
   }
-  Alert.alert(message, undefined, [{ text: 'Cancel', style: 'cancel' }, { text: 'OK', style: 'destructive', onPress: onYes }]);
+  Alert.alert(message, undefined, [{ text: labels.cancel, style: 'cancel' }, { text: labels.confirm, style: 'destructive', onPress: onYes }]);
 }
 
 export default function MyHealth() {
@@ -42,6 +44,7 @@ export default function MyHealth() {
   const entries = useQuery({ queryKey: ['health-entries', active?.id], queryFn: () => api.patients.healthEntries(active!.id), enabled: Boolean(active) });
   const [adding, setAdding] = useState<HealthEntryKind | null>(null);
   const [editingContact, setEditingContact] = useState(false);
+  const consents = useConsents();
   const remove = useMutation({
     mutationFn: (e: HealthEntry) => api.patients.removeHealthEntry(e.patientId, e.id),
     onSuccess: async () => {
@@ -97,6 +100,13 @@ export default function MyHealth() {
         </View>
       </Card>
 
+      <EmergencyNotice />
+      {consents.data && !consents.data.healthDataConsented ? (
+        <Notice tone="warning" title={t('privacy.healthData')} body={t('privacy.healthDataOff')} testID="health-paused">
+          <Button label={t('privacy.title')} variant="ghost" size="sm" fullWidth={false} onPress={() => router.push('/settings/privacy')} />
+        </Notice>
+      ) : null}
+
       {entries.isPending ? (
         <LoadingScreen />
       ) : entries.error ? (
@@ -125,7 +135,7 @@ export default function MyHealth() {
                         <Badge label={t(`health.provenance_${e.provenance}`)} tone={provenanceTone(e.provenance)} icon={e.provenance === 'PROFESSIONALLY_VERIFIED' ? 'check' : undefined} />
                       </View>
                       {e.provenance !== 'PROFESSIONALLY_VERIFIED' ? (
-                        <PressableScale accessibilityRole="button" accessibilityLabel={t('common.remove')} onPress={() => confirm(t('health.removeConfirm'), () => remove.mutate(e))} style={{ padding: spacing.sm }}>
+                        <PressableScale accessibilityRole="button" accessibilityLabel={t('common.remove')} onPress={() => confirm(t('health.removeConfirm'), { cancel: t('common.cancel'), confirm: t('common.remove') }, () => remove.mutate(e))} style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
                           <Icon name="trash-2" size={16} color="textTertiary" />
                         </PressableScale>
                       ) : null}
@@ -151,6 +161,8 @@ export default function MyHealth() {
           </View>
         </Card>
       </Section>
+
+      <MedicalDisclaimer />
 
       <AddEntrySheet patientId={active.id} kind={adding} onClose={() => setAdding(null)} />
       <EmergencyContactSheet patient={active} visible={editingContact} onClose={() => setEditingContact(false)} />

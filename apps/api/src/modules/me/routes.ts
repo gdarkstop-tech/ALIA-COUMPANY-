@@ -1,4 +1,4 @@
-import { assignRoleBody, requiresMfa, updateMeBody, type MeResponse, type Role } from '@ghayarly/shared';
+import { BRAND_NAME_EN, assignRoleBody, requiresMfa, updateMeBody, type MeResponse, type Role } from '@ghayarly/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Tx } from '../../db/client';
@@ -13,7 +13,7 @@ async function ensureProfile(tx: Tx, principal: Principal) {
   if (existing) return existing;
   const [created] = await tx
     .insert(userProfiles)
-    .values({ userId: principal.userId, displayName: principal.user.name.slice(0, 80) || 'Ghayarly user' })
+    .values({ userId: principal.userId, displayName: principal.user.name.slice(0, 80) || `${BRAND_NAME_EN} user` })
     .returning();
   return created!;
 }

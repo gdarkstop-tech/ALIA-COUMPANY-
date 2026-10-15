@@ -37,7 +37,8 @@ export default function SignUp() {
       return;
     }
     qc.clear();
-    resetTo('/onboarding/role');
+    // Through the session gate: terms/privacy consent comes before role selection.
+    resetTo('/');
   };
 
   return (

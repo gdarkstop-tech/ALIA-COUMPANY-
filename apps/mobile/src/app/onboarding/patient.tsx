@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { EG_PHONE_RE, normalizeEgyptPhone } from '@/features/auth/authErrors';
+import { useConsents, useRecordConsents } from '@/features/compliance/hooks';
 import { api, errorKey } from '@/lib/api';
 import { FAMILY_CONSENT_VERSION } from '@/lib/config';
 import { isValidIsoDate, maskDate } from '@/lib/format';
@@ -13,7 +14,7 @@ import { useI18n } from '@/providers/i18n';
 import { usePreferences } from '@/providers/preferences';
 import { useMe } from '@/providers/session';
 import { useTheme } from '@/providers/theme';
-import { Badge, Button, Header, Icon, Notice, PressableScale, Screen, Segmented, Select, Text, TextField } from '@/ui';
+import { Badge, Button, Card, Checkbox, Header, Icon, Notice, PressableScale, Screen, Segmented, Select, Text, TextField } from '@/ui';
 
 const QUICK_ADD: Record<HealthEntryKind, 'onboarding.quickAddAllergy' | 'onboarding.quickAddCondition' | 'onboarding.quickAddMedication' | 'onboarding.quickAddSurgery'> = {
   ALLERGY: 'onboarding.quickAddAllergy',
@@ -27,7 +28,7 @@ function Progress({ step }: { step: number }) {
   return (
     <View style={{ flexDirection: 'row', gap: spacing.xs }} accessibilityLabel={`${step + 1} / 3`}>
       {[0, 1, 2].map((i) => (
-        <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= step ? colors.primary : colors.border }} />
+        <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= step ? colors.accent : colors.border }} />
       ))}
     </View>
   );
@@ -60,15 +61,24 @@ export default function PatientOnboarding() {
   const [ecPhone, setEcPhone] = useState('');
   const [ecRelation, setEcRelation] = useState('');
   const patientId = self?.id;
+  // Explicit, separate consent for sensitive health data — asked in context, never pre-ticked.
+  const consents = useConsents();
+  const recordConsents = useRecordConsents();
+  const needsHealthConsent = consents.data ? !consents.data.healthDataConsented : false;
+  const [healthConsent, setHealthConsent] = useState(false);
 
   const displayName = name || me.data?.user.name || '';
 
   const saveStep1 = async () => {
     if (!isValidIsoDate(dob) || dob > new Date().toISOString().slice(0, 10)) return setError(t('errors.invalidDate'));
     if (phone && !EG_PHONE_RE.test(normalizeEgyptPhone(phone))) return setError(t('errors.invalidPhone'));
+    if (needsHealthConsent && !healthConsent) return setError(t('privacy.healthConsentRequired'));
     setBusy(true);
     setError(null);
     try {
+      if (needsHealthConsent && consents.data) {
+        await recordConsents.mutateAsync({ state: consents.data, answers: { HEALTH_DATA_PROCESSING: true } });
+      }
       let id = patientId;
       if (!id) {
         const created = await api.patients.create({ displayName: displayName.trim(), dateOfBirth: dob, sex, relationship: 'SELF', consentBasis: 'SELF', consentAttested: true, consentStatementVersion: FAMILY_CONSENT_VERSION });
@@ -147,7 +157,7 @@ export default function PatientOnboarding() {
       }
       footer={
         step === 0 ? (
-          <Button testID="onboarding-next" label={t('common.continue')} onPress={() => void saveStep1()} loading={busy} disabled={!displayName.trim() || !dob} />
+          <Button testID="onboarding-next" label={t('common.continue')} onPress={() => void saveStep1()} loading={busy} disabled={!displayName.trim() || !dob || (needsHealthConsent && !healthConsent)} />
         ) : step === 1 ? (
           <View style={{ gap: spacing.sm }}>
             <Button testID="onboarding-next" label={t('common.continue')} onPress={() => void saveStep2()} loading={busy} />
@@ -186,6 +196,15 @@ export default function PatientOnboarding() {
           <Select label={t('onboarding.governorate')} optional value={governorate} onChange={setGovernorate} options={GOVERNORATES.map((g) => ({ value: g, label: t(`governorate.${g}`) }))} />
           <TextField label={t('onboarding.city')} optional value={city} onChangeText={setCity} />
           <TextField label={t('auth.phone')} optional value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+2010…" ltr />
+          {needsHealthConsent ? (
+            <Card testID="health-consent-card" style={{ gap: spacing.sm }}>
+              <Text variant="callout" weight="semibold">{t('privacy.healthConsentTitle')}</Text>
+              <Text variant="footnote" color="textSecondary">{t('privacy.healthConsentBody')}</Text>
+              <Checkbox testID="health-consent" checked={healthConsent} onChange={setHealthConsent} label={t('privacy.healthConsentAgree')}>
+                <Button label={`${t('legal.read')} · ${t('legal.healthConsent')}`} variant="ghost" size="sm" fullWidth={false} onPress={() => router.push('/legal/health-consent')} />
+              </Checkbox>
+            </Card>
+          ) : null}
         </Animated.View>
       ) : step === 1 ? (
         <Animated.View entering={FadeIn.duration(300)} style={{ gap: spacing.xl }}>

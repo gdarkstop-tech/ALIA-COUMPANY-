@@ -1,7 +1,7 @@
 import { expect, request, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
-export const DEMO_PASSWORD = 'Ghayarly-Demo-2026';
+export const DEMO_PASSWORD = 'DressMyWound-Demo-2026';
 export const API_URL = process.env.E2E_API_URL ?? 'http://localhost:4000';
 const SHOTS = 'artifacts';
 mkdirSync(SHOTS, { recursive: true });
@@ -35,4 +35,15 @@ export function unique(prefix: string) {
 /** React Navigation keeps inactive tab/stack screens mounted on web; target only what is visible. */
 export function byId(page: Page, id: string) {
   return page.getByTestId(id).filter({ visible: true }).first();
+}
+
+/** Accepts the current terms + privacy (and optionally health-data) consents through the API. */
+export async function grantConsentsApi(ctx: Awaited<ReturnType<typeof apiSession>>, healthData = false) {
+  const state = await (await ctx.get('/v1/me/consents')).json();
+  const wanted = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', ...(healthData ? ['HEALTH_DATA_PROCESSING'] : [])];
+  const consents = (state.consents as { type: string; currentVersion: string }[])
+    .filter((c) => wanted.includes(c.type))
+    .map((c) => ({ type: c.type, version: c.currentVersion, granted: true }));
+  const res = await ctx.post('/v1/me/consents', { data: { consents, source: 'web', locale: 'en' } });
+  expect(res.ok(), await res.text()).toBeTruthy();
 }

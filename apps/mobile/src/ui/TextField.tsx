@@ -75,7 +75,7 @@ export const TextField = forwardRef<TextInput, Props>(function TextField({ label
           ]}
         />
         {secureTextEntry ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={reveal ? 'Hide password' : 'Show password'} hitSlop={12} onPress={() => setReveal((v) => !v)}>
+          <Pressable accessibilityRole="button" accessibilityLabel={reveal ? t('common.hidePassword') : t('common.showPassword')} onPress={() => setReveal((v) => !v)} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
             <Icon name={reveal ? 'eye-off' : 'eye'} size={18} color="textTertiary" />
           </Pressable>
         ) : null}

@@ -141,7 +141,7 @@ describe('authentication', () => {
       method: 'POST',
       url: '/api/auth/request-password-reset',
       headers: { origin: ORIGIN, 'content-type': 'application/json' },
-      payload: JSON.stringify({ email, redirectTo: 'ghayarly://reset-password' }),
+      payload: JSON.stringify({ email, redirectTo: 'dressmywound://reset-password' }),
     });
     expect(req.statusCode).toBe(200);
     const mail = app.services.messaging.outbox!.list({ to: email, purpose: 'password-reset' })[0]!;

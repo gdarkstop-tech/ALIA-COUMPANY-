@@ -1,7 +1,7 @@
 {
   "name": "ghayarly",
   "private": true,
-  "description": "Dress My Wound (Ghayarly) — premium healthcare & home-care platform. Monorepo.",
+  "description": "Dress My Wound (\u063a\u064a\u0631 \u0644\u064a) \u2014 premium healthcare & home-care platform. Monorepo.",
   "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=22.12.0"
@@ -20,7 +20,9 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "e2e": "pnpm --filter @ghayarly/e2e e2e",
-    "check": "pnpm typecheck && pnpm lint && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "release:check": "node --no-warnings scripts/release/check.ts",
+    "brand:assets": "node --no-warnings scripts/brand/generate-assets.ts && python3 scripts/brand/flatten-icon.py apps/mobile/assets/icon.png && python3 scripts/brand/flatten-icon.py --rgba store/assets/google-play/icon-512.png"
   },
   "devDependencies": {
     "turbo": "2.11.8",

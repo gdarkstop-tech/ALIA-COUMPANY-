@@ -9,23 +9,24 @@ export function Chip({ label, selected, onPress, icon, testID }: { label: string
   return (
     <PressableScale
       testID={testID}
-      accessibilityRole="button"
-      aria-selected={Boolean(selected)}
+      accessibilityRole={selected === undefined ? 'button' : 'checkbox'}
+      {...(selected === undefined ? {} : { 'aria-checked': selected, accessibilityState: { checked: selected } })}
       onPress={onPress}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        minHeight: 40,
+        minHeight: 44,
         paddingHorizontal: spacing.lg,
         borderRadius: radii.pill,
-        backgroundColor: selected ? colors.navy : colors.surface,
-        borderWidth: 1,
-        borderColor: selected ? colors.navy : colors.border,
+        // Selection = TetraSol orange (soft fill + accent outline), never a clinical colour.
+        backgroundColor: selected ? colors.accentSoft : colors.surface,
+        borderWidth: selected ? 1.5 : 1,
+        borderColor: selected ? colors.accent : colors.border,
       }}
     >
-      {icon ? <Icon name={icon} size={14} tint={selected ? colors.surface : colors.textSecondary} /> : null}
-      <Text variant="footnote" weight="semibold" style={{ color: selected ? colors.surface : colors.textSecondary }}>
+      {icon ? <Icon name={icon} size={14} tint={selected ? colors.accentText : colors.textSecondary} /> : null}
+      <Text variant="footnote" weight="semibold" style={{ color: selected ? colors.accentText : colors.textSecondary }}>
         {label}
       </Text>
     </PressableScale>

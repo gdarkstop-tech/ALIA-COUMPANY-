@@ -14,7 +14,7 @@ import { loadEnv } from '../config/env';
 import { createMessaging } from '../integrations/messaging';
 import { createPools } from './client';
 
-export const DEMO_PASSWORD = 'Ghayarly-Demo-2026';
+export const DEMO_PASSWORD = 'DressMyWound-Demo-2026';
 export const DEMO_ACCOUNTS = {
   patient: { email: 'patient.demo@demo.ghayarly.test', name: 'Salma Hassan' },
   doctor: { email: 'doctor.demo@demo.ghayarly.test', name: 'Dr. Ahmed Fathy' },
@@ -84,6 +84,16 @@ const DEMO_PRODUCTS = [
   { slug: 'demo-tetrasol-placeholder-c', letterEn: 'C', letterAr: 'ج', variants: [{ en: 'Demo option 1', ar: 'خيار تجريبي ١', egp: 260, stock: 'OUT_OF_STOCK' }] },
 ];
 
+/** Records synthetic consent events (source `seed`) at the current document versions. */
+export async function grantSeedConsents(client: pg.PoolClient | pg.Pool, userId: string, includeHealthData: boolean) {
+  const { rows } = await client.query<{ value: Record<string, string> }>(`select value from app.settings where key = 'consent.current_versions'`);
+  const versions = rows[0]!.value;
+  const types = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', ...(includeHealthData ? ['HEALTH_DATA_PROCESSING'] : [])];
+  for (const t of types) {
+    await client.query(`insert into app.consent_events (user_id, consent_type, document_version, granted, source, locale) values ($1, $2, $3, true, 'seed', 'ar')`, [userId, t, versions[t]]);
+  }
+}
+
 export async function seed(log: (line: string) => void = console.log) {
   const env = loadEnv();
   if (env.NODE_ENV === 'production') throw new Error('Refusing to seed synthetic data in production');
@@ -146,6 +156,9 @@ export async function seed(log: (line: string) => void = console.log) {
     await profile(ids.pendingDoctor, 'د. كريم نبيل', 'DOCTOR');
     await role(ids.pendingNurse, 'NURSE');
     await profile(ids.pendingNurse, 'هدى سمير', 'NURSE');
+
+    // ---------------------------------------------------------------- consents (synthetic accounts accepted the draft documents)
+    for (const userId of Object.values(ids)) await grantSeedConsents(client, userId, userId === ids.patient);
 
     // ---------------------------------------------------------------- patient & family
     const createPatient = async (p: { name: string; dob: string; sex: string; rel: string; level: string; basis: string; blood?: string; gov?: string; city?: string; self?: boolean }) => {
@@ -295,7 +308,7 @@ export async function seed(log: (line: string) => void = console.log) {
   }
 }
 
-const isMain = process.argv[1]?.endsWith('seed.ts');
+const isMain = /(^|[\\/])seed\.ts$/.test(process.argv[1] ?? '');
 if (isMain) {
   seed().catch((err) => {
     console.error(err);

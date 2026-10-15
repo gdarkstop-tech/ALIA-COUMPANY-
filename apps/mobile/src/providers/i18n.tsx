@@ -1,5 +1,5 @@
 import { createTranslator, direction, isRTL as rtl, pick, type Locale, type TranslationKey, type TranslationParams } from '@ghayarly/i18n';
-import * as Updates from 'expo-updates';
+import { reloadAppAsync } from 'expo';
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { DevSettings, I18nManager, Platform } from 'react-native';
 import { usePreferences } from './preferences';
@@ -18,7 +18,7 @@ const Ctx = createContext<I18n | null>(null);
 
 async function reloadForDirection() {
   try {
-    await Updates.reloadAsync();
+    await reloadAppAsync('Layout direction changed');
   } catch {
     if (__DEV__) DevSettings.reload();
   }

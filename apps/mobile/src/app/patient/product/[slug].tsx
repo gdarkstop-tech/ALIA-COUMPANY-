@@ -85,9 +85,9 @@ export default function ProductDetail() {
             const selected = v.id === variantId;
             return (
               <PressableScale key={v.id} testID={`variant-${v.sku}`} accessibilityRole="radio" aria-checked={selected} onPress={() => setVariantId(v.id)} scaleTo={0.99}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg, borderWidth: selected ? 2 : 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: colors.surface }}>
-                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selected ? colors.primary : colors.borderStrong, alignItems: 'center', justifyContent: 'center' }}>
-                  {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} /> : null}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg, borderWidth: selected ? 2 : 1, borderColor: selected ? colors.accent : colors.border, backgroundColor: selected ? colors.accentSoft : colors.surface }}>
+                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selected ? colors.accent : colors.borderStrong, alignItems: 'center', justifyContent: 'center' }}>
+                  {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} /> : null}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text variant="callout" weight="medium">{pickL(v, 'label')}</Text>

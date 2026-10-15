@@ -18,6 +18,14 @@ test('Flow A — patient journey with family management and discovery', async ({
   await byId(page, 'sign-up-password').fill(password);
   await byId(page, 'sign-up-submit').click();
 
+  // Consent gate: terms + privacy must be accepted explicitly (marketing stays optional, unticked).
+  await expect(byId(page, 'consent-gate')).toBeVisible();
+  await expect(byId(page, 'consent-accept')).toHaveAttribute('aria-disabled', 'true');
+  await byId(page, 'consent-terms').click();
+  await byId(page, 'consent-privacy').click();
+  await shot(page, 'A01b-consent-gate');
+  await byId(page, 'consent-accept').click();
+
   await expect(byId(page, 'role-screen')).toBeVisible();
   await shot(page, 'A02-role-selection');
   await byId(page, 'role-PATIENT').click();
@@ -25,6 +33,9 @@ test('Flow A — patient journey with family management and discovery', async ({
   await expect(byId(page, 'patient-onboarding')).toBeVisible();
   await byId(page, 'onb-dob').fill('19900315');
   await expect(byId(page, 'onb-dob')).toHaveValue('1990-03-15');
+  // Explicit, separate health-data consent before any health information is stored.
+  await expect(byId(page, 'onboarding-next')).toHaveAttribute('aria-disabled', 'true');
+  await byId(page, 'health-consent').click();
   await shot(page, 'A03-onboarding-step1');
   await byId(page, 'onboarding-next').click();
   await byId(page, 'onb-entry-ALLERGY').fill('Latex');

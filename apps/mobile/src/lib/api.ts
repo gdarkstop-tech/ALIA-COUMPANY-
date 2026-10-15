@@ -25,9 +25,11 @@ export function errorKey(err: unknown):
   | 'errors.notFound'
   | 'errors.validation'
   | 'errors.rateLimited'
+  | 'errors.healthConsentRequired'
   | 'errors.generic' {
   if (err instanceof ApiError) {
     if (err.isNetwork) return 'errors.network';
+    if (err.code === 'HEALTH_DATA_CONSENT_REQUIRED') return 'errors.healthConsentRequired';
     if (err.status === 401) return 'errors.unauthorized';
     if (err.status === 403) return 'errors.forbidden';
     if (err.status === 404) return 'errors.notFound';

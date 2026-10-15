@@ -14,7 +14,7 @@ export type TextProps = RNTextProps & {
 
 const DEFAULT_WEIGHT: Partial<Record<TextVariant, Weight>> = { display: 'bold', title1: 'bold', title2: 'semibold', title3: 'semibold' };
 
-export function Text({ variant = 'body', weight, color = 'text', align = 'auto', tabular, style, ...rest }: TextProps) {
+export function Text({ variant = 'body', weight, color = 'text', align = 'auto', tabular, style, maxFontSizeMultiplier = typography.maxFontSizeMultiplier, ...rest }: TextProps) {
   const { colors } = useTheme();
   const w = weight ?? DEFAULT_WEIGHT[variant] ?? 'regular';
   const base: TextStyle = {
@@ -26,5 +26,6 @@ export function Text({ variant = 'body', weight, color = 'text', align = 'auto',
     ...(variant === 'display' || variant === 'title1' ? { letterSpacing: typography.letterSpacing.tight } : {}),
     ...(tabular ? { fontVariant: ['tabular-nums'] } : {}),
   };
-  return <RNText {...rest} style={[base, style]} />;
+  // Honour the OS text-size setting (Dynamic Type / font scale) up to a tested ceiling.
+  return <RNText {...rest} maxFontSizeMultiplier={maxFontSizeMultiplier} style={[base, style]} />;
 }

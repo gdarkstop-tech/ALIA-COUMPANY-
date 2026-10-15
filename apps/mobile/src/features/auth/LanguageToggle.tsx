@@ -13,7 +13,7 @@ export function LanguageToggle() {
       accessibilityRole="button"
       accessibilityLabel={t('common.language')}
       onPress={() => setLocale(next)}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, minHeight: 36, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, minHeight: 44, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
     >
       <Icon name="globe" size={14} color="textSecondary" />
       <Text variant="footnote" weight="semibold" color="textSecondary">

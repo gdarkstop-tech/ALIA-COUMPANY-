@@ -8,11 +8,13 @@ import { api, ApiError } from '@/lib/api';
 import { authClient } from '@/lib/auth-client';
 import { useI18n } from './Providers';
 
-const NAV: { href: string; key: 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.security'; icon: string; permission?: Permission }[] = [
+const NAV: { href: string; key: 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security'; icon: string; permission?: Permission }[] = [
   { href: '/', key: 'admin.overview', icon: '◎', permission: 'provider.verification.review' },
   { href: '/verification', key: 'admin.verification', icon: '✓', permission: 'provider.verification.review' },
   { href: '/users', key: 'admin.users', icon: '◍', permission: 'users.read' },
   { href: '/audit', key: 'admin.audit', icon: '≡', permission: 'audit.read' },
+  // ADMIN-only (the API and the database both enforce the ADMIN role).
+  { href: '/features', key: 'admin.features', icon: '⚑', permission: 'users.roles.grant' },
   { href: '/security', key: 'admin.security', icon: '⚿' },
 ];
 

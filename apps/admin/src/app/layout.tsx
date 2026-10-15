@@ -17,7 +17,7 @@ const plex = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'Ghayarly Admin',
+  title: 'Dress My Wound Admin',
   description: 'Operations & clinical review console',
   robots: { index: false, follow: false },
 };

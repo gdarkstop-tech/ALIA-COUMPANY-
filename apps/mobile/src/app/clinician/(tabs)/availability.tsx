@@ -15,13 +15,15 @@ type Slot = { weekday: number; startMinute: number; endMinute: number };
 
 function Stepper({ value, onChange, min, max, step = 1, format, testID }: { value: number; onChange: (v: number) => void; min: number; max: number; step?: number; format?: (v: number) => string; testID?: string }) {
   const { colors } = useTheme();
+  const { t } = useI18n();
+  const target = { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' } as const;
   return (
     <View testID={testID} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, backgroundColor: colors.surface }}>
-      <PressableScale accessibilityRole="button" accessibilityLabel="-" onPress={() => onChange(Math.max(min, value - step))} style={{ padding: spacing.sm + 2 }}>
+      <PressableScale accessibilityRole="button" accessibilityLabel={t('common.decrease')} accessibilityValue={{ text: format ? format(value) : String(value) }} onPress={() => onChange(Math.max(min, value - step))} style={target}>
         <Icon name="minus" size={16} />
       </PressableScale>
       <Text weight="semibold" tabular style={{ minWidth: 56, textAlign: 'center' }}>{format ? format(value) : value}</Text>
-      <PressableScale accessibilityRole="button" accessibilityLabel="+" onPress={() => onChange(Math.min(max, value + step))} style={{ padding: spacing.sm + 2 }}>
+      <PressableScale accessibilityRole="button" accessibilityLabel={t('common.increase')} accessibilityValue={{ text: format ? format(value) : String(value) }} onPress={() => onChange(Math.min(max, value + step))} style={target}>
         <Icon name="plus" size={16} />
       </PressableScale>
     </View>
@@ -115,10 +117,10 @@ export default function Availability() {
                   update.mutate({ availabilityStatus: o, ...(o === 'AWAY' ? { awayUntil } : {}) });
                 }}
                 scaleTo={0.99}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg, borderWidth: selected ? 2 : 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surface }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg, borderWidth: selected ? 2 : 1, borderColor: selected ? colors.accent : colors.border, backgroundColor: selected ? colors.accentSoft : colors.surface }}
               >
-                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selected ? colors.primary : colors.borderStrong, alignItems: 'center', justifyContent: 'center' }}>
-                  {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} /> : null}
+                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selected ? colors.accent : colors.borderStrong, alignItems: 'center', justifyContent: 'center' }}>
+                  {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} /> : null}
                 </View>
                 <Text variant="callout" weight={selected ? 'semibold' : 'regular'}>{t(`availability.${o}`)}</Text>
               </PressableScale>
@@ -152,7 +154,7 @@ export default function Availability() {
               <Text variant="callout">{t('availability.temporarilyUnavailable')}</Text>
               <Text variant="caption" color="textTertiary">{t('availability.temporarilyUnavailableHint')}</Text>
             </View>
-            <Switch testID="pause-switch" value={p.temporarilyUnavailable} onValueChange={(v) => update.mutate({ temporarilyUnavailable: v })} trackColor={{ true: colors.primary, false: colors.border }} />
+            <Switch testID="pause-switch" accessibilityLabel={t('availability.temporarilyUnavailable')} value={p.temporarilyUnavailable} onValueChange={(v) => update.mutate({ temporarilyUnavailable: v })} trackColor={{ true: colors.accent, false: colors.border }} />
           </View>
           <Button testID="save-capacity" label={t('common.save')} variant="soft" size="md" loading={update.isPending} onPress={() => update.mutate({ maxDailyAppointments: maxDaily, ...(isDoctor ? {} : { serviceRadiusKm: radius }) })} />
         </View>
@@ -166,7 +168,7 @@ export default function Availability() {
               <View key={d} style={{ padding: spacing.lg, gap: spacing.sm, borderTopWidth: i ? 1 : 0, borderTopColor: colors.divider }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text variant="callout" weight="medium">{t(`availability.weekday${d}` as 'availability.weekday0')}</Text>
-                  <Switch testID={`day-${d}`} value={Boolean(slot)} onValueChange={() => toggleDay(d)} trackColor={{ true: colors.primary, false: colors.border }} />
+                  <Switch testID={`day-${d}`} accessibilityLabel={t(`availability.weekday${d}` as 'availability.weekday0')} value={Boolean(slot)} onValueChange={() => toggleDay(d)} trackColor={{ true: colors.accent, false: colors.border }} />
                 </View>
                 {slot ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>

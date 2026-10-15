@@ -1,4 +1,4 @@
-/* Ghayarly admin console — token-driven, RTL-aware (logical properties only). */
+/* Dress My Wound admin console — token-driven, RTL-aware (logical properties only). */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {

@@ -1,4 +1,4 @@
-# Local backend services for Ghayarly. Usage:  docker compose -f infra/docker-compose.yml up -d
+# Local backend services for Dress My Wound (غير لي). Usage:  docker compose -f infra/docker-compose.yml up -d
 # Then:  pnpm db:migrate && pnpm db:seed   (see README.md)
 name: ghayarly
 services:

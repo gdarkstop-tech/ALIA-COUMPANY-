@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { useConsents } from '@/features/compliance/hooks';
 import { api, ApiError, errorKey } from '@/lib/api';
 import { authClient } from '@/lib/auth-client';
 import { useI18n } from '@/providers/i18n';
@@ -24,6 +25,7 @@ export default function Index() {
   const session = authClient.useSession();
   const signedIn = Boolean(session.data);
   const me = useMe(signedIn);
+  const consents = useConsents(signedIn && Boolean(me.data));
   const signOut = useSignOut();
   const role = activeExperience(me.data);
   const patients = useQuery({ queryKey: ['patients'], queryFn: () => api.patients.list(), enabled: role === 'PATIENT' });
@@ -38,6 +40,10 @@ export default function Index() {
   if (!signedIn || expired) return <Redirect href="/welcome" />;
   if (me.isPending) return <Splash />;
   if (me.error) return <ErrorState message={t(errorKey(me.error))} onRetry={() => void me.refetch()} />;
+  // Current terms + privacy must be accepted before anything else (new accounts and document updates).
+  if (consents.isPending) return <Splash />;
+  if (consents.error) return <ErrorState message={t(errorKey(consents.error))} onRetry={() => void consents.refetch()} />;
+  if (consents.data.missingRequired.length) return <Redirect href="/consent" />;
   if (!role) return <Redirect href="/onboarding/role" />;
   if (role === 'PATIENT') {
     if (patients.isPending) return <Splash />;
