@@ -14,23 +14,13 @@ import {
   type FeatureFlags,
 } from '@ghayarly/shared';
 import { desc, eq, sql } from 'drizzle-orm';
-import { createHash } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { Tx } from '../../db/client';
 import { consentEvents, featureFlags, settings } from '../../db/schema';
 import { AppError, forbidden, notFound, unprocessable } from '../../lib/errors';
-import { enforceMfa, inContext, requirePrincipal, requireRole } from '../../lib/principal';
+import { enforceMfa, getPrincipal, inContext, requirePrincipal, requireRole } from '../../lib/principal';
+import { sessionKey } from '../../lib/rateLimitKey';
 import { parse } from '../../lib/validate';
-
-/**
- * Per-session rate-limit key: Egyptian mobile networks put many users behind one carrier-grade
- * NAT address, so IP-only limits would let one person lock out others. Hashing keeps the raw
- * cookie out of the limiter store.
- */
-function sessionKey(request: FastifyRequest): string {
-  const cookie = request.headers.cookie ?? request.headers.authorization ?? '';
-  return cookie ? `s:${createHash('sha256').update(cookie).digest('hex').slice(0, 32)}` : `ip:${request.ip}`;
-}
 
 /** Re-authentication window for accounts without a password (phone OTP sign-in). */
 const FRESH_SESSION_MS = 15 * 60 * 1000;
@@ -143,9 +133,16 @@ export async function complianceRoutes(app: FastifyInstance) {
   });
 
   // ---------------------------------------------------------------- feature flags
+  /** Effective flags for the caller. Review / internal-test accounts may use store subscriptions
+   *  while they are off for everyone else, so App Review can buy the submitted products. */
   app.get('/system/features', async (request): Promise<FeatureFlags> => {
-    const rows = await inContext(request, null, (tx) => tx.select({ key: featureFlags.key, enabled: featureFlags.enabled }).from(featureFlags));
+    const principal = await getPrincipal(request);
+    const { rows, storeSubscriptions } = await inContext(request, principal, async (tx) => ({
+      rows: await tx.select({ key: featureFlags.key, enabled: featureFlags.enabled }).from(featureFlags),
+      storeSubscriptions: (await tx.execute<{ ok: boolean }>(sql`select app.store_subscriptions_available() as ok`)).rows[0]?.ok ?? false,
+    }));
     const map = new Map(rows.map((r) => [r.key, r.enabled]));
+    map.set('billing.store_subscriptions', storeSubscriptions);
     return Object.fromEntries(FEATURE_KEYS.map((k) => [k, map.get(k) ?? false])) as FeatureFlags;
   });
 

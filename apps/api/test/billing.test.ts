@@ -62,6 +62,10 @@ describe('store event normalization', () => {
     expect(ev?.sandbox).toBe(true);
     expect(ev?.eventType).toBe('CLIENT_VERIFY');
   });
+
+  it('never lets a transaction superseded by an upgrade restore access', () => {
+    expect(normalizeApple({ tx: { originalTransactionId: '1', transactionId: '2', productId: 'x', expiresDate: NOW.getTime() + 300 * DAY, isUpgraded: true }, now: NOW })).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------- service (fixture stores)
@@ -106,6 +110,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.query(`update app.billing_plan_offers set apple_product_id = null`);
   await owner.query(`update app.feature_flags set enabled = false where key = 'billing.store_subscriptions'`);
+  await owner.query(`update app.billing_plans set family_profile_limit = null where code = 'SILVER'`);
   await appPool.end();
   await owner.end();
   await plain.close();
@@ -134,6 +139,18 @@ describe('entitlement service', () => {
     expect(e.json.effectivePlan).toBe('SILVER');
   });
 
+  it('review accounts can buy while subscriptions are off for everyone else (App Review)', async () => {
+    const reviewer = await signUp(app, { role: 'PATIENT' });
+    const regular = await signUp(app, { role: 'PATIENT' });
+    await owner.query(`update app.user_profiles set account_kind = 'REVIEW' where user_id = $1`, [reviewer.userId]);
+    const flags = async (c: typeof reviewer) => (await c.req({ method: 'GET', url: '/v1/system/features' })).json['billing.store_subscriptions'];
+    expect(await flags(reviewer)).toBe(true);
+    expect(await flags(regular)).toBe(false);
+    const gold = async (c: typeof reviewer) => (await c.req({ method: 'GET', url: '/v1/billing/plans?platform=ios' })).json.find((p: { code: string }) => p.code === 'GOLD');
+    expect((await gold(reviewer)).purchasable).toBe(true);
+    expect((await gold(regular)).unavailableReason).toBe('FEATURE_DISABLED');
+  });
+
   it('grants only after server verification, bound to the purchasing account; refunds revoke access', async () => {
     const buyer = await signUp(app, { role: 'PATIENT' });
     const token = (await buyer.req({ method: 'GET', url: '/v1/billing/account-token' })).json.appAccountToken as string;
@@ -144,6 +161,10 @@ describe('entitlement service', () => {
     const off = await buyer.req({ method: 'POST', url: '/v1/billing/apple/verify', body: { signedTransactionInfo: signed } });
     expect(off.status).toBe(409);
     expect(off.json.error.code).toBe('FEATURE_DISABLED');
+    // Paid tiers must unlock what they sell: subscriptions cannot go live while a plan (Silver) has
+    // no family-profile limit.
+    await expect(owner.query(`update app.feature_flags set enabled = true where key = 'billing.store_subscriptions'`)).rejects.toThrow(/PLAN_FAMILY_LIMITS_REQUIRED/);
+    await owner.query(`update app.billing_plans set family_profile_limit = 1 where code = 'SILVER'`);
     await owner.query(`update app.feature_flags set enabled = true where key = 'billing.store_subscriptions'`);
 
     // Forged / unverifiable payload → rejected.
@@ -179,6 +200,53 @@ describe('entitlement service', () => {
     const n3 = await app.inject({ method: 'POST', url: '/webhooks/apple/app-store-notifications', payload: { signedPayload: stalePayload } });
     expect(JSON.parse(n3.body).outcome).toBe('IGNORED_STALE');
     expect((await buyer.req({ method: 'GET', url: '/v1/billing/entitlements' })).json.effectivePlan).toBe('SILVER');
+  });
+
+  it('once subscriptions are on, the family-profile limit comes from the plan', async () => {
+    const c = await signUp(app, { role: 'PATIENT' });
+    const member = (displayName: string, relationship: string) => ({ displayName, dateOfBirth: '1955-05-05', sex: 'FEMALE', relationship, consentBasis: 'ADULT_CONSENT_ATTESTED', consentAttested: true, consentStatementVersion: 'family-consent-v1' });
+    expect((await c.req({ method: 'POST', url: '/v1/patients', body: member('Mother', 'MOTHER') })).status).toBe(201);
+    const second = await c.req({ method: 'POST', url: '/v1/patients', body: member('Aunt', 'OTHER') });
+    expect(second.status).toBe(422);
+    expect(second.json.error.code).toBe('FAMILY_LIMIT_REACHED');
+  });
+
+  it('a newer purchase from another app account on the same Apple ID re-binds; notifications never fail on a mismatch', async () => {
+    const a = await signUp(app, { role: 'PATIENT' });
+    const b = await signUp(app, { role: 'PATIENT' });
+    const tokenOf = async (c: typeof a) => (await c.req({ method: 'GET', url: '/v1/billing/account-token' })).json.appAccountToken as string;
+    const t0 = Date.now();
+    const base = { originalTransactionId: `otx-shared-${a.userId}`, productId: 'com.example.dmw.gold.monthly', expiresDate: t0 + 30 * DAY, environment: 'Sandbox', type: 'Auto-Renewable Subscription' };
+    fixtures.set(`tx-a-${a.userId}`, { ...base, transactionId: `ta-${a.userId}`, appAccountToken: await tokenOf(a), signedDate: t0 - 10_000 });
+    fixtures.set(`tx-b-${a.userId}`, { ...base, transactionId: `tb-${a.userId}`, appAccountToken: await tokenOf(b), signedDate: t0 });
+    expect((await a.req({ method: 'POST', url: '/v1/billing/apple/verify', body: { signedTransactionInfo: `tx-a-${a.userId}` } })).json.effectivePlan).toBe('GOLD');
+
+    const taken = await b.req({ method: 'POST', url: '/v1/billing/apple/verify', body: { signedTransactionInfo: `tx-b-${a.userId}` } });
+    expect(taken.status).toBe(200);
+    expect(taken.json.effectivePlan).toBe('GOLD');
+    expect((await a.req({ method: 'GET', url: '/v1/billing/entitlements' })).json.effectivePlan).toBe('SILVER');
+
+    // A late notification about A's older transaction is recorded, not thrown back at Apple.
+    const late = `notif-late-${a.userId}`;
+    notifications.set(late, { notificationType: 'DID_RENEW', notificationUUID: `uuid-late-${a.userId}`, signedDate: t0 - 5_000, tx: fixtures.get(`tx-a-${a.userId}`)! });
+    const n = await app.inject({ method: 'POST', url: '/webhooks/apple/app-store-notifications', payload: { signedPayload: late } });
+    expect(n.statusCode).toBe(200);
+    expect(JSON.parse(n.body).outcome).toBe('IGNORED_ACCOUNT_MISMATCH');
+    expect((await b.req({ method: 'GET', url: '/v1/billing/entitlements' })).json.effectivePlan).toBe('GOLD');
+  });
+
+  it('a refund of an earlier billing period leaves the current paid period active', async () => {
+    const u = await signUp(app, { role: 'PATIENT' });
+    const token = (await u.req({ method: 'GET', url: '/v1/billing/account-token' })).json.appAccountToken as string;
+    const t0 = Date.now();
+    const current = { originalTransactionId: `otx-period-${u.userId}`, transactionId: `cur-${u.userId}`, productId: 'com.example.dmw.gold.monthly', expiresDate: t0 + 30 * DAY, appAccountToken: token, environment: 'Sandbox', signedDate: t0, type: 'Auto-Renewable Subscription' };
+    fixtures.set(`cur-${u.userId}`, current);
+    expect((await u.req({ method: 'POST', url: '/v1/billing/apple/verify', body: { signedTransactionInfo: `cur-${u.userId}` } })).json.effectivePlan).toBe('GOLD');
+    const refundOld = `notif-refund-old-${u.userId}`;
+    notifications.set(refundOld, { notificationType: 'REFUND', notificationUUID: `uuid-refund-old-${u.userId}`, signedDate: t0 + 1_000, tx: { ...current, transactionId: `old-${u.userId}`, expiresDate: t0 - DAY, revocationDate: t0 } });
+    const n = await app.inject({ method: 'POST', url: '/webhooks/apple/app-store-notifications', payload: { signedPayload: refundOld } });
+    expect(JSON.parse(n.body).outcome).toBe('IGNORED_STALE');
+    expect((await u.req({ method: 'GET', url: '/v1/billing/entitlements' })).json.effectivePlan).toBe('GOLD');
   });
 
   it('clients cannot write entitlements directly, even bypassing the API', async () => {

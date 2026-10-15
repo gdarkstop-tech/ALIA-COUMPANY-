@@ -13,17 +13,22 @@ import { asc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { withContext, type Tx } from '../../db/client';
-import { billingPlanOffers, billingPlans, entitlements, featureFlags, userProfiles } from '../../db/schema';
+import { billingPlanOffers, billingPlans, entitlements, userProfiles } from '../../db/schema';
+import type { Stores } from '../../integrations/billing';
 import { AppError, forbidden, unprocessable } from '../../lib/errors';
-import { inContext, requirePrincipal, type Principal } from '../../lib/principal';
+import { getPrincipal, inContext, requirePrincipal, type Principal } from '../../lib/principal';
+import { sessionKey } from '../../lib/rateLimitKey';
 import { parse } from '../../lib/validate';
-import { GOOGLE_NOTIFICATION_TYPES, normalizeApple, normalizeGoogle, type NormalizedStoreEvent } from './events';
+import { GOOGLE_NOTIFICATION_TYPES, normalizeApple, normalizeGoogle, type GoogleSubscriptionV2, type NormalizedStoreEvent } from './events';
 
 const platformQuery = z.object({ platform: z.enum(['ios', 'android', 'web']).default('web') });
+// One subscription group per store → a handful of transactions at most; every entry costs a
+// signature check or a Play Developer API call, so keep the batch small.
 const restoreBody = z.object({
-  apple: z.array(z.string().min(20).max(20_000)).max(50).default([]),
-  google: z.array(z.object({ productId: z.string().min(1).max(200), purchaseToken: z.string().min(10).max(4_000) })).max(50).default([]),
+  apple: z.array(z.string().min(20).max(20_000)).max(10).default([]),
+  google: z.array(z.object({ productId: z.string().min(1).max(200), purchaseToken: z.string().min(10).max(4_000) })).max(10).default([]),
 });
+const perAccount = (max: number) => ({ rateLimit: { max, timeWindow: '1 minute', keyGenerator: sessionKey } });
 
 async function loadPlans(tx: Tx): Promise<BillingPlan[]> {
   const plans = await tx.select().from(billingPlans).orderBy(asc(billingPlans.sortOrder));
@@ -54,9 +59,18 @@ async function accountKind(tx: Tx, userId: string): Promise<string> {
   return row?.kind ?? 'STANDARD';
 }
 
-async function flagOn(tx: Tx, key: string): Promise<boolean> {
-  const [row] = await tx.select({ enabled: featureFlags.enabled }).from(featureFlags).where(eq(featureFlags.key, key));
-  return Boolean(row?.enabled);
+/** Global flag, or a review / internal-test caller (App Review must be able to buy). */
+async function subscriptionsAvailable(tx: Tx): Promise<boolean> {
+  const r = await tx.execute<{ ok: boolean }>(sql`select app.store_subscriptions_available() as ok`);
+  return Boolean(r.rows[0]?.ok);
+}
+
+const ACCESS_GRANTING = new Set(['ACTIVE', 'GRACE_PERIOD']);
+/** Google auto-refunds purchases that are not acknowledged within 3 days — acknowledge once bound. */
+async function acknowledgeIfNeeded(stores: Stores, ev: NormalizedStoreEvent, sub: GoogleSubscriptionV2, purchaseToken: string, outcome: string) {
+  if ((outcome === 'APPLIED' || outcome === 'DUPLICATE') && ACCESS_GRANTING.has(ev.status) && sub.acknowledgementState === 'ACKNOWLEDGEMENT_STATE_PENDING') {
+    await stores.google.acknowledge(ev.productId, purchaseToken);
+  }
 }
 
 async function accountToken(tx: Tx, userId: string): Promise<string> {
@@ -89,19 +103,20 @@ async function entitlementState(tx: Tx, userId: string): Promise<EntitlementsRes
  * (a) the purchase's account token is the caller's, (b) sandbox purchases come from review /
  * internal-test accounts in production, (c) store subscriptions are enabled (or reviewer account).
  */
-async function verifyForUser(request: FastifyRequest, principal: Principal, ev: NormalizedStoreEvent): Promise<EntitlementsResponse> {
+async function verifyForUser(request: FastifyRequest, principal: Principal, ev: NormalizedStoreEvent): Promise<EntitlementsResponse & { outcome: string }> {
   const { env } = request.server.services;
   return inContext(request, principal, async (tx) => {
     const kind = await accountKind(tx, principal.userId);
     const privileged = kind === 'REVIEW' || kind === 'INTERNAL_TEST';
-    if (!(await flagOn(tx, 'billing.store_subscriptions')) && !privileged) throw new AppError(409, 'FEATURE_DISABLED', 'Subscriptions are not available yet');
+    if (!(await subscriptionsAvailable(tx))) throw new AppError(409, 'FEATURE_DISABLED', 'Subscriptions are not available yet');
     if (ev.sandbox && env.NODE_ENV === 'production' && !privileged) throw forbidden('SANDBOX_PURCHASE_NOT_ALLOWED', 'Test purchases are only accepted for review accounts');
     const token = await accountToken(tx, principal.userId);
     if (!ev.accountToken || ev.accountToken.toLowerCase() !== token.toLowerCase()) throw forbidden('PURCHASE_ACCOUNT_MISMATCH', 'This purchase was made for a different account');
     const plan = await planForProduct(tx, ev);
     if (!plan) throw unprocessable('UNKNOWN_PRODUCT', 'This product is not a Dress My Wound plan');
-    await apply(tx, ev, plan, principal.userId);
-    return entitlementState(tx, principal.userId);
+    const outcome = await apply(tx, ev, plan, principal.userId);
+    if (outcome === 'IGNORED_ACCOUNT_MISMATCH') throw forbidden('SUBSCRIPTION_BELONGS_TO_ANOTHER_ACCOUNT', 'This subscription is linked to another account');
+    return { ...(await entitlementState(tx, principal.userId)), outcome };
   });
 }
 
@@ -110,9 +125,10 @@ export async function billingRoutes(app: FastifyInstance) {
 
   app.get('/v1/billing/plans', async (request): Promise<PlanForClient[]> => {
     const { platform } = parse(platformQuery, request.query);
-    return inContext(request, null, async (tx) => {
+    const principal = await getPrincipal(request);
+    return inContext(request, principal, async (tx) => {
       const plans = await loadPlans(tx);
-      const enabled = await flagOn(tx, 'billing.store_subscriptions');
+      const enabled = await subscriptionsAvailable(tx);
       return plans
         .filter((p) => p.active)
         .map((p) => {
@@ -135,33 +151,34 @@ export async function billingRoutes(app: FastifyInstance) {
     return inContext(request, principal, (tx) => entitlementState(tx, principal.userId));
   });
 
-  app.post('/v1/billing/apple/verify', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
+  app.post('/v1/billing/apple/verify', { config: perAccount(30) }, async (request) => {
     const principal = await requirePrincipal(request);
     const body = parse(appleVerifyBody, request.body);
     const tx = await stores.apple.verifyTransaction(body.signedTransactionInfo);
     const ev = normalizeApple({ tx, now: new Date() });
     if (!ev) throw unprocessable('NOT_A_SUBSCRIPTION', 'Not an auto-renewable subscription');
-    return verifyForUser(request, principal, ev);
+    const { outcome: _outcome, ...state } = await verifyForUser(request, principal, ev);
+    return state;
   });
 
-  app.post('/v1/billing/google/verify', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
+  app.post('/v1/billing/google/verify', { config: perAccount(30) }, async (request) => {
     const principal = await requirePrincipal(request);
     const body = parse(googleVerifyBody, request.body);
     const sub = await stores.google.getSubscription(body.purchaseToken);
     const now = new Date();
     const ev = normalizeGoogle({ purchaseToken: body.purchaseToken, sub, eventId: `verify:${sub.latestOrderId ?? body.purchaseToken.slice(0, 40)}:${sub.subscriptionState}:${sub.lineItems?.[0]?.expiryTime ?? ''}`, eventType: 'CLIENT_VERIFY', eventAt: now, now });
     if (!ev || ev.productId !== body.productId) throw unprocessable('NOT_A_SUBSCRIPTION', 'Purchase is not an active subscription for this product');
-    const result = await verifyForUser(request, principal, ev);
-    if (sub.acknowledgementState !== 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED') await stores.google.acknowledge(body.productId, body.purchaseToken);
-    return result;
+    const { outcome, ...state } = await verifyForUser(request, principal, ev);
+    await acknowledgeIfNeeded(stores, ev, sub, body.purchaseToken, outcome);
+    return state;
   });
 
   /** Restore Purchases: the app re-reads purchases from the store on-device; the server re-verifies each. */
-  app.post('/v1/billing/restore', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request) => {
+  app.post('/v1/billing/restore', { config: perAccount(10) }, async (request) => {
     const principal = await requirePrincipal(request);
     const body = parse(restoreBody, request.body);
     const errors: string[] = [];
-    for (const signed of body.apple) {
+    for (const signed of new Set(body.apple)) {
       try {
         const ev = normalizeApple({ tx: await stores.apple.verifyTransaction(signed), now: new Date() });
         if (ev) await verifyForUser(request, principal, ev);
@@ -169,12 +186,15 @@ export async function billingRoutes(app: FastifyInstance) {
         errors.push(e instanceof AppError ? e.code : 'VERIFY_FAILED');
       }
     }
-    for (const g of body.google) {
+    for (const g of new Map(body.google.map((x) => [x.purchaseToken, x])).values()) {
       try {
         const sub = await stores.google.getSubscription(g.purchaseToken);
         const now = new Date();
         const ev = normalizeGoogle({ purchaseToken: g.purchaseToken, sub, eventId: `restore:${sub.latestOrderId ?? g.purchaseToken.slice(0, 40)}:${sub.subscriptionState}`, eventType: 'RESTORE', eventAt: now, now });
-        if (ev) await verifyForUser(request, principal, ev);
+        if (ev) {
+          const { outcome } = await verifyForUser(request, principal, ev);
+          await acknowledgeIfNeeded(stores, ev, sub, g.purchaseToken, outcome);
+        }
       } catch (e) {
         errors.push(e instanceof AppError ? e.code : 'VERIFY_FAILED');
       }
@@ -203,7 +223,7 @@ export async function billingRoutes(app: FastifyInstance) {
       packageName?: string;
       eventTimeMillis?: string;
       subscriptionNotification?: { notificationType: number; purchaseToken: string };
-      voidedPurchaseNotification?: { purchaseToken: string; productType?: number };
+      voidedPurchaseNotification?: { purchaseToken: string; orderId?: string; productType?: number };
       testNotification?: object;
     };
     if (payload.packageName !== env.GOOGLE_PLAY_PACKAGE_NAME) throw forbidden('WRONG_PACKAGE', 'Notification for another app');
@@ -212,6 +232,8 @@ export async function billingRoutes(app: FastifyInstance) {
     // Never trust the notification body for state: fetch the authoritative subscription.
     const sub = await stores.google.getSubscription(token);
     const now = new Date();
+    // A void can concern one past renewal order; only the latest order's void ends current access.
+    const voided = payload.voidedPurchaseNotification;
     const ev = normalizeGoogle({
       purchaseToken: token,
       sub,
@@ -219,10 +241,11 @@ export async function billingRoutes(app: FastifyInstance) {
       eventType: payload.voidedPurchaseNotification ? 'VOIDED' : (GOOGLE_NOTIFICATION_TYPES[payload.subscriptionNotification!.notificationType] ?? 'UNKNOWN'),
       eventAt: payload.eventTimeMillis ? new Date(Number(payload.eventTimeMillis)) : now,
       now,
-      voided: Boolean(payload.voidedPurchaseNotification),
+      voided: Boolean(voided) && (!voided!.orderId || !sub.latestOrderId || voided!.orderId === sub.latestOrderId),
     });
     if (!ev) return reply.status(200).send({ ok: true, outcome: 'IGNORED_NOT_SUBSCRIPTION' });
     const outcome = await applyServerEvent(ev);
+    await acknowledgeIfNeeded(stores, ev, sub, token, outcome);
     return reply.status(200).send({ ok: true, outcome });
   });
 

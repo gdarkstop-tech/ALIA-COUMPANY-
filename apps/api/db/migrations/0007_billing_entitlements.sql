@@ -127,7 +127,7 @@ CREATE TABLE app.store_events (
   user_id text REFERENCES auth."user" ("id") ON DELETE SET NULL,
   event_at timestamptz NOT NULL,
   received_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  outcome text NOT NULL CHECK (outcome IN ('APPLIED', 'IGNORED_STALE', 'IGNORED_UNKNOWN_SUBSCRIPTION', 'IGNORED_NOT_SUBSCRIPTION')),
+  outcome text NOT NULL CHECK (outcome IN ('APPLIED', 'IGNORED_STALE', 'IGNORED_UNKNOWN_SUBSCRIPTION', 'IGNORED_NOT_SUBSCRIPTION', 'IGNORED_ACCOUNT_MISMATCH')),
   -- Verified, non-sensitive summary only (never raw receipts or tokens).
   summary jsonb NOT NULL DEFAULT '{}'::jsonb,
   UNIQUE (source, external_event_id)
@@ -138,12 +138,21 @@ CREATE POLICY store_events_select ON app.store_events FOR SELECT TO ghayarly_app
 GRANT SELECT ON app.store_events TO ghayarly_app;
 
 /*
- * Applies ONE already-verified store event. Idempotent (duplicate event ids are no-ops) and
- * order-safe (an event older than the last applied one never moves the state backwards — except
- * terminal refund/revocation, which always win).
+ * Applies ONE already-verified store event. Never raises for ordinary store situations, so store
+ * notifications are always acknowledged and retries do not pile up.
+ *   - Serialised per subscription (advisory lock): a client verify racing the store's own
+ *     notification, or two deliveries of the same notification, cannot both insert.
+ *   - Idempotent: a repeated event id returns DUPLICATE.
+ *   - Order-safe: an event older than the last applied one never moves the state backwards.
+ *     Refund / revocation always wins for the CURRENT period, but a refund of an earlier billing
+ *     period (expiry before the current one) leaves the paid current period intact.
+ *   - Account binding: a subscription belongs to the account whose token is on the purchase. It is
+ *     re-bound only by a NEWER verified transaction carrying another account's token (e.g. an
+ *     upgrade made from a different app account on the same Apple ID) or when the bound account
+ *     was deleted; anything else is recorded as IGNORED_ACCOUNT_MISMATCH.
  *
- * p_user: the account that submitted a purchase (client verify call) — NULL for server
- * notifications, which must reference a subscription already bound to an account.
+ * p_user: the account the purchase's own token resolves to (client verify: the caller, after the
+ * API checked the token; server notification: token owner or NULL).
  */
 CREATE FUNCTION app.billing_apply_event(
   p_source app.entitlement_source, p_event_id text, p_event_type text, p_event_at timestamptz,
@@ -153,27 +162,42 @@ CREATE FUNCTION app.billing_apply_event(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = app, pg_temp AS $$
 DECLARE
   v_existing app.entitlements;
+  v_found boolean;
   v_outcome text;
   v_user text;
+  v_rebound boolean := false;
 BEGIN
   IF p_source = 'ADMIN_GRANT' THEN RAISE EXCEPTION 'USE_ADMIN_GRANT' USING ERRCODE = 'P0001'; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_source::text || ':' || p_external_ref, 0));
   IF EXISTS (SELECT 1 FROM app.store_events WHERE source = p_source AND external_event_id = p_event_id) THEN
     RETURN 'DUPLICATE';
   END IF;
 
   SELECT * INTO v_existing FROM app.entitlements WHERE source = p_source AND external_ref = p_external_ref FOR UPDATE;
-  IF FOUND AND p_user IS NOT NULL AND v_existing.user_id <> p_user THEN
-    -- A subscription is bound to the first account that verified it.
-    RAISE EXCEPTION 'SUBSCRIPTION_BELONGS_TO_ANOTHER_ACCOUNT' USING ERRCODE = '42501';
-  END IF;
+  v_found := FOUND;
   v_user := coalesce(v_existing.user_id, p_user);
 
-  IF v_user IS NULL THEN
+  IF v_found AND p_user IS NOT NULL AND v_existing.user_id <> p_user THEN
+    IF p_event_at > v_existing.last_event_at
+       OR EXISTS (SELECT 1 FROM app.account_deletions d WHERE d.user_id = v_existing.user_id) THEN
+      v_user := p_user;
+      v_rebound := true;
+    ELSE
+      v_outcome := 'IGNORED_ACCOUNT_MISMATCH';
+    END IF;
+  END IF;
+
+  IF v_outcome IS NOT NULL THEN
+    NULL;
+  ELSIF v_user IS NULL THEN
     v_outcome := 'IGNORED_UNKNOWN_SUBSCRIPTION';
-  ELSIF FOUND AND p_event_at < v_existing.last_event_at AND p_status NOT IN ('REFUNDED', 'REVOKED') THEN
+  ELSIF v_found AND p_status IN ('REFUNDED', 'REVOKED') AND p_expires_at IS NOT NULL AND v_existing.expires_at IS NOT NULL
+        AND p_expires_at < v_existing.expires_at THEN
+    v_outcome := 'IGNORED_STALE';  -- refund / revocation of an earlier billing period
+  ELSIF v_found AND p_event_at < v_existing.last_event_at AND p_status NOT IN ('REFUNDED', 'REVOKED') THEN
     v_outcome := 'IGNORED_STALE';
-  ELSIF FOUND THEN
-    UPDATE app.entitlements SET plan_code = p_plan, status = p_status, product_id = p_product_id, expires_at = p_expires_at,
+  ELSIF v_found THEN
+    UPDATE app.entitlements SET user_id = v_user, plan_code = p_plan, status = p_status, product_id = p_product_id, expires_at = p_expires_at,
       auto_renew = p_auto_renew, last_event_at = greatest(last_event_at, p_event_at), last_verified_at = now()
     WHERE id = v_existing.id;
     v_outcome := 'APPLIED';
@@ -188,7 +212,8 @@ BEGIN
   IF v_outcome = 'APPLIED' THEN
     INSERT INTO app.audit_log (actor_user_id, action, entity_type, entity_id, metadata)
     VALUES (v_user, 'billing.entitlement.updated', 'entitlement', p_external_ref,
-            jsonb_build_object('source', p_source, 'event', p_event_type, 'plan', p_plan, 'status', p_status, 'expiresAt', p_expires_at));
+            jsonb_build_object('source', p_source, 'event', p_event_type, 'plan', p_plan, 'status', p_status, 'expiresAt', p_expires_at,
+                               'reboundFrom', CASE WHEN v_rebound THEN v_existing.user_id END));
   END IF;
   RETURN v_outcome;
 END $$;
@@ -216,6 +241,40 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = app, pg_temp AS $$
     LIMIT 1
   ), 'SILVER'::app.plan_code)
 $$;
+
+-- Family-profile limit: from the caller's plan once store subscriptions are on (paid tiers must
+-- actually unlock what they sell); the global setting applies while subscriptions are off.
+CREATE OR REPLACE FUNCTION app.family_profile_limit() RETURNS int
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = app, pg_temp AS $$
+  SELECT CASE
+    WHEN coalesce((SELECT enabled FROM app.feature_flags WHERE key = 'billing.store_subscriptions'), false)
+      THEN coalesce((SELECT family_profile_limit FROM app.billing_plans WHERE code = app.effective_plan(app.current_user_id())), 0)
+    ELSE coalesce((SELECT (value #>> '{}')::int FROM app.settings WHERE key = 'family.max_managed_profiles'), 8)
+  END
+$$;
+
+-- Subscriptions cannot be switched on while any active plan lacks a family-profile limit
+-- (the Silver limit is still a pending business decision).
+CREATE FUNCTION app.feature_flags_billing_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = app, pg_temp AS $$
+BEGIN
+  IF NEW.key = 'billing.store_subscriptions' AND NEW.enabled AND NOT OLD.enabled
+     AND EXISTS (SELECT 1 FROM app.billing_plans WHERE active AND family_profile_limit IS NULL) THEN
+    RAISE EXCEPTION 'PLAN_FAMILY_LIMITS_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER feature_flags_billing_guard BEFORE UPDATE ON app.feature_flags
+  FOR EACH ROW EXECUTE FUNCTION app.feature_flags_billing_guard();
+
+-- Whether the CALLER may use store subscriptions now: the global flag, or a review / internal-test
+-- account (App Review must be able to buy the products submitted with the build).
+CREATE FUNCTION app.store_subscriptions_available() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = app, pg_temp AS $$
+  SELECT coalesce((SELECT enabled FROM app.feature_flags WHERE key = 'billing.store_subscriptions'), false) OR app.is_review_account()
+$$;
+REVOKE ALL ON FUNCTION app.store_subscriptions_available() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.store_subscriptions_available() TO ghayarly_app;
 
 REVOKE ALL ON FUNCTION app.billing_apply_event(app.entitlement_source, text, text, timestamptz, text, text, app.plan_code, text, app.entitlement_status, timestamptz, boolean, jsonb),
   app.effective_plan(text), app.billing_user_for_token(text), app.billing_is_test_account(text) FROM PUBLIC;

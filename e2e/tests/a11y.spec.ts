@@ -8,8 +8,9 @@ import { byId, signInMobile } from './helpers';
  * rendered, reflow at narrow widths and touch-target sizes. VoiceOver/TalkBack, Dynamic Type and
  * native gestures still require on-device testing (docs/release/RELEASE_STATUS.md).
  *
- * Gate: no "serious" or "critical" WCAG 2.2 A/AA violations; no horizontal scrolling at 320 px;
- * interactive targets ≥ 44×44 px (WCAG 2.5.8 needs 24; Apple HIG 44 pt; Material 48 dp).
+ * Gate: no "serious" or "critical" WCAG 2.2 A/AA violations; no horizontal scrolling and no control
+ * pushed outside the viewport at 320 / 360 / 390 px; interactive targets ≥ 44×44 px (WCAG 2.5.8 needs
+ * 24; Apple HIG 44 pt; Material 48 dp).
  */
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -36,9 +37,30 @@ async function audit(page: Page, name: string) {
       .map((el) => `${el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.textContent?.trim().slice(0, 30)} ${Math.round(el.getBoundingClientRect().width)}×${Math.round(el.getBoundingClientRect().height)}`),
   );
   expect(small, `${name}: touch targets under 44 px`).toEqual([]);
+
+  // Page-level overflow misses controls pushed out of their card (e.g. a non-wrapping button row on a
+  // 360 px phone, which clips in LTR and spills past the card edge in RTL): every control must sit
+  // inside each of its containers, unless a container scrolls horizontally (profile switcher, carousels).
+  const clipped = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('[role="button"],[role="checkbox"],[role="switch"],[role="tab"],[role="link"],button,a,input')]
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0 || getComputedStyle(el).visibility === 'hidden') return null;
+        const name = el.getAttribute('data-testid') ?? el.textContent?.trim().slice(0, 30);
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+          const ox = getComputedStyle(a).overflowX;
+          if ((ox === 'auto' || ox === 'scroll') && a.scrollWidth > a.clientWidth) return null;
+          const ar = a.getBoundingClientRect();
+          if (ar.width > 0 && (r.left < ar.left - 1 || r.right > ar.right + 1)) return `${name} overflows its container by ${Math.round(Math.max(ar.left - r.left, r.right - ar.right))} px`;
+        }
+        return r.left < -1 || r.right > window.innerWidth + 1 ? `${name} outside the viewport` : null;
+      })
+      .filter(Boolean),
+  );
+  expect(clipped, `${name}: controls clipped or outside their container`).toEqual([]);
 }
 
-for (const width of [320, 390]) {
+for (const width of [320, 360, 390]) {
   test.describe(`accessibility @ ${width}px`, () => {
     // Emulate "reduce motion". On iOS/Android the app honours it through Reanimated's
     // ReducedMotionConfig (verified on device only); the web harness may still animate, hence the

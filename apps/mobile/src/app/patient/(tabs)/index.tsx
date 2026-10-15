@@ -71,7 +71,8 @@ export default function PatientHome() {
                 <Text variant="callout" color="textSecondary">
                   {t('home.todayEmpty')}
                 </Text>
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {/* Wraps on narrow phones and at large Dynamic Type sizes instead of clipping. */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
                   <Button label={t('home.findDoctor')} icon="mci:stethoscope" size="md" fullWidth={false} onPress={() => router.push('/patient/care')} />
                   <Button label={t('home.requestNurse')} icon="mci:medical-bag" size="md" variant="secondary" fullWidth={false} onPress={() => router.push({ pathname: '/patient/care', params: { type: 'NURSE' } })} />
                 </View>

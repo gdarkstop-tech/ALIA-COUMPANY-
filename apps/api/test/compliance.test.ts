@@ -67,6 +67,10 @@ describe('consents', () => {
     const entry = await c.req({ method: 'POST', url: `/v1/patients/${p.json.id}/health-entries`, body: { kind: 'ALLERGY', title: 'Penicillin' } });
     expect(entry.status).toBe(403);
     expect(entry.json.error.code).toBe('HEALTH_DATA_CONSENT_REQUIRED');
+    // Editing the profile (blood type, contacts) stores health-context data as well.
+    const edit = await c.req({ method: 'PATCH', url: `/v1/patients/${p.json.id}`, body: { bloodType: 'A+' } });
+    expect(edit.status).toBe(403);
+    expect(edit.json.error.code).toBe('HEALTH_DATA_CONSENT_REQUIRED');
     // Ledger is append-only even for the application role.
     const cl = await appPool.connect();
     try {
@@ -107,6 +111,8 @@ describe('feature flags', () => {
     await admin.req({ method: 'PATCH', url: '/v1/admin/features/commerce.checkout', body: { enabled: false } });
     const audit = await owner.query(`select count(*)::int as n from app.audit_log where action = 'feature.flag.updated' and entity_id = 'commerce.checkout'`);
     expect(audit.rows[0].n).toBeGreaterThanOrEqual(2);
+    const by = await owner.query(`select updated_by_user_id from app.feature_flags where key = 'commerce.checkout'`);
+    expect(by.rows[0].updated_by_user_id).toBe(admin.userId);
 
     // Even bypassing the API, the database refuses to enable a regulated feature without evidence.
     const cl = await appPool.connect();
@@ -152,6 +158,24 @@ describe('review account isolation', () => {
     expect(await visible(reviewer.userId, true)).toEqual([demoDoc.userId]);
     const outsider = await signUp(app, { role: 'PATIENT' });
     expect(await visible(outsider.userId, false)).toEqual([real.userId]);
+
+    // The public TetraSol catalogue is not personal data: reviewers review what real users get.
+    const slug = `review-visible-${Date.now()}`;
+    await owner.query(
+      `insert into app.products (slug, brand, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, content_status, approval_reference, approved_at)
+       values ($1, 'TetraSol', 'a','a','a','a','a','a','a','a', 'APPROVED', 'TEST-REF-1', now())`,
+      [slug],
+    );
+    const cl = await appPool.connect();
+    try {
+      await cl.query('BEGIN');
+      await cl.query("select set_config('app.user_id', $1, true), set_config('app.demo_mode', 'off', true)", [reviewer.userId]);
+      const { rows } = await cl.query('select slug from app.products where slug = $1', [slug]);
+      expect(rows.length).toBe(1);
+    } finally {
+      await cl.query('ROLLBACK');
+      cl.release();
+    }
   });
 
   it('users cannot promote themselves to a review account', async () => {
@@ -225,6 +249,24 @@ describe('account deletion', () => {
     expect(audit.rows[0].n).toBe(1);
   });
 
+  it('also erases profiles the user created and left earlier, and pending password-reset tokens', async () => {
+    const c = await signUp(app, { role: 'PATIENT' });
+    const mother = await c.req({ method: 'POST', url: '/v1/patients', body: MOTHER });
+    await c.req({ method: 'POST', url: `/v1/patients/${mother.json.id}/health-entries`, body: { kind: 'ALLERGY', title: 'Latex' } });
+    const left = await c.req({ method: 'DELETE', url: `/v1/patients/${mother.json.id}/access/${c.userId}` });
+    expect(left.status).toBeLessThan(300);
+    await owner.query(`insert into auth."verification" (id, identifier, value, "expiresAt") values ($1, $2, $3, now() + interval '30 minutes')`, [
+      `v-${c.userId}`,
+      `reset-password:tok-${c.userId}`,
+      c.userId,
+    ]);
+    const res = await c.req({ method: 'POST', url: '/v1/me/account-deletion', body: { confirmation: 'DELETE', password: PASSWORD } });
+    expect(res.status).toBe(200);
+    expect(res.json.summary.deletedPatientProfiles).toBe(1);
+    expect((await owner.query('select count(*)::int as n from app.patients where id = $1', [mother.json.id])).rows[0].n).toBe(0);
+    expect((await owner.query(`select count(*)::int as n from auth."verification" where value = $1`, [c.userId])).rows[0].n).toBe(0);
+  });
+
   it('a deleted account cannot be signed back into, and the email can be registered again', async () => {
     const c = await signUp(app, { role: 'PATIENT' });
     await c.req({ method: 'POST', url: '/v1/me/account-deletion', body: { confirmation: 'DELETE', password: PASSWORD } });
@@ -245,6 +287,7 @@ describe('account deletion', () => {
       `insert into app.provider_ledger_entries (provider_user_id, entry_type, status, amount_piasters, description, occurred_at) values ($1, 'VISIT_EARNING', 'PAID_OUT', 10000, 'Visit', now())`,
       [nurse.userId],
     );
+    await owner.query(`insert into app.provider_credentials (provider_user_id, kind, issuer, identifier, status) values ($1, 'NATIONAL_ID', 'Civil Registry', '29001011234567', 'APPROVED')`, [nurse.userId]);
     const res = await nurse.req({ method: 'POST', url: '/v1/me/account-deletion', body: { confirmation: 'DELETE', password: PASSWORD } });
     expect(res.status).toBe(200);
     expect(res.json.summary.providerRecordsRetainedForLegalObligations).toBe(true);
@@ -252,5 +295,8 @@ describe('account deletion', () => {
     expect(p.rows[0]).toEqual({ verification_status: 'SUSPENDED', display_name_en: 'Deleted account', bio_en: null });
     const ledger = await owner.query('select count(*)::int as n from app.provider_ledger_entries where provider_user_id = $1', [nurse.userId]);
     expect(ledger.rows[0].n).toBe(1);
+    // Identity documents (national ID / licence numbers) are not needed to keep payout records.
+    const creds = await owner.query('select count(*)::int as n from app.provider_credentials where provider_user_id = $1', [nurse.userId]);
+    expect(creds.rows[0].n).toBe(0);
   });
 });

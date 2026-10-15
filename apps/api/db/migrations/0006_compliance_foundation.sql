@@ -27,9 +27,11 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = app, pg_temp AS $$
   )
 $$;
 
--- Catalogue visibility (providers, services, products, ledgers):
---   review/test accounts → synthetic rows only;
+-- Visibility of PERSON-linked catalogue rows (clinician profiles, their credentials, ledgers):
+--   review/test accounts → synthetic rows only (reviewers never see or contact real clinicians);
 --   everyone else        → real rows, plus synthetic rows only when DEMO_MODE is on.
+-- The public catalogue (TetraSol products, nursing service types) contains no personal data, so
+-- review accounts see the same approved catalogue as real users (App Review must review what users get).
 CREATE FUNCTION app.catalog_visible(p_is_demo boolean) RETURNS boolean
 LANGUAGE sql STABLE SET search_path = app, pg_temp AS $$
   SELECT CASE WHEN app.is_review_account() THEN p_is_demo ELSE (NOT p_is_demo OR app.demo_visible()) END
@@ -55,15 +57,14 @@ CREATE OR REPLACE VIEW app.public_provider_credentials WITH (security_barrier = 
 
 DROP POLICY nursing_services_select ON app.nursing_services;
 CREATE POLICY nursing_services_select ON app.nursing_services FOR SELECT TO ghayarly_app
-  USING ((active AND app.catalog_visible(is_demo)) OR app.has_permission('catalog.services.manage'));
+  USING ((active AND (NOT is_demo OR app.demo_visible() OR app.is_review_account())) OR app.has_permission('catalog.services.manage'));
 
 CREATE OR REPLACE FUNCTION app.product_visible(p_product uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = app, pg_temp AS $$
   SELECT EXISTS (
     SELECT 1 FROM app.products
     WHERE id = p_product
-      AND CASE WHEN app.is_review_account() THEN is_demo
-               ELSE ((content_status = 'APPROVED' AND NOT is_demo) OR (is_demo AND app.demo_visible())) END
+      AND ((content_status = 'APPROVED' AND NOT is_demo) OR (is_demo AND (app.demo_visible() OR app.is_review_account())))
   )
 $$;
 
@@ -119,6 +120,14 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = app, pg_temp AS $$
   ), false)
 $$;
 
+-- How many family profiles the caller may manage. 0007 redefines this once plans exist.
+CREATE FUNCTION app.family_profile_limit() RETURNS int
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = app, pg_temp AS $$
+  SELECT coalesce((SELECT (value #>> '{}')::int FROM app.settings WHERE key = 'family.max_managed_profiles'), 8)
+$$;
+REVOKE ALL ON FUNCTION app.family_profile_limit() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.family_profile_limit() TO ghayarly_app;
+
 -- Health data may only be created after explicit, current health-data-processing consent.
 CREATE OR REPLACE FUNCTION app.create_patient_profile(
   p_display_name text, p_date_of_birth date, p_sex app.sex, p_relationship app.relationship,
@@ -156,8 +165,8 @@ BEGIN
   END IF;
 
   IF p_relationship <> 'SELF' THEN
-    SELECT (value #>> '{}')::int INTO v_limit FROM app.settings WHERE key = 'family.max_managed_profiles';
-    IF (SELECT count(*) FROM app.patient_access WHERE user_id = v_user AND status = 'ACTIVE' AND relationship <> 'SELF') >= coalesce(v_limit, 8) THEN
+    v_limit := app.family_profile_limit();
+    IF (SELECT count(*) FROM app.patient_access WHERE user_id = v_user AND status = 'ACTIVE' AND relationship <> 'SELF') >= v_limit THEN
       RAISE EXCEPTION 'FAMILY_LIMIT_REACHED' USING ERRCODE = 'P0001';
     END IF;
   END IF;
@@ -173,6 +182,29 @@ BEGIN
     jsonb_build_object('relationship', p_relationship, 'consentBasis', p_consent_basis, 'accessLevel', v_level,
                        'consentStatementVersion', p_statement_version));
   RETURN v_id;
+END $$;
+
+-- Editing a profile stores health-context data too (blood type, emergency contacts, location).
+CREATE OR REPLACE FUNCTION app.patients_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = app, pg_temp AS $$
+BEGIN
+  IF current_user = 'ghayarly_app' THEN
+    IF NOT app.has_current_consent('HEALTH_DATA_PROCESSING') THEN
+      RAISE EXCEPTION 'HEALTH_DATA_CONSENT_REQUIRED' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.blood_type IS DISTINCT FROM OLD.blood_type THEN
+      IF NEW.blood_type = 'UNKNOWN' THEN
+        NEW.blood_type_provenance := NULL;
+      ELSE
+        NEW.blood_type_provenance := CASE WHEN NEW.linked_user_id = app.current_user_id()
+          THEN 'PATIENT_REPORTED'::app.provenance ELSE 'CAREGIVER_REPORTED'::app.provenance END;
+      END IF;
+    END IF;
+    IF NEW.date_of_birth > current_date THEN
+      RAISE EXCEPTION 'INVALID_DATE_OF_BIRTH' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+  RETURN NEW;
 END $$;
 
 CREATE OR REPLACE FUNCTION app.health_entries_guard() RETURNS trigger
@@ -209,8 +241,9 @@ CREATE TABLE app.feature_flags (
 );
 CREATE TRIGGER feature_flags_touch BEFORE UPDATE ON app.feature_flags FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 
+-- SECURITY INVOKER on purpose: the role checks below compare current_user (see 0003 guards).
 CREATE FUNCTION app.feature_flags_audit() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = app, pg_temp AS $$
+LANGUAGE plpgsql SET search_path = app, pg_temp AS $$
 BEGIN
   IF current_user = 'ghayarly_app' AND (NEW.risk, NEW.requires_regulatory_evidence, NEW.key) IS DISTINCT FROM (OLD.risk, OLD.requires_regulatory_evidence, OLD.key) THEN
     RAISE EXCEPTION 'PROTECTED_FIELD' USING ERRCODE = '42501';
@@ -227,7 +260,8 @@ CREATE POLICY feature_flags_select ON app.feature_flags FOR SELECT TO ghayarly_a
 CREATE POLICY feature_flags_update ON app.feature_flags FOR UPDATE TO ghayarly_app
   USING (app.has_role('ADMIN')) WITH CHECK (app.has_role('ADMIN'));
 GRANT SELECT ON app.feature_flags TO ghayarly_app;
-GRANT UPDATE (enabled, evidence_ref, updated_at, updated_by_user_id) ON app.feature_flags TO ghayarly_app;
+-- updated_by_user_id is set by the trigger only.
+GRANT UPDATE (enabled, evidence_ref, updated_at) ON app.feature_flags TO ghayarly_app;
 
 INSERT INTO app.feature_flags (key, enabled, risk, requires_regulatory_evidence, description) VALUES
   ('ai.assistant', false, 'HIGH', true, 'Conversational health assistant. Requires clinical-safety review, AI governance sign-off and regulatory assessment before enabling.'),
@@ -303,6 +337,14 @@ BEGIN
       v_detached_patients := v_detached_patients + 1;
     END IF;
   END LOOP;
+  -- Profiles the caller created and nobody else can reach any more (e.g. they left them earlier).
+  WITH orphaned AS (
+    DELETE FROM app.patients p
+    WHERE p.created_by_user_id = v_user
+      AND (p.linked_user_id IS NULL OR p.linked_user_id = v_user)
+      AND NOT EXISTS (SELECT 1 FROM app.patient_access o WHERE o.patient_id = p.id AND o.user_id <> v_user AND o.status = 'ACTIVE')
+    RETURNING 1)
+  SELECT v_deleted_patients + count(*) INTO v_deleted_patients FROM orphaned;
   UPDATE app.patients SET linked_user_id = NULL WHERE linked_user_id = v_user;
 
   DELETE FROM app.cart_items WHERE user_id = v_user;
@@ -314,8 +356,12 @@ BEGIN
         verification_status = 'SUSPENDED', verification_note = 'Account deleted by user',
         display_name_ar = 'حساب محذوف', display_name_en = 'Deleted account',
         bio_ar = NULL, bio_en = NULL, current_affiliation = NULL, previous_experience = NULL,
-        skills = '{}', service_area = NULL, temporarily_unavailable = true
+        skills = '{}', service_area = NULL, temporarily_unavailable = true,
+        subspecialty = NULL, city = '-', fee_piasters = NULL
       WHERE user_id = v_user;
+      -- Identity documents (national ID, licence numbers) are not needed to keep payout records.
+      DELETE FROM app.provider_credentials WHERE provider_user_id = v_user;
+      UPDATE app.provider_verification_events SET note = NULL WHERE provider_user_id = v_user AND note IS NOT NULL;
       DELETE FROM app.provider_working_hours WHERE provider_user_id = v_user;
       DELETE FROM app.provider_services WHERE provider_user_id = v_user;
       v_provider_retained := true;
@@ -332,7 +378,8 @@ BEGIN
   DELETE FROM auth."session" WHERE "userId" = v_user;
   DELETE FROM auth."account" WHERE "userId" = v_user;
   DELETE FROM auth."twoFactor" WHERE "userId" = v_user;
-  DELETE FROM auth."verification" WHERE identifier IN (v_email, v_phone) OR identifier LIKE '%' || v_user || '%';
+  -- Includes password-reset tokens (identifier 'reset-password:<token>', value = user id).
+  DELETE FROM auth."verification" WHERE identifier IN (v_email, v_phone) OR identifier LIKE '%' || v_user || '%' OR value = v_user;
   UPDATE auth."user" SET
     name = 'Deleted account', email = 'deleted-' || id || '@deleted.invalid', "emailVerified" = false, image = NULL,
     "phoneNumber" = NULL, "phoneNumberVerified" = false, "twoFactorEnabled" = false, "updatedAt" = now()

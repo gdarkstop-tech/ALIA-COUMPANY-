@@ -39,6 +39,8 @@ type AppleTx = {
   environment?: string;
   signedDate?: number;
   type?: string;
+  /** Set on a transaction replaced by an upgrade; the upgrade's own transaction carries access. */
+  isUpgraded?: boolean;
 };
 type AppleRenewal = { autoRenewStatus?: number; isInBillingRetryPeriod?: boolean; gracePeriodExpiresDate?: number };
 
@@ -65,6 +67,8 @@ export function normalizeApple(args: {
   const { tx, renewal, notification, now } = args;
   if (!tx.originalTransactionId || !tx.productId) return null;
   if (tx.type && tx.type !== 'Auto-Renewable Subscription') return null;
+  // A superseded transaction (re-signed later via Transaction.all) must never restore access.
+  if (tx.isUpgraded) return null;
   const { status, expiresAt } = appleStatus(tx, renewal, notification?.notificationType, now);
   const signed = notification?.signedDate ?? tx.signedDate ?? now.getTime();
   return {

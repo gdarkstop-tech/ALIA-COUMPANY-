@@ -47,7 +47,12 @@ export function createAppleStore(env: Env): AppleStore {
   const appId = env.APPLE_IAP_APP_APPLE_ID;
   const online = env.APPLE_IAP_ONLINE_CHECKS;
   // Production first; Sandbox is still needed for App Review and TestFlight (policy limits who benefits).
-  const verifiers = [new SignedDataVerifier(roots, online, Environment.PRODUCTION, env.APPLE_IAP_BUNDLE_ID!, appId), new SignedDataVerifier(roots, online, Environment.SANDBOX, env.APPLE_IAP_BUNDLE_ID!)];
+  // The library refuses a Production verifier without the app's Apple ID, so non-production servers
+  // configured without it verify Sandbox transactions only.
+  const verifiers = [
+    ...(appId ? [new SignedDataVerifier(roots, online, Environment.PRODUCTION, env.APPLE_IAP_BUNDLE_ID!, appId)] : []),
+    new SignedDataVerifier(roots, online, Environment.SANDBOX, env.APPLE_IAP_BUNDLE_ID!),
+  ];
   const firstOk = async <T>(fn: (v: SignedDataVerifier) => Promise<T>): Promise<T> => {
     let last: unknown;
     for (const v of verifiers) {
