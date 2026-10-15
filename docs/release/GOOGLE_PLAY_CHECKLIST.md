@@ -6,7 +6,7 @@ Package `com.aliagroup.dressmywound` (proposed) · Expo SDK 57 / React Native 0.
 Requirements come only from `docs/release/evidence/STORE_REQUIREMENTS_EVIDENCE.md` (verified 2026-10-14). Keys such as [G3] and [E5] point to [Official sources](#official-sources).
 Companion docs: `docs/release/PRIVACY_AND_DATA_DISCLOSURES.md` (Data safety answers), `docs/release/PAYMENT_COMPLIANCE.md` (payment rails) and `docs/release/RELEASE_STATUS.md` (build log, including the outcome of the final Android rebuild).
 
-> **Bottom line: the Android app is NOT ready for submission.** It has not run on any phone or emulator: this environment has no `/dev/kvm` and no macOS. No Play Console, Google Cloud or Expo/EAS account exists. The only release build so far (2026-10-14) is debug-signed, predates `expo-iap` and contains a JS crash bug that has since been fixed. **It must not be distributed.** A final rebuild with `expo-iap` and the biometric-permission block is running. Its result goes into `docs/release/RELEASE_STATUS.md` and is not stated here.
+> **Bottom line: the Android app is NOT ready for submission.** It has not run on any phone or emulator: this environment has no `/dev/kvm` and no macOS. No Play Console, Google Cloud or Expo/EAS account exists. The final local release build (2026-10-15, with `expo-iap` and the biometric-permission block) is **BUILT and inspected but debug-signed: it must not be distributed**. Store builds are produced and signed by EAS / Play App Signing. An earlier 2026-10-14 build contained a JS crash bug and is superseded.
 
 ---
 
@@ -34,12 +34,12 @@ Companion docs: `docs/release/PRIVACY_AND_DATA_DISCLOSURES.md` (Data safety answ
 
 | Artifact | Facts | Verification |
 |---|---|---|
-| Release APK + AAB, 2026-10-14 (`APP_VARIANT=production`, `expo prebuild` + `./gradlew assembleRelease bundleRelease`) | BUILD SUCCESSFUL. aapt2: `com.aliagroup.dressmywound`, versionCode `1`, versionName `1.0.0`, compileSdk `36`, targetSdkVersion `36`, native-code `arm64-v8a armeabi-v7a x86 x86_64`, label `Dress My Wound`, label-ar `غير لي`. API URL baked in: `https://api.dressmywound.invalid` (**placeholder**). Signed with `CN=Android Debug` (**not distributable**). Built **before** `expo-iap` was added. Contains a JS crash (removed palette keys in `Avatar`), now fixed in source. | verified by native build inspection |
+| **Final** release APK + AAB, 2026-10-15 (`APP_VARIANT=production`, `expo prebuild --clean` + `./gradlew assembleRelease bundleRelease`, Expo 57.0.29, `expo-iap` 6.0.2) | BUILD SUCCESSFUL. aapt2: `com.aliagroup.dressmywound`, versionCode `1`, versionName `1.0.0`, minSdk `24`, compileSdk `36`, targetSdkVersion `36`, native-code `arm64-v8a armeabi-v7a x86 x86_64`, label `Dress My Wound`, label-ar `غير لي`, `allowBackup=false`, `enableOnBackInvokedCallback=true`. `scripts/release/verify-android.sh`: targetSdk OK, permission allow-list OK, zip entries 16 KB aligned, 44/44 64-bit `.so` files aligned ≥ 16 KB. API URL baked in: `https://api.dressmywound.invalid` (**placeholder**). Signed with the local Android debug key (**not distributable**). | verified by native build inspection |
+| Superseded release APK, 2026-10-14 | Built before `expo-iap`; contained a JS crash (removed palette keys in `Avatar`, fixed) and `USE_BIOMETRIC`/`USE_FINGERPRINT`. **Do not use.** | verified by native build inspection |
 | Dev-client APK (`assembleDebug`, `APP_VARIANT=development`) | `com.aliagroup.dressmywound.dev`, label `Dress My Wound Dev` / AR `غير لي تطوير`, targetSdk 36. Debug-only permissions `SYSTEM_ALERT_WINDOW` and `CHANGE_WIFI_MULTICAST_STATE` come from the dev menu/launcher and are not in store builds. Never uploaded to Play. | verified by native build inspection |
-| Final release rebuild (adds `expo-iap` → Play Billing + `com.android.vending.BILLING`, and blocks `USE_BIOMETRIC`/`USE_FINGERPRINT`) | Running. Result → `docs/release/RELEASE_STATUS.md`. | not verified (here) |
 | Device runs | **None.** No emulator (no KVM) and no physical device. | not verified |
 
-Automated checks that passed on 2026-10-15: 158 unit/API tests (`apps/api` 102 across 7 files, including `test/compliance.test.ts` with 11 tests and `test/billing.test.ts` with 10; `packages/tokens` 43; `packages/shared` 9; `packages/i18n` 4); `scripts/release/check.ts` 46/46; `expo-doctor` 21/21; typecheck 8/8 workspaces; lint clean. Playwright E2E runs on the **Expo web build**, which is a proxy and not native: flows A–F, Arabic RTL and `e2e/tests/a11y.spec.ts` (6/6) all pass.
+Automated checks that passed on 2026-10-15: 158 unit/API tests (`apps/api` 102 across 7 files, including `test/compliance.test.ts` with 11 tests and `test/billing.test.ts` with 10; `packages/tokens` 43; `packages/shared` 9; `packages/i18n` 4); `scripts/release/check.ts` 46/46; `expo-doctor` 21/21; typecheck 8/8 workspaces; lint clean. Playwright E2E runs on the **Expo web build**, which is a proxy and not native: 13 passed (flows A–F, Arabic RTL and `e2e/tests/a11y.spec.ts` 6/6). Current totals live in `RELEASE_STATUS.md`.
 
 ---
 
@@ -64,7 +64,7 @@ Automated checks that passed on 2026-10-15: 158 unit/API tests (`apps/api` 102 a
 
 ## 2. Permissions
 
-### 2.1 Permissions in the 2026-10-14 release APK (aapt2)
+### 2.1 Permissions in the final 2026-10-15 release APK (aapt2)
 
 | Permission | Origin | Disposition |
 |---|---|---|
@@ -73,10 +73,11 @@ Automated checks that passed on 2026-10-15: 158 unit/API tests (`apps/api` 102 a
 | `android.permission.ACCESS_NETWORK_STATE` | `expo-network` | kept |
 | `android.permission.ACCESS_WIFI_STATE` | `expo-network` | kept |
 | `com.aliagroup.dressmywound.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | `androidx.core` (signature-level, app-internal) | kept |
-| `android.permission.USE_BIOMETRIC` | `androidx.biometric` via `expo-secure-store` (biometric mode unused) | **now blocked.** The generated production manifest has `tools:node="remove"`. Confirmation in a built APK is pending the final rebuild. |
-| `android.permission.USE_FINGERPRINT` | same | **now blocked**, same caveat |
+| `com.android.vending.BILLING` | `expo-iap` (Google Play Billing) | kept — required for in-app subscriptions |
+| `android.permission.USE_BIOMETRIC` | `androidx.biometric` via `expo-secure-store` (biometric mode unused) | **blocked** — absent from the built APK (it was present in the superseded 2026-10-14 build) |
+| `android.permission.USE_FINGERPRINT` | same | **blocked** — absent from the built APK |
 
-Expected in the final build: the five kept permissions plus `com.android.vending.BILLING`, which `node_modules/expo-iap/android/src/main/AndroidManifest.xml` declares. `scripts/release/verify-android.sh` allows exactly that set and fails on anything else (its regex match is unanchored). The final result goes into `RELEASE_STATUS.md`.
+The final build contains exactly the six kept permissions above. `scripts/release/verify-android.sh` allows exactly that set and fails on anything else.
 
 ### 2.2 Permission policy items
 
@@ -195,7 +196,7 @@ Flag gating is verified by automated test (`apps/api/test/compliance.test.ts`: a
 
 - **Completed implementation (code/config):** target and min SDK, ABIs, AAB profiles, permission blocking (incl. biometrics), `allowBackup=false`, HTTPS-only release builds, edge-to-edge insets, predictive-back opt-in, in-app and web account deletion, privacy center with consent switches, consent gate, review-account seeding, payment-rail classification, `expo-iap` (PBL 9.1.0) client, server-side Play verification and RTDN, flag gating of regulated features.
 - **Verified by automated test:** `apps/api/test/compliance.test.ts` (11), `apps/api/test/billing.test.ts` (10), `apps/api/test/patients.test.ts`, `scripts/release/check.ts` (46 checks), Playwright on **Expo web** (`flow-a`…`flow-f`, `rtl-arabic`, `a11y`). `scripts/release/verify-android.sh` is configured in CI job `android-native`.
-- **Verified by native build inspection (2026-10-14 APK, pre-`expo-iap`):** targetSdk 36, ABIs, 16 KB alignment, permission set, labels, debug signing. **Everything must be re-checked on the final build** (see `RELEASE_STATUS.md`).
+- **Verified by native build inspection (final 2026-10-15 APK with `expo-iap`):** targetSdk 36, minSdk 24, ABIs, 16 KB alignment, permission set (incl. `com.android.vending.BILLING`, no biometric permissions), labels, `allowBackup=false`, debug signing. Re-run `scripts/release/verify-android.sh` on every EAS-built artifact.
 - **Requires developer or other accounts:** Organization Play account + D-U-N-S, package registration, EAS project and upload key, Play signing cert in `assetlinks.json`, Play service account for `eas submit`, Google Cloud service account + Pub/Sub RTDN, product and base-plan IDs, support domain and email, hosting `apps/site`, review-account domain and password, production API URL, all App content forms, category and tags.
 - **Requires official assets:** official Alia Group / TetraSol logos (none drawn anywhere; tokens `PROVISIONAL`), final 512 icon and feature graphic (current files are temporary placeholders), EN and AR phone screenshots.
 - **Requires legal approval:** privacy policy, terms, health consent, medical disclaimer (all `DRAFT_PENDING_LEGAL_REVIEW`), legal entity name, the verbatim [G28] disclaimer in EN and AR, Data safety answers, retention wording, Health apps declaration categories, 18+ policy and the missing SELF-age check, hybrid-tier classification.
