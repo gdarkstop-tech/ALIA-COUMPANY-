@@ -46,7 +46,7 @@ async function audit(page: Page, name: string) {
       .map((el) => {
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0 || getComputedStyle(el).visibility === 'hidden') return null;
-        const name = el.getAttribute('data-testid') ?? el.textContent?.trim().slice(0, 30);
+        const name = el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.textContent?.trim().slice(0, 30);
         for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
           const ox = getComputedStyle(a).overflowX;
           if ((ox === 'auto' || ox === 'scroll') && a.scrollWidth > a.clientWidth) return null;

@@ -30,6 +30,9 @@ function Stepper({ value, onChange, min, max, step = 1, format, testID }: { valu
   );
 }
 
+const stepperRow = { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md } as const;
+const stepperLabel = { flexGrow: 1, flexShrink: 1, flexBasis: 120 } as const;
+
 export default function Availability() {
   const { t, locale } = useI18n();
   const { colors } = useTheme();
@@ -139,13 +142,14 @@ export default function Availability() {
 
       <Card>
         <View style={{ gap: spacing.lg }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md }}>
-            <Text variant="callout" style={{ flex: 1 }}>{t('availability.maxDaily')}</Text>
+          {/* The stepper moves under its label on narrow phones / large text instead of spilling out. */}
+          <View style={stepperRow}>
+            <Text variant="callout" style={stepperLabel}>{t('availability.maxDaily')}</Text>
             <Stepper testID="max-daily" value={maxDaily} onChange={setMaxDaily} min={0} max={80} />
           </View>
           {!isDoctor ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md }}>
-              <Text variant="callout" style={{ flex: 1 }}>{t('availability.serviceRadius')}</Text>
+            <View style={stepperRow}>
+              <Text variant="callout" style={stepperLabel}>{t('availability.serviceRadius')}</Text>
               <Stepper value={radius} onChange={setRadius} min={1} max={100} format={(v) => t('availability.km', { count: v })} />
             </View>
           ) : null}

@@ -63,6 +63,9 @@ export const TextField = forwardRef<TextInput, Props>(function TextField({ label
           style={[
             {
               flex: 1,
+              // Lets the field shrink below its intrinsic width so the reveal button stays visible on
+              // narrow phones and at large text sizes.
+              minWidth: 0,
               fontFamily: typography.fontFamily.regular,
               fontSize: typography.size.body,
               color: colors.text,

@@ -276,7 +276,7 @@ Requirements, all [verified-official]:
 | 7.5 | Subscription warning | When `entitlements.storeManaged`, the screen warns that deletion does not cancel the App Store or Play subscription (`billing.activeStoreSubscription`). The web page says the same. | `CODE_READY` · verified by config inspection |
 | 7.6 | Web URL | `apps/site` builds `/delete-account` (EN and AR, naming Dress My Wound / غير لي). It gives the in-app steps and an email request path, and lists deleted and kept data. Store field `google.accountDeletionUrl` = `https://<SUPPORT_DOMAIN_TO_CONFIRM>/delete-account` (**placeholder**). The page is not hosted and the support email is a placeholder. | `CODE_READY` · `NEEDS_ACCOUNT_ACTION` |
 | 7.7 | Email (support) deletion path | **No tooling.** `app.delete_my_account('SUPPORT')` can only delete the caller's own account, and no admin endpoint invokes it. No completion time is stated (gap 5). | `none (gap)` · `NEEDS_LEGAL_APPROVAL` |
-| 7.8 | Store reviewers | Review accounts (`apps/api/src/db/seed-review.ts`) can be deleted and re-seeded. They see only synthetic catalogue rows. | `CODE_READY` · verified by automated test (`compliance.test.ts`: review isolation) |
+| 7.8 | Store reviewers | Review accounts (`apps/api/src/db/seed-review.ts`) can be deleted and re-seeded. They never see real patients or real clinicians (only synthetic clinician profiles); they see the same approved public catalogue (TetraSol products, nursing service types) as real users, which contains no personal data. | `CODE_READY` · verified by automated test (`compliance.test.ts`: review isolation) |
 | 7.9 | Acceptance | Whether Apple and Google accept the flow, including the healthcare-specific retention | `NEEDS_STORE_REVIEW` |
 
 ---
@@ -309,9 +309,9 @@ Requirements, all [verified-official]:
 
 These are findings from reading the code; none is fixed here.
 
-1. **Health consent covers INSERT only.** After withdrawal, `PATCH /v1/patients/:id` can still change blood type, date of birth, sex, phone, emergency contact, governorate and city, and existing health entries can still be edited (title, detail, note). Neither path checks `has_current_consent`. The UI promises that new health information is not saved.
+1. ~~Health consent covers INSERT only.~~ Fixed 2026-10-15: profile edits and changes to an entry's content also require current health-data consent (database guards; `compliance.test.ts`). Marking an entry as entered-in-error stays possible.
 2. **Terms and privacy consent is enforced only in the app.** The API serves domain requests for accounts without current Terms or Privacy consent. Health data is the exception, because the database enforces it.
-3. **Deletion ledger case keeps clinician credentials.** `provider_credentials` (including the `identifier` of `NATIONAL_ID` and licence numbers), `provider_verification_events`, gender, specialty, subspecialty, experience, governorate, city and fee are kept. The in-app and web "kept" lists do not say so.
+3. **Deletion ledger case** — partly fixed 2026-10-15: clinician credentials (ID and licence numbers) are deleted, verification notes cleared, and city, subspecialty and fee scrubbed (`compliance.test.ts`). Provider type, gender, specialty, years of experience and governorate stay with the retained payout records; the in-app and web "kept" lists do not say so yet.
 4. **Deletion does not touch subscription data.** `billing_accounts`, `entitlements` and `store_events` stay, linked to the tombstone, and this is not disclosed.
 5. **The email deletion path has no tooling and no stated completion time.** Apple requires a stated timeline for manual deletion [A3], and PDPL requires a response within 6 working days [EG1].
 6. **`NSPrivacyCollectedDataTypePurchaseHistory` is missing from `ios.privacyManifests`.** Add it before `billing.store_subscriptions` is enabled. Physical Address and the clinician-identifier type are to confirm.

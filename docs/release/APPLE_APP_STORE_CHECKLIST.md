@@ -255,7 +255,7 @@ Limits are **[verified-official]**: https://developer.apple.com/help/app-store-c
 | Item | Requirement (source) | Project state | Status | Verified |
 |---|---|---|---|---|
 | Demo account | **[verified-official]** For apps with login: a username and password that **must not expire**, extra accounts in Notes, and a live backend (2.1(a)). https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information | `apps/api/src/db/seed-review.ts` (`pnpm --filter @ghayarly/api review:seed`) idempotently creates `review.patient@`, `review.doctor@` and `review.nurse@<REVIEW_EMAIL_DOMAIN>`. All three share one password, which must be ≥ 16 characters, not a guessable word, and never committed. Each account gets `emailVerified = true` and `account_kind = 'REVIEW'`. The doctor and nurse get APPROVED synthetic profiles, labelled "Synthetic review profile — not a real clinician". The patient gets Terms, Privacy and Health-data consent. Production requires `--confirm-production` and the **owner** DB URL. Clinicians see only an MFA warning, because MFA is enforced server-side on admin feature-flag routes only. | CODE_READY; NEEDS_ACCOUNT_ACTION (an operator runs it against the backend the review build uses; needs a company-controlled `REVIEW_EMAIL_DOMAIN`) | verified by automated test (`apps/api/test/compliance.test.ts`: "review accounts see only synthetic catalogue rows; real accounts never see them", "users cannot promote themselves to a review account") |
-| Review data completeness | 2.1(a) (same URL) | **Gap.** Review accounts see *only* `is_demo` rows. `seed.ts` (the synthetic catalogue) refuses to run in production, and `seed-review.ts` creates **no products, nursing services, ledger rows or appointments**. On the production backend a reviewer would see an empty TetraSol store, no nursing services, only "Dr. Review" and "Nurse Review" in Care, and empty Earnings. Fix: add a production-safe review-catalogue seed. | open (not CODE_READY) | verified by config inspection |
+| Review data completeness | 2.1(a) (same URL) | **Partly fixed 2026-10-15.** Review accounts now see the same approved public catalogue as real users (TetraSol products, nursing service types; no personal data), so the store is not empty once real products are approved. Clinicians stay synthetic for reviewers ("Dr. Review", "Nurse Review"), and Earnings/appointments are empty. Still open: approved TetraSol product content in production, and a sample ledger for the clinician review accounts. | partly `CODE_READY` · open | verified by automated test (`compliance.test.ts`: review isolation) |
 | Reviewer deletes an account | The demo account must not expire (same URL) | Reviewers may delete the review accounts. Re-run `review:seed` after each review, and keep someone on hand who can re-create them during review. | NEEDS_ACCOUNT_ACTION | not verified |
 | Contact | **[verified-official]** A phone number in international format with `+` (e.g. `+20…`). Notes ≤ 4000 bytes. (same URL) | The name, email and `+20` phone have not been provided. | NEEDS_ACCOUNT_ACTION | not verified |
 
@@ -278,12 +278,12 @@ TURNED OFF IN THIS VERSION (server-side feature flags, off by default)
   [A] Off. No In-App Purchase is offered and nothing can be bought.
   [B] Gold and Platinum are auto-renewable subscriptions sold only through In-App Purchase, in one subscription group. Me > Plans & subscription has Restore Purchases and Manage subscription. Some benefits are marked "Real-world benefit" (e.g. priority matching); no in-person service is sold in this version.
 
-REVIEW ACCOUNTS (synthetic data only)
+REVIEW ACCOUNTS (synthetic people only)
 Sign in with email and password. All three accounts use the password in the Sign-In Information fields.
 - Patient: review.patient@<REVIEW_EMAIL_DOMAIN> (in the Sign-In fields)
 - Doctor: review.doctor@<REVIEW_EMAIL_DOMAIN>
 - Nurse: review.nurse@<REVIEW_EMAIL_DOMAIN>
-Review accounts are isolated: they see only synthetic, labelled records (e.g. "Dr. Review - Synthetic review profile - not a real clinician") and never real patients or clinicians; real users never see review data. No SMS code is needed. Doctor and Nurse accounts may show a recommendation to turn on two-step verification; it is not needed for review. Earnings and appointments are empty for review accounts.
+Review accounts are isolated: every patient and clinician they see is a synthetic, labelled record (e.g. "Dr. Review - Synthetic review profile - not a real clinician"), never a real patient or clinician; the TetraSol catalogue is the same approved catalogue real users see. Real users never see review data. No SMS code is needed. Doctor and Nurse accounts may show a recommendation to turn on two-step verification; it is not needed for review. Earnings and appointments are empty for review accounts.
 
 SUGGESTED PATHS
 Patient: My Health > add an entry (health-data consent already given) > Me > Family > add a profile > Care > open a clinician > TetraSol > browse.
@@ -381,7 +381,7 @@ Beta review details are also **[verified-official]**: contact, demo account flag
 1. Pin `eas.json` `ios.image` to `"sdk-57"` (§2).
 2. Re-run the iOS prebuild after `expo-iap`; re-inspect `Info.plist`, entitlements and `PrivacyInfo.xcprivacy` (§5.1).
 3. Hide Plans & subscription while `billing.store_subscriptions` is off, or ship working IAP (§8).
-4. Add a production-safe synthetic **review catalogue**: products, nursing services, sample ledger (§13).
+4. Approve real TetraSol product content in production (reviewers see the real approved catalogue) and add a sample ledger for the clinician review accounts (§13).
 5. Hide the "Assistant name" row while `ai.assistant` is off, and hide Me > System status in store builds (§7).
 6. Universal Links: add a validated, auth-gated `/app/*` handler before setting `APP_LINK_DOMAIN`, and add AASA entries per variant (§4).
 7. Add `submit.production.ios` (`ascAppId`) to `eas.json`, or submit interactively (§15).

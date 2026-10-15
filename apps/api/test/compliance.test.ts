@@ -59,6 +59,7 @@ describe('consents', () => {
   it('withdrawing health-data consent stops new health entries; history stays append-only', async () => {
     const c = await signUp(app, { role: 'PATIENT' });
     const p = await c.req({ method: 'POST', url: '/v1/patients', body: SELF });
+    const earlier = await c.req({ method: 'POST', url: `/v1/patients/${p.json.id}/health-entries`, body: { kind: 'MEDICATION', title: 'Metformin' } });
     const state = await c.req({ method: 'GET', url: '/v1/me/consents' });
     const health = state.json.consents.find((x: { type: string }) => x.type === 'HEALTH_DATA_PROCESSING');
     const w = await c.req({ method: 'POST', url: '/v1/me/consents', body: { consents: [{ type: 'HEALTH_DATA_PROCESSING', version: health.currentVersion, granted: false }], source: 'android', locale: 'en' } });
@@ -71,12 +72,19 @@ describe('consents', () => {
     const edit = await c.req({ method: 'PATCH', url: `/v1/patients/${p.json.id}`, body: { bloodType: 'A+' } });
     expect(edit.status).toBe(403);
     expect(edit.json.error.code).toBe('HEALTH_DATA_CONSENT_REQUIRED');
+    // Corrections stay possible: an earlier entry can still be marked entered-in-error.
+    expect((await c.req({ method: 'DELETE', url: `/v1/patients/${p.json.id}/health-entries/${earlier.json.id}` })).status).toBeLessThan(300);
     // Ledger is append-only even for the application role.
     const cl = await appPool.connect();
     try {
       await cl.query('BEGIN');
       await cl.query("select set_config('app.user_id', $1, true)", [c.userId]);
       await expect(cl.query('update app.consent_events set granted = true where user_id = $1', [c.userId])).rejects.toThrow(/permission denied|append-only/);
+      await cl.query('ROLLBACK');
+      await cl.query('BEGIN');
+      await cl.query("select set_config('app.user_id', $1, true)", [c.userId]);
+      // Rewriting an entry's content without consent is refused by the database itself.
+      await expect(cl.query('update app.patient_health_entries set title = $2 where patient_id = $1', [p.json.id, 'Changed'])).rejects.toThrow(/HEALTH_DATA_CONSENT_REQUIRED/);
     } finally {
       await cl.query('ROLLBACK');
       cl.release();

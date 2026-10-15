@@ -207,6 +207,20 @@ BEGIN
   RETURN NEW;
 END $$;
 
+-- Changing the content of an existing entry also requires current consent; marking an entry as
+-- entered-in-error (a correction that removes it from view) stays possible without it.
+CREATE FUNCTION app.health_entries_update_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = app, pg_temp AS $$
+BEGIN
+  IF current_user = 'ghayarly_app' AND (NEW.title, NEW.detail, NEW.note) IS DISTINCT FROM (OLD.title, OLD.detail, OLD.note)
+     AND NOT app.has_current_consent('HEALTH_DATA_PROCESSING') THEN
+    RAISE EXCEPTION 'HEALTH_DATA_CONSENT_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER health_entries_update_guard BEFORE UPDATE ON app.patient_health_entries
+  FOR EACH ROW EXECUTE FUNCTION app.health_entries_update_guard();
+
 CREATE OR REPLACE FUNCTION app.health_entries_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = app, pg_temp AS $$
 BEGIN
