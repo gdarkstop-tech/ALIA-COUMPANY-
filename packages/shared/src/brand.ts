@@ -16,5 +16,5 @@ export function brandName(locale: 'ar' | 'en'): string {
   return locale === 'ar' ? BRAND_NAME_AR : BRAND_NAME_EN;
 }
 
-/** Spellings that must never appear in user-facing copy (enforced by release checks). */
-export const FORBIDDEN_BRAND_SPELLINGS = ['Ghayarly', 'غيرني', 'غيّرلي', 'غيرلي'] as const;
+// The list of forbidden spellings lives in scripts/release/brand-rules.ts (release tooling only),
+// so the wrong names are never compiled into the app bundle.

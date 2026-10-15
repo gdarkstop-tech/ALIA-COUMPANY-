@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FORBIDDEN_BRAND_SPELLINGS } from '../../packages/shared/src/brand.ts';
+import { FORBIDDEN_BRAND_SPELLINGS } from './brand-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const failures: string[] = [];
