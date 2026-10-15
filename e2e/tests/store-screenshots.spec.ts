@@ -9,11 +9,14 @@ import { byId, signInMobile } from './helpers';
  * They are layout/copy drafts for the listing, NOT final store assets: before submission replace them
  * with captures from the native iOS / Android builds (status bar, native controls, fonts).
  *
- *   apple-6.9in    1320 × 2868  (440 × 956 @3x)  — App Store 6.9" iPhone set
+ *   apple-6.3in    1206 × 2622  (402 × 874 @3x)  — App Store iPhone with Dynamic Island, medium display
+ *   apple-6.9in    1320 × 2868  (440 × 956 @3x)  — App Store iPhone with Dynamic Island, large display
  *   google-phone   1080 × 1920  (360 × 640 @3x)  — Play phone screenshots (9:16, within the 2:1 limit)
+ * Saved as JPEG: App Store screenshots must not contain an alpha channel; Play accepts JPEG too.
  */
 const OUT = '../store/screenshots/draft-web-harness';
 const SIZES = [
+  { dir: 'apple-6.3in', viewport: { width: 402, height: 874 } },
   { dir: 'apple-6.9in', viewport: { width: 440, height: 956 } },
   { dir: 'google-phone', viewport: { width: 360, height: 640 } },
 ] as const;
@@ -34,7 +37,7 @@ for (const size of SIZES) {
         mkdirSync(dir, { recursive: true });
         const capture = async (name: string) => {
           await page.waitForTimeout(1500);
-          await page.screenshot({ path: `${dir}/${name}.png` });
+          await page.screenshot({ path: `${dir}/${name}.jpg`, type: 'jpeg', quality: 90 });
         };
 
         await signInMobile(page, 'patient.demo@demo.ghayarly.test');
