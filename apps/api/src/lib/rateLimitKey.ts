@@ -1,12 +1,13 @@
-import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
+import { getPrincipal } from './principal';
 
 /**
- * Per-session rate-limit key: Egyptian mobile networks put many users behind one carrier-grade
- * NAT address, so IP-only limits would let one person lock out others (and let one account spread
- * over many IPs). Hashing keeps the raw cookie out of the limiter store.
+ * Rate-limit key for signed-in endpoints: the account, not the network address. Egyptian mobile
+ * networks put many users behind one carrier-grade NAT address (an IP key would let one person
+ * lock out others), and keying on raw headers would let a client mint a new key per request.
+ * Anonymous callers fall back to the proxy-resolved IP.
  */
-export function sessionKey(request: FastifyRequest): string {
-  const cookie = request.headers.cookie ?? request.headers.authorization ?? '';
-  return cookie ? `s:${createHash('sha256').update(cookie).digest('hex').slice(0, 32)}` : `ip:${request.ip}`;
+export async function sessionKey(request: FastifyRequest): Promise<string> {
+  const principal = await getPrincipal(request).catch(() => null);
+  return principal ? `u:${principal.userId}` : `ip:${request.ip}`;
 }

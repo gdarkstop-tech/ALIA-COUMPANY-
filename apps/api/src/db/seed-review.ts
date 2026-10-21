@@ -1,10 +1,11 @@
 /**
  * Provisions App Store / Google Play REVIEW accounts (Patient, Doctor, Nurse) — idempotent.
  *
- * Isolation (migration 0006): review accounts have account_kind = 'REVIEW'. They see ONLY synthetic
- * catalogue rows (is_demo = true) and real users never see those rows, so reviewers can exercise
- * every flow without touching real patients, clinicians or prices. Review accounts may be deleted
- * by reviewers (account deletion is part of review); re-run this script to recreate them.
+ * Isolation (migration 0006): review accounts have account_kind = 'REVIEW'. Every patient and
+ * clinician they see is synthetic (is_demo = true) and real users never see those rows; the public
+ * catalogue (approved TetraSol products, nursing service types) is the same one real users see.
+ * Review accounts may be deleted by reviewers (account deletion is part of review); re-run this
+ * script to recreate them. Re-running also rotates the password and signs out old sessions.
  *
  * Usage (operator, with the OWNER database URL from the secret manager):
  *   REVIEW_ACCOUNT_PASSWORD='<strong unique password>' REVIEW_EMAIL_DOMAIN='review.example.com' \
@@ -40,15 +41,31 @@ export async function seedReviewAccounts(log: (line: string) => void = console.l
   const pools = createPools(env);
   const owner = new pg.Pool({ connectionString: ownerUrl });
   const auth = createAuth(env, pools.authPool, createMessaging(env, () => undefined));
+  const ctx = await auth.$context;
   try {
     const ids: Record<string, string> = {};
     for (const a of REVIEW) {
       const email = `${a.local}@${domain}`;
-      const existing = await owner.query<{ id: string }>('select id from auth."user" where email = $1', [email]);
+      const existing = await owner.query<{ id: string; kind: string | null }>(
+        'select u.id, p.account_kind::text as kind from auth."user" u left join app.user_profiles p on p.user_id = u.id where u.email = $1',
+        [email],
+      );
       let id = existing.rows[0]?.id;
+      if (id && existing.rows[0]!.kind !== 'REVIEW') {
+        // Someone registered this address first (the pattern is public). Never adopt that account.
+        throw new Error(`${email} already belongs to a non-review account — use another REVIEW_EMAIL_DOMAIN or investigate`);
+      }
       if (!id) {
         const res = await auth.api.signUpEmail({ body: { email, password, name: a.name } });
         id = res.user.id;
+      } else {
+        // Rotation: the credentials handed to Apple / Google must be the ones just provided.
+        const hash = await ctx.password.hash(password);
+        const updated = await owner.query(`update auth."account" set password = $2, "updatedAt" = now() where "userId" = $1 and "providerId" = 'credential'`, [id, hash]);
+        if (!updated.rowCount) {
+          await owner.query(`insert into auth."account" (id, "accountId", "providerId", "userId", password) values (gen_random_uuid()::text, $1, 'credential', $1, $2)`, [id, hash]);
+        }
+        await owner.query('delete from auth."session" where "userId" = $1', [id]);
       }
       await owner.query('update auth."user" set "emailVerified" = true where id = $1', [id]);
       await owner.query('insert into app.user_roles (user_id, role, granted_by_user_id) values ($1, $2, $1) on conflict do nothing', [id, a.role]);
@@ -78,7 +95,7 @@ export async function seedReviewAccounts(log: (line: string) => void = console.l
     };
     await provider(ids.doctor!, 'DOCTOR');
     await provider(ids.nurse!, 'NURSE');
-    log('✓ review accounts ready (account_kind = REVIEW; synthetic catalogue only)');
+    log('✓ review accounts ready (account_kind = REVIEW; synthetic people only, password set)');
   } finally {
     await owner.end();
     await pools.appPool.end();

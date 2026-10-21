@@ -16,7 +16,11 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (Array.isArray(value)) value.forEach((v) => headers.append(key, v));
       else headers.set(key, String(value));
     }
-    if (request.ip && !headers.has('x-forwarded-for')) headers.set('x-forwarded-for', request.ip);
+    // Better Auth rate-limits by client IP: give it the address Fastify resolved through the
+    // configured proxy hops (TRUST_PROXY_HOPS), never a forwarding header the client can choose.
+    headers.delete('x-forwarded-for');
+    headers.delete('x-real-ip');
+    if (request.ip) headers.set('x-forwarded-for', request.ip);
     const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body !== undefined && request.body !== null;
     const webRequest = new Request(url, {
       method: request.method,

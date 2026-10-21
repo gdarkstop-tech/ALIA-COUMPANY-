@@ -37,6 +37,13 @@ const schema = z.object({
   /** `required`: staff/clinician endpoints reject sessions without 2FA. `warn`: allowed with a warning (dev only). */
   MFA_ENFORCEMENT: z.enum(['required', 'warn']).default('warn'),
 
+  /**
+   * Reverse proxies in front of the API in production (load balancer, CDN). The client IP used by
+   * every rate limit is taken this many hops back in X-Forwarded-For; `true`-style trust would let
+   * clients spoof it. Set to the real number of hops for the hosting setup.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+
   /** Sign-in attempts per minute per IP. Defaults to 5 (production); development may raise it for E2E runs. */
   AUTH_SIGNIN_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).optional(),
 

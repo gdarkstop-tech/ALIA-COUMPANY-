@@ -54,7 +54,8 @@ export async function buildServer(env: Env, overrides: { stores?: Stores } = {})
             redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'], remove: true },
             ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } } : {}),
           },
-    trustProxy: env.NODE_ENV === 'production',
+    // Trust exactly TRUST_PROXY_HOPS proxies (counted from the server), never the whole header.
+    trustProxy: env.NODE_ENV === 'production' ? (_address: string, hop: number) => hop < env.TRUST_PROXY_HOPS : false,
     genReqId: () => randomUUID(),
     bodyLimit: 1024 * 1024,
   });

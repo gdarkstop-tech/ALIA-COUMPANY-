@@ -57,11 +57,14 @@ async function consentState(tx: Tx, userId: string): Promise<ConsentsResponse> {
 }
 
 /** Strips obvious personal data from free-text client error messages before logging. */
-function redact(text: string | undefined): string | undefined {
+/** Strips what a crash report must never carry: contact details, numbers (ASCII or Arabic-Indic
+ *  digits), JWT-like tokens and the VALUE after any credential keyword. */
+export function redact(text: string | undefined): string | undefined {
   return text
     ?.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email]')
-    .replace(/\+?\d[\d\s-]{7,}\d/g, '[number]')
-    .replace(/(token|cookie|authorization|password)\S*/gi, '[redacted]');
+    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '[token]')
+    .replace(/(token|cookie|authorization|password|passcode|secret|bearer|otp)\S*\s*[:=]?\s*(bearer\s+)?\S+/giu, '[redacted]')
+    .replace(/[+\d\u0660-\u0669\u06F0-\u06F9][\d\u0660-\u0669\u06F0-\u06F9\s-]{6,}[\d\u0660-\u0669\u06F0-\u06F9]/gu, '[number]');
 }
 
 export async function complianceRoutes(app: FastifyInstance) {
@@ -190,10 +193,10 @@ export async function complianceRoutes(app: FastifyInstance) {
     request.log.warn(
       {
         clientError: {
-          name: body.name,
+          name: redact(body.name),
           message: redact(body.message),
           stack: env.NODE_ENV === 'production' ? redact(body.stack)?.slice(0, 2000) : redact(body.stack),
-          route: body.route?.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id'),
+          route: redact(body.route?.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id')),
           platform: body.platform,
           appVersion: body.appVersion,
           appVariant: body.appVariant,

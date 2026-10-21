@@ -1,5 +1,6 @@
 import { expo } from '@better-auth/expo';
 import { betterAuth } from 'better-auth';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { phoneNumber, twoFactor } from 'better-auth/plugins';
 import type { Pool } from 'pg';
 import { BRAND_NAME_AR, BRAND_NAME_EN, PHONE_ONLY_EMAIL_DOMAIN } from '@ghayarly/shared';
@@ -82,6 +83,25 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
       useSecureCookies: isProd,
       defaultCookieAttributes: { sameSite: 'lax', httpOnly: true, secure: isProd },
       ipAddress: { ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'] },
+    },
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/phone-number/verify') return;
+        const body = (ctx.body ?? {}) as { phoneNumber?: string; updatePhoneNumber?: boolean };
+        // Re-binding the sign-in phone needs only a session plus a code sent to the NEW number, so a
+        // stolen session could plant a permanent password-less way in. No app flow uses it.
+        if (body.updatePhoneNumber) {
+          throw APIError.from('FORBIDDEN', { code: 'PHONE_CHANGE_NOT_ALLOWED', message: 'Changing the sign-in phone number is not available' });
+        }
+        // A phone code is a single factor: accounts with two-step verification sign in with their
+        // password and authenticator code instead.
+        if (body.phoneNumber) {
+          const user = await ctx.context.adapter.findOne<{ twoFactorEnabled?: boolean | null }>({ model: 'user', where: [{ field: 'phoneNumber', value: body.phoneNumber }] });
+          if (user?.twoFactorEnabled) {
+            throw APIError.from('FORBIDDEN', { code: 'USE_PASSWORD_SIGN_IN', message: 'Sign in with your email, password and authenticator code' });
+          }
+        }
+      }),
     },
     plugins: [
       expo(),

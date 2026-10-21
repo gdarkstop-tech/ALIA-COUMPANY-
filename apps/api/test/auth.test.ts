@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadEnv } from '../src/config/env';
-import { clientFor, createTestServer, grantRole, ORIGIN, PASSWORD, signIn, signUp, uniqueEmail } from './helpers';
+import { clientFor, createTestServer, grantRole, ORIGIN, ownerPool, PASSWORD, signIn, signUp, uniqueEmail } from './helpers';
 
 let app: FastifyInstance;
 
@@ -122,6 +122,38 @@ describe('authentication', () => {
     expect(me.status).toBe(200);
     expect(me.json.user.phoneNumber).toBe(phone);
     expect(me.json.user.phoneNumberVerified).toBe(true);
+  });
+
+  it('a session cannot re-bind the sign-in phone, and 2FA accounts cannot sign in with a phone code alone', async () => {
+    const post = (url: string, body: object, cookie?: string) =>
+      app.inject({ method: 'POST', url, headers: { origin: ORIGIN, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, payload: JSON.stringify(body) });
+    const otp = async (phone: string) => {
+      expect((await post('/api/auth/phone-number/send-otp', { phoneNumber: phone })).statusCode).toBe(200);
+      const msgs = app.services.messaging.outbox!.list({ to: phone, purpose: 'phone-otp' });
+      return msgs[msgs.length - 1]!.body.match(/\b(\d{6})\b/)![1]!;
+    };
+    const randomPhone = () => `+2011${Math.floor(10000000 + Math.random() * 89999999)}`;
+
+    // A signed-in user (e.g. a stolen session) tries to point the account at another number.
+    const victim = await signUp(app, {});
+    const attackerPhone = randomPhone();
+    const change = await post('/api/auth/phone-number/verify', { phoneNumber: attackerPhone, code: await otp(attackerPhone), updatePhoneNumber: true }, victim.cookie);
+    expect(change.statusCode).toBe(403);
+    expect(JSON.parse(change.body).code).toBe('PHONE_CHANGE_NOT_ALLOWED');
+
+    // An account with two-step verification cannot be entered with an SMS code alone (SIM swap).
+    const secured = await signUp(app, {});
+    const phone = randomPhone();
+    const owner = ownerPool();
+    try {
+      await owner.query(`update auth."user" set "phoneNumber" = $2, "phoneNumberVerified" = true, "twoFactorEnabled" = true where id = $1`, [secured.userId, phone]);
+    } finally {
+      await owner.end();
+    }
+    const signInByPhone = await post('/api/auth/phone-number/verify', { phoneNumber: phone, code: await otp(phone) });
+    expect(signInByPhone.statusCode).toBe(403);
+    expect(JSON.parse(signInByPhone.body).code).toBe('USE_PASSWORD_SIGN_IN');
+    expect(signInByPhone.headers['set-cookie']).toBeUndefined();
   });
 
   it('rejects phone numbers that are not Egyptian mobiles', async () => {
