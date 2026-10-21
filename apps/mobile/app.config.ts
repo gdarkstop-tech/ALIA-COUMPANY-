@@ -116,6 +116,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
         ['NSPrivacyCollectedDataTypeUserID'],
         ['NSPrivacyCollectedDataTypeOtherUserContent'],
         ['NSPrivacyCollectedDataTypeCrashData'],
+        // Store subscription transactions (originalTransactionId, plan, status), linked to the account.
+        ['NSPrivacyCollectedDataTypePurchaseHistory'],
       ].map(([type]) => ({
         NSPrivacyCollectedDataType: type!,
         NSPrivacyCollectedDataTypeLinked: type !== 'NSPrivacyCollectedDataTypeCrashData',
@@ -165,7 +167,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
             {
               action: 'VIEW',
               autoVerify: true,
-              data: [{ scheme: 'https', host: LINK_DOMAIN, pathPrefix: '/app' }],
+              // '/app/' (not '/app') so it matches the AASA scope '/app/*' and never '/apple…'.
+              data: [{ scheme: 'https', host: LINK_DOMAIN, pathPrefix: '/app/' }],
               category: ['BROWSABLE', 'DEFAULT'],
             },
           ],

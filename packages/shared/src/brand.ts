@@ -2,7 +2,7 @@
  * Official product identity. Every user-facing surface (apps, emails, SMS, TOTP issuer, store
  * metadata, legal pages) must take the product name from here.
  *
- *   English: Dress My Wound        Arabic: غير لي   (NOT "غيرني", NOT "غيّرلي")
+ *   English: Dress My Wound        Arabic: غير لي   (wrong spellings: scripts/release/brand-rules.ts)
  *
  * Internal identifiers (npm scope `@ghayarly/*`, database roles, cookie prefix) intentionally keep
  * the original technical slug: renaming them would break migrations and live sessions.

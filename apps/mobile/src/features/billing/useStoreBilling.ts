@@ -4,13 +4,39 @@ import Constants from 'expo-constants';
 import * as IAP from './iap';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Platform } from 'react-native';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { reportError } from '@/lib/errorReporting';
 import { useFeatures } from '@/features/compliance/hooks';
 
 const platform = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
 const androidPackage = Constants.expoConfig?.android?.package;
 
 export type StoreProduct = { id: string; displayPrice: string };
+
+/** Billing problems the subscription screen explains individually (see billing.error_* strings). */
+export type BillingError = 'STORE_UNAVAILABLE' | 'VERIFY_FAILED' | 'OTHER_ACCOUNT' | 'PENDING_APPROVAL' | 'NETWORK' | 'ALREADY_OWNED' | 'PURCHASE_FAILED';
+
+function purchaseErrorCode(code: unknown): BillingError {
+  switch (code) {
+    case 'deferred-payment':
+    case 'pending':
+      return 'PENDING_APPROVAL';
+    case 'network-error':
+      return 'NETWORK';
+    case 'already-owned':
+      return 'ALREADY_OWNED';
+    default:
+      return 'PURCHASE_FAILED';
+  }
+}
+
+function verifyErrorCode(e: unknown): BillingError {
+  if (e instanceof ApiError) {
+    if (e.isNetwork) return 'NETWORK';
+    if (e.code === 'PURCHASE_ACCOUNT_MISMATCH' || e.code === 'SUBSCRIPTION_BELONGS_TO_ANOTHER_ACCOUNT') return 'OTHER_ACCOUNT';
+  }
+  return 'VERIFY_FAILED';
+}
 
 export function usePlans() {
   return useQuery({ queryKey: ['billing-plans', platform], queryFn: () => api.billing.plans(platform) });
@@ -36,7 +62,7 @@ export function useStoreBilling() {
   const enabled = features['billing.store_subscriptions'] && platform !== 'web';
   const [products, setProducts] = useState<Record<string, StoreProduct>>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<BillingError | null>(null);
   const pending = useRef<((ok: boolean) => void) | null>(null);
   const ids = productIdsFor(plans.data);
 
@@ -48,18 +74,25 @@ export function useStoreBilling() {
         try {
           if (platform === 'ios') await api.billing.verifyApple({ signedTransactionInfo: purchase.purchaseToken ?? '' });
           else await api.billing.verifyGoogle({ productId: purchase.productId, purchaseToken: purchase.purchaseToken ?? '' });
-          // Finish only after the server has verified and recorded the purchase.
-          await IAP.finishTransaction({ purchase, isConsumable: false });
-          await qc.invalidateQueries({ queryKey: ['entitlements'] });
-          pending.current?.(true);
-        } catch {
-          setError('VERIFY_FAILED');
+        } catch (e) {
+          // Not finished: the store re-delivers the transaction, so it can be verified again later.
+          setError(verifyErrorCode(e));
           pending.current?.(false);
+          return;
+        }
+        await qc.invalidateQueries({ queryKey: ['entitlements'] });
+        pending.current?.(true);
+        // Finish only after the server has verified and recorded the purchase (it also acknowledges
+        // Google purchases itself), so a failure here is logged, not shown as a failed purchase.
+        try {
+          await IAP.finishTransaction({ purchase, isConsumable: false });
+        } catch (e) {
+          reportError(e, { fatal: false, route: 'billing/finishTransaction' });
         }
       })();
     });
     const errorSub = IAP.purchaseErrorListener((e) => {
-      if (!IAP.isUserCancelledError(e)) setError(String(e.code ?? 'PURCHASE_FAILED'));
+      if (!IAP.isUserCancelledError(e)) setError(purchaseErrorCode(e.code));
       pending.current?.(false);
     });
     void (async () => {

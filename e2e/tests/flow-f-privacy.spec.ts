@@ -57,3 +57,17 @@ test('Flow F — privacy center and in-app account deletion', async ({ page }) =
   const res = await ctx.post('/api/auth/sign-in/email', { data: { email, password } });
   expect(res.ok()).toBeFalsy();
 });
+
+/** A deep link straight into the patient area must not skip the Terms / Privacy consent gate. */
+test('Flow F — deep links cannot skip the consent gate', async ({ page }) => {
+  const email = unique('flow-f-gate');
+  const password = 'E2e-Password-2026';
+  const api = await apiSession(email, password, { signUp: true, name: 'Gate Tester' });
+  await api.post('/v1/me/roles', { data: { role: 'PATIENT' } });
+
+  await signInMobile(page, email, password);
+  await expect(byId(page, 'consent-gate')).toBeVisible();
+  await page.goto('/patient/health');
+  await expect(byId(page, 'consent-gate')).toBeVisible();
+  await expect(byId(page, 'my-health')).toHaveCount(0);
+});

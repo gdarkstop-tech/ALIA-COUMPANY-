@@ -89,17 +89,24 @@ write(
   ),
 );
 
-// Verified-link association files only with REAL values — never publish placeholders.
+// Verified-link association files only with REAL values — never publish placeholders. The app ID
+// must be the one the store build uses (APP_ID_BASE, same default as apps/mobile/app.config.ts).
 const team = process.env.APPLE_TEAM_ID;
 const certs = process.env.ANDROID_CERT_SHA256;
+const appId = process.env.APP_ID_BASE ?? 'com.aliagroup.dressmywound';
+if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(appId)) throw new Error(`APP_ID_BASE "${appId}" is not a reverse-DNS identifier`);
+if (team && !/^[A-Z0-9]{10}$/.test(team)) throw new Error('APPLE_TEAM_ID must be the 10-character Team ID from the Apple Developer account');
+const fingerprints = certs?.split(',').map((c) => c.trim().toUpperCase());
+if (fingerprints?.some((c) => !/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(c))) throw new Error('ANDROID_CERT_SHA256 must be SHA-256 fingerprints (AA:BB:…, 32 bytes) from Play Console → App integrity');
 mkdirSync(join(out, '.well-known'), { recursive: true });
+const template = (name: string) => JSON.parse(readFileSync(join(here, `well-known/${name}`), 'utf8').replaceAll('<APP_ID>', appId));
 if (team) {
-  const aasa = JSON.parse(readFileSync(join(here, 'well-known/apple-app-site-association.template.json'), 'utf8').replace('<APPLE_TEAM_ID>', team));
+  const aasa = JSON.parse(JSON.stringify(template('apple-app-site-association.template.json')).replace('<APPLE_TEAM_ID>', team));
   writeFileSync(join(out, '.well-known/apple-app-site-association'), JSON.stringify(aasa, null, 2));
 }
-if (certs) {
-  const links = JSON.parse(readFileSync(join(here, 'well-known/assetlinks.template.json'), 'utf8'));
-  links[0].target.sha256_cert_fingerprints = certs.split(',').map((c) => c.trim());
+if (fingerprints) {
+  const links = template('assetlinks.template.json');
+  links[0].target.sha256_cert_fingerprints = fingerprints;
   writeFileSync(join(out, '.well-known/assetlinks.json'), JSON.stringify(links, null, 2));
 }
 console.log(`✓ site built in ${out}${team ? ' (+ apple-app-site-association)' : ''}${certs ? ' (+ assetlinks.json)' : ''}`);

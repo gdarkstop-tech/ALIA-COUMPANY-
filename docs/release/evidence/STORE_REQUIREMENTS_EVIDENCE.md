@@ -182,7 +182,7 @@ _apple-health-payments: Apple App Review Guidelines on health/medical apps, paym
   Implication: Do not let the AI assistant or any tool compute medication or dressing dosages unless TetraSol (as manufacturer) or an approved entity provides and stands behind it. Gate it behind a feature flag.
 - **[verified-official]** 5.1.1(ix): Apps that provide services in highly regulated fields, explicitly including healthcare, should be submitted by a legal entity that provides the services, not an individual developer.  
   Source: https://developer.apple.com/app-store/review/guidelines/  
-  Implication: Enroll the Apple Developer account as an Organization, under the legal entity (e.g. Alia Group / the operating company) that actually provides the healthcare marketplace service. A personal account (gdarkstop@gmail.com as an individual) is likely to be rejected.
+  Implication: Enroll the Apple Developer account as an Organization, under the legal entity (e.g. Alia Group / the operating company) that actually provides the healthcare marketplace service. A personal (individual) developer account is likely to be rejected.
 - **[verified-official]** Organization enrollment requires: a legal entity that can contract with Apple (no DBAs, trade names or branches); a D-U-N-S Number; an enrolling person with legal binding authority; and a public, functional website on a domain associated with the organization. The fee is 99 USD per year, shown in local currency. The organization's name appears as the seller on the App Store.  
   Source: https://developer.apple.com/programs/enroll/  
   Implication: Get a D-U-N-S number for the Egyptian legal entity and a real company website, with privacy policy and terms, before iOS submission. Plan for D&B lead time.
@@ -711,7 +711,7 @@ _egypt-health: Egypt-specific healthcare and privacy rules for Dress My Wound / 
 - Whether uploads are blocked until the Oct 13, 2026 DPLA is accepted is not stated by Apple.
 - Google's 'Expanded Billing Choice' reaching Rest of World on 2027-09-30 is forward-looking, and fees for that region are 'forthcoming'. Do not plan pricing around it.
 - The 'Health apps declaration mandatory since 2024-08-31' date has no supporting quote.
-- That an individual Apple account (gdarkstop@gmail.com) 'is likely to be rejected' is an inference. 5.1.1(ix) says 'should'. Google's Organization-account rule for health apps is the binding one.
+- That an individual Apple developer account 'is likely to be rejected' is an inference. 5.1.1(ix) says 'should'. Google's Organization-account rule for health apps is the binding one.
 - The google-policy topic is cut off mid-finding (Photo/Video, then Contacts for API 37). Target audience, Families, the Subscriptions policy and the rest of the Play policy findings cannot be assessed.
 
 ### missing

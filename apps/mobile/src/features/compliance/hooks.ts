@@ -1,7 +1,7 @@
 import { FEATURES_OFF, type ConsentType, type ConsentsResponse, type FeatureFlags } from '@ghayarly/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Platform } from 'react-native';
-import { api } from '@/lib/api';
+import { ApiError, api, errorKey } from '@/lib/api';
 import { useI18n } from '@/providers/i18n';
 
 const SOURCE = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
@@ -24,7 +24,19 @@ export function useRecordConsents() {
     onSuccess: (next) => {
       qc.setQueryData(['consents'], next);
     },
+    // A document was updated while this screen was open: reload the current versions so the next
+    // tap answers the new documents instead of re-sending the stale ones.
+    onError: (e) => {
+      if (isStaleConsent(e)) void qc.invalidateQueries({ queryKey: ['consents'] });
+    },
   });
+}
+
+const isStaleConsent = (e: unknown) => e instanceof ApiError && e.code === 'STALE_CONSENT_VERSION';
+
+/** Message for a failed consent update ("documents were updated" instead of a generic error). */
+export function consentErrorKey(e: unknown) {
+  return isStaleConsent(e) ? ('legal.updatedNotice' as const) : errorKey(e);
 }
 
 /** Server-side feature flags. Until the server answers, everything regulated stays OFF. */

@@ -2,7 +2,7 @@ import { spacing } from '@ghayarly/tokens';
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
-import { useConsents, useRecordConsents } from '@/features/compliance/hooks';
+import { consentErrorKey, useConsents, useRecordConsents } from '@/features/compliance/hooks';
 import { errorKey } from '@/lib/api';
 import { useI18n } from '@/providers/i18n';
 import { useResetTo, useSignOut } from '@/providers/session';
@@ -37,7 +37,7 @@ export default function ConsentGate() {
       header={<Header title={t('legal.gateTitle')} subtitle={t('legal.gateBody')} />}
       footer={
         <View style={{ gap: spacing.sm }}>
-          {record.error ? <Notice tone="danger" body={t(errorKey(record.error))} /> : null}
+          {record.error ? <Notice tone="danger" body={t(consentErrorKey(record.error))} /> : null}
           <Button
             testID="consent-accept"
             variant="accent"

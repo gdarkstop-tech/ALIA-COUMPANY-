@@ -2,9 +2,9 @@
   "locale": "en-GB",
   "apple": {
     "name": "Dress My Wound",
-    "subtitle": "Family health & home care",
+    "subtitle": "Your family's health records",
     "promotionalText": "Keep your family's health information in one private place and find verified doctors and nurses in Egypt.",
-    "keywords": "wound care,nurse,doctor,home visit,family health,health record,dressing,Egypt,clinic,caregiver",
+    "keywords": "wound care,nurse,doctor,medications,family health,health record,dressing,Egypt,clinic,caregiver",
     "description": "Dress My Wound brings your family's health information and care team together in one calm, private place.\n\nKEEP YOUR HEALTH INFORMATION ORGANISED\n• Record allergies, conditions, medications, past surgeries, blood type and an emergency contact.\n• Everything you add is clearly marked as self-reported.\n\nCARE FOR YOUR FAMILY\n• Manage profiles for parents and children you are authorised to care for.\n• Every family profile records the consent or legal authority behind it.\n\nFIND VERIFIED CLINICIANS\n• Browse doctors and nurses whose professional credentials have been reviewed by our team.\n• See availability, services and approximate service areas.\n\nTETRASOL STORE\n• Browse TetraSol wound-care products in one dedicated store.\n\nPRIVATE BY DESIGN\n• Health information is stored only with your explicit consent.\n• Only you and the people you authorise can see your records.\n• Delete your account at any time from inside the app.\n\nIMPORTANT\nDress My Wound does not diagnose or treat and is not an emergency service. In an emergency in Egypt call 123.\n\nAvailable in Arabic and English.",
     "whatsNew": "First release.",
     "supportUrl": "https://<SUPPORT_DOMAIN_TO_CONFIRM>/",
@@ -13,7 +13,7 @@
   },
   "google": {
     "title": "Dress My Wound",
-    "shortDescription": "Your family's health records and verified home-care clinicians, in one place.",
+    "shortDescription": "Your family's health records and verified doctors and nurses, in one place.",
     "fullDescription": "Dress My Wound brings your family's health information and care team together in one calm, private place.\n\nKeep your health information organised: allergies, conditions, medications, past surgeries, blood type and an emergency contact — always marked as self-reported.\n\nCare for your family: manage profiles for parents and children you are authorised to care for, with the consent or legal authority recorded for each.\n\nFind verified clinicians: browse doctors and nurses whose professional credentials have been reviewed by our team.\n\nTetraSol store: browse TetraSol wound-care products in one dedicated store.\n\nPrivate by design: health information is stored only with your explicit consent, only you and the people you authorise can see it, and you can delete your account at any time from inside the app.\n\nImportant: Dress My Wound does not diagnose or treat and is not an emergency service. In an emergency in Egypt call 123.\n\nAvailable in Arabic and English.",
     "privacyPolicyUrl": "https://<SUPPORT_DOMAIN_TO_CONFIRM>/privacy",
     "accountDeletionUrl": "https://<SUPPORT_DOMAIN_TO_CONFIRM>/delete-account"

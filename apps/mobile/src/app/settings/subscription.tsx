@@ -27,10 +27,17 @@ export default function Subscription() {
   if (billing.plans.error) return <ErrorState message={t(errorKey(billing.plans.error))} onRetry={() => void billing.plans.refetch()} />;
   const current = ent.data?.effectivePlan ?? 'SILVER';
   const activeStore = ent.data?.entitlements.find((e) => e.source !== 'ADMIN_GRANT' && (e.status === 'ACTIVE' || e.status === 'GRACE_PERIOD'));
+  const thisStore = Platform.OS === 'ios' ? 'APPLE' : 'GOOGLE';
+  // A second purchase would start a parallel subscription (double billing): on Android every tier
+  // change, and on either platform a plan bought in the other store, goes through the store's own
+  // subscription settings instead. StoreKit handles upgrades within the group itself on iOS.
+  const changeInStoreOnly = Boolean(activeStore && (activeStore.source !== thisStore || thisStore === 'GOOGLE'));
+  const otherStore = activeStore?.source === 'APPLE' ? t('billing.appStore') : t('billing.googlePlay');
 
   return (
     <Screen testID="subscription-screen" header={<Header back title={t('billing.title')} subtitle={t('billing.subtitle')} />}>
-      {billing.error ? <Notice tone="warning" body={billing.error === 'STORE_UNAVAILABLE' ? t('billing.storeUnavailable') : t('billing.verifyFailed')} /> : null}
+      {billing.error ? <Notice tone="warning" testID="billing-error" body={t(`billing.error_${billing.error}`)} /> : null}
+      {activeStore && activeStore.source !== thisStore ? <Notice tone="info" body={t('billing.managedInOtherStore', { store: otherStore })} /> : null}
       {billing.plans.data.map((plan) => {
         const isCurrent = plan.code === current;
         return (
@@ -58,7 +65,15 @@ export default function Subscription() {
                       <Text variant="callout" weight="semibold" tabular>
                         {t(o.period === 'MONTHLY' ? 'billing.monthly' : 'billing.yearly')} · {label}
                       </Text>
-                      {plan.purchasable && productId && storePrice && !isCurrent ? (
+                      {plan.purchasable && productId && storePrice && !isCurrent && changeInStoreOnly ? (
+                        <Button
+                          testID={`change-plan-${plan.code}-${o.period}`}
+                          variant="secondary"
+                          icon="external-link"
+                          label={t('billing.changeInStore', { store: otherStore })}
+                          onPress={() => void billing.manage(activeStore?.productId)}
+                        />
+                      ) : plan.purchasable && productId && storePrice && !isCurrent ? (
                         <Button
                           testID={`subscribe-${plan.code}-${o.period}`}
                           variant="accent"
@@ -90,8 +105,10 @@ export default function Subscription() {
           label={t('billing.restore')}
           loading={billing.busy}
           onPress={async () => {
-            await billing.restore().catch(() => undefined);
-            toast(t('billing.restored'));
+            const result = await billing.restore().catch(() => null);
+            if (!result) toast(t('billing.restoreFailed'), 'error');
+            else if (result.restoreErrors.length) toast(t('billing.restoreIssues'), 'error');
+            else toast(t('billing.restored'));
           }}
         />
         {activeStore ? <Button testID="manage-subscription" variant="ghost" icon="external-link" label={t('billing.manage')} onPress={() => void billing.manage(activeStore.productId)} /> : null}

@@ -2,7 +2,7 @@ import { spacing } from '@ghayarly/tokens';
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Switch, View } from 'react-native';
-import { useConsents, useRecordConsents } from '@/features/compliance/hooks';
+import { consentErrorKey, useConsents, useRecordConsents } from '@/features/compliance/hooks';
 import { errorKey } from '@/lib/api';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
@@ -58,7 +58,7 @@ export default function PrivacyCenter() {
           />
         </View>
       </Card>
-      {record.error ? <Notice tone="danger" body={t(errorKey(record.error))} /> : null}
+      {record.error ? <Notice tone="danger" body={t(consentErrorKey(record.error))} /> : null}
 
       <Notice tone="info" icon="mci:shield-lock-outline" title={t('privacy.dataSummaryTitle')} body={t('privacy.dataSummaryBody')} />
       <Text variant="caption" color="textTertiary">{t('privacy.noTracking')}</Text>
