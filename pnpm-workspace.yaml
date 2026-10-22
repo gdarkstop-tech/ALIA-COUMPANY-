@@ -4,3 +4,7 @@ packages:
   - "e2e"
 onlyBuiltDependencies:
   - esbuild
+overrides:
+  # Security: Next.js < 16.4.1 has a critical unauthenticated RCE advisory. Also pins the copy that
+  # better-auth pulls in as an optional dependency.
+  next: 16.4.2
