@@ -147,6 +147,9 @@ BEGIN
   IF p_date_of_birth > current_date THEN RAISE EXCEPTION 'INVALID_DATE_OF_BIRTH' USING ERRCODE = 'P0001'; END IF;
   IF coalesce(length(trim(p_statement_version)), 0) = 0 THEN RAISE EXCEPTION 'CONSENT_STATEMENT_REQUIRED' USING ERRCODE = 'P0001'; END IF;
   v_age := extract(year FROM age(current_date, p_date_of_birth))::int;
+  -- Serialise profile creation per account: the self-profile check and the family-size limit are
+  -- count-then-insert, so two concurrent requests could otherwise both pass them.
+  PERFORM pg_advisory_xact_lock(hashtextextended('patient_profiles:' || v_user, 0));
 
   IF p_relationship = 'SELF' THEN
     IF p_consent_basis <> 'SELF' THEN RAISE EXCEPTION 'INVALID_CONSENT_BASIS' USING ERRCODE = 'P0001'; END IF;

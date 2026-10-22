@@ -51,6 +51,8 @@ export default function ConsentGate() {
               )
             }
           />
+          {/* Declining is a real choice: the account (and its data) can be deleted without accepting. */}
+          <Button testID="consent-decline-delete" label={t('legal.declineDelete')} variant="ghost" onPress={() => router.push('/settings/delete-account' as Href)} />
           <Button
             label={t('common.signOut')}
             variant="ghost"

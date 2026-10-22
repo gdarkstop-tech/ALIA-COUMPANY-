@@ -62,7 +62,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
           heading: 'How long we keep it',
           paragraphs: [
             'Until you delete it or delete your account. When you delete your account we immediately delete your sign-in credentials and sessions and your own health records, and anonymise your account.',
-            'We keep only what the law requires: financial records of completed clinician payouts, the security audit log and the history of consents you gave. These are retained for [retention period — to be confirmed by legal] and are not used for any other purpose.',
+            'We keep only what the law requires: financial records of completed clinician payouts, the records of store subscription transactions we received from Apple or Google (transaction identifiers, plan, status and dates — never card details), the security audit log and the history of consents you gave. These are retained for [retention period — to be confirmed by legal], are no longer linked to your name or contact details, and are not used for any other purpose.',
           ],
         },
         {
@@ -114,7 +114,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
           heading: 'مدة الاحتفاظ',
           paragraphs: [
             'حتى تحذفها أو تحذف حسابك. عند حذف الحساب نحذف فوراً بيانات الدخول والجلسات وسجلاتك الصحية الخاصة، ونجعل الحساب مجهول الهوية.',
-            'نحتفظ فقط بما يُلزِمنا به القانون: السجلات المالية لمستحقات مقدمي الرعاية المدفوعة، وسجل التدقيق الأمني، وسجل الموافقات التي منحتها، وذلك لمدة [مدة الاحتفاظ — يحددها الفريق القانوني] ولا تُستخدم لأي غرض آخر.',
+            'نحتفظ فقط بما يُلزِمنا به القانون: السجلات المالية لمستحقات مقدمي الرعاية المدفوعة، وسجلات معاملات الاشتراك التي تلقيناها من Apple أو Google (معرّفات المعاملة والباقة والحالة والتواريخ — دون بيانات البطاقة أبداً)، وسجل التدقيق الأمني، وسجل الموافقات التي منحتها، وذلك لمدة [مدة الاحتفاظ — يحددها الفريق القانوني]، دون ربطها باسمك أو بيانات التواصل، ولا تُستخدم لأي غرض آخر.',
           ],
         },
         {
@@ -148,7 +148,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
           paragraphs: [
             'Where paid plans are offered in the app, they are auto-renewing subscriptions sold and billed by the Apple App Store or Google Play at the price the store shows before you confirm. Payment is charged to your store account.',
             'A subscription renews automatically for the same period unless you cancel it in your App Store or Google Play account settings at least 24 hours before the current period ends. Deleting your Dress My Wound account does not cancel a store subscription.',
-            'Refunds are handled by Apple or Google under their policies. Plans unlock app features only; clinical services and TetraSol products are paid separately when they become available.',
+            'Refunds are handled by Apple or Google under their policies. A plan includes the app features it lists and, where a benefit is marked as a real-world benefit, that benefit on eligible services (for example reduced platform fees or priority matching). The clinical services and TetraSol products themselves are paid separately when they become available. A plan never changes clinical advice or the order in which urgent needs are handled.',
           ],
         },
         { heading: 'Acceptable use', paragraphs: ['Do not misuse the service, attempt to access data that is not yours, or upload unlawful content. We may suspend accounts that put others at risk.'] },
@@ -170,7 +170,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
           paragraphs: [
             'عند توفر الباقات المدفوعة في التطبيق، تكون اشتراكات تتجدد تلقائياً يبيعها ويحصّل قيمتها App Store من Apple أو Google Play بالسعر الذي يعرضه المتجر قبل تأكيدك، ويُخصم المبلغ من حسابك في المتجر.',
             'يتجدد الاشتراك تلقائياً للمدة نفسها ما لم تُلغِه من إعدادات حسابك في App Store أو Google Play قبل انتهاء المدة الحالية بـ ٢٤ ساعة على الأقل. حذف حسابك في غير لي لا يُلغي الاشتراك في المتجر.',
-            'تتولى Apple أو Google طلبات الاسترداد وفق سياساتهما. تفتح الباقات ميزات داخل التطبيق فقط، وتُدفع الخدمات العلاجية ومنتجات TetraSol بشكل منفصل عند توفرها.',
+            'تتولى Apple أو Google طلبات الاسترداد وفق سياساتهما. تشمل الباقة ميزات التطبيق المذكورة فيها، وعندما تُوصف ميزة بأنها ميزة على خدمات فعلية فهي تنطبق على الخدمات المؤهلة (مثل رسوم منصة مخفّضة أو أولوية في المطابقة). تُدفع الخدمات العلاجية ومنتجات TetraSol نفسها بشكل منفصل عند توفرها. لا تغيّر الباقة أي نصيحة طبية ولا ترتيب التعامل مع الحالات العاجلة.',
           ],
         },
         { heading: 'الاستخدام المقبول', paragraphs: ['لا تُسئ استخدام الخدمة، ولا تحاول الوصول إلى بيانات لا تخصك، ولا ترفع محتوى غير قانوني. يجوز لنا إيقاف الحسابات التي تعرّض الآخرين للخطر.'] },

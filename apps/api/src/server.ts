@@ -4,6 +4,8 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
+import { REQUIRED_ACCOUNT_CONSENTS } from '@ghayarly/shared';
+import { sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { createAuth, type Auth } from './auth/auth';
 import { registerAuthRoutes } from './auth/routes';
@@ -12,7 +14,7 @@ import { assertRlsEffective, createDb, createPools, type Db, type Pools } from '
 import { createMessaging, type Messaging } from './integrations/messaging';
 import { createPaymentGateway, type PaymentGateway } from './integrations/payments';
 import { AppError, fromPgError } from './lib/errors';
-import { registerPrincipal } from './lib/principal';
+import { getPrincipal, inContext, registerPrincipal } from './lib/principal';
 import { adminRoutes } from './modules/admin/routes';
 import { complianceRoutes } from './modules/compliance/routes';
 import { billingRoutes } from './modules/billing/routes';
@@ -126,6 +128,24 @@ export async function buildServer(env: Env, overrides: { stores?: Stores } = {})
   });
 
   registerPrincipal(app);
+
+  // Terms of Use + Privacy Policy acceptance is enforced here for every state-changing /v1 request,
+  // not only by the app's consent screen (deep links, old app builds and other clients). Exempt:
+  // answering the consents themselves, account deletion (declining the terms means deleting the
+  // account), anonymous crash reports, appeals, and the staff console (staff work under employment
+  // terms, not the consumer documents).
+  const CONSENT_FREE_WRITES = [/^\/v1\/me\/consents$/, /^\/v1\/me\/account-deletion$/, /^\/v1\/me\/appeals(\/|$)/, /^\/v1\/telemetry\//, /^\/v1\/admin\//];
+  app.addHook('preHandler', async (request) => {
+    if (!request.url.startsWith('/v1/') || ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
+    const path = request.url.split('?')[0]!;
+    if (CONSENT_FREE_WRITES.some((r) => r.test(path))) return;
+    const principal = await getPrincipal(request);
+    if (!principal) return; // the route answers 401 itself
+    const checks = sql.join(REQUIRED_ACCOUNT_CONSENTS.map((type) => sql`app.has_current_consent(${type}::app.consent_type)`), sql` and `);
+    const res = await inContext(request, principal, (tx) => tx.execute<{ ok: boolean | null }>(sql`select ${checks} as ok`));
+    if (!res.rows[0]?.ok) throw new AppError(403, 'CONSENT_REQUIRED', 'Accept the current Terms of Use and Privacy Policy to continue');
+  });
+
   await registerAuthRoutes(app);
   await app.register(systemRoutes);
   await app.register(meRoutes, { prefix: '/v1' });

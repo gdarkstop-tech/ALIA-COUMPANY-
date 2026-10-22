@@ -1,8 +1,10 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { apiSession, DEMO_PASSWORD, shot, unique } from './helpers';
+import { apiSession, DEMO_PASSWORD, grantConsentsApi, shot, unique } from './helpers';
 
 async function createSubmission(type: 'DOCTOR' | 'NURSE', nameEn: string): Promise<{ api: APIRequestContext; userId: string }> {
   const api = await apiSession(unique(`flow-e-${type.toLowerCase()}`), 'E2e-Password-2026', { signUp: true, name: nameEn });
+  // Terms + Privacy first: the API refuses other writes until they are accepted.
+  await grantConsentsApi(api);
   expect((await api.post('/v1/me/roles', { data: { role: type } })).ok()).toBeTruthy();
   const profile = await api.put('/v1/provider/me', {
     data: {

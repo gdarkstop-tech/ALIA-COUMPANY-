@@ -28,11 +28,26 @@ afterAll(async () => {
 });
 
 describe('consents', () => {
-  it('blocks health data until explicit health-data consent is given (database-enforced)', async () => {
-    const c = await signUp(app, { role: 'PATIENT', consents: false });
+  it('refuses writes until the current Terms and Privacy Policy are accepted (server-enforced)', async () => {
+    const c = await signUp(app, { consents: false });
     const before = await c.req({ method: 'GET', url: '/v1/me/consents' });
     expect(before.status).toBe(200);
     expect(before.json.missingRequired).toEqual(['TERMS_OF_SERVICE', 'PRIVACY_POLICY']);
+    // A deep link or another client cannot skip the consent screen: every write is refused…
+    const role = await c.req({ method: 'POST', url: '/v1/me/roles', body: { role: 'PATIENT' } });
+    expect(role.status).toBe(403);
+    expect(role.json.error.code).toBe('CONSENT_REQUIRED');
+    // …except answering the documents and deleting the account.
+    await grantConsents(c, false);
+    expect((await c.req({ method: 'POST', url: '/v1/me/roles', body: { role: 'PATIENT' } })).status).toBe(200);
+  });
+
+  it('blocks health data until explicit health-data consent is given (database-enforced)', async () => {
+    const c = await signUp(app, { consents: false });
+    await grantConsents(c, false);
+    await c.req({ method: 'POST', url: '/v1/me/roles', body: { role: 'PATIENT' } });
+    const before = await c.req({ method: 'GET', url: '/v1/me/consents' });
+    expect(before.json.missingRequired).toEqual([]);
     expect(before.json.healthDataConsented).toBe(false);
 
     const denied = await c.req({ method: 'POST', url: '/v1/patients', body: SELF });

@@ -60,7 +60,7 @@ export const planCodeEnum = appSchema.enum('plan_code', ['SILVER', 'GOLD', 'PLAT
 export const paymentClassEnum = appSchema.enum('payment_class', ['PHYSICAL_PRODUCT', 'PHYSICAL_SERVICE', 'ELIGIBLE_PERSON_TO_PERSON_SERVICE', 'DIGITAL_SUBSCRIPTION', 'DIGITAL_FEATURE']);
 export const billingPeriodEnum = appSchema.enum('billing_period', ['MONTHLY', 'YEARLY']);
 export const entitlementSourceEnum = appSchema.enum('entitlement_source', ['APPLE', 'GOOGLE', 'ADMIN_GRANT']);
-export const entitlementStatusEnum = appSchema.enum('entitlement_status', ['ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'EXPIRED', 'REVOKED', 'REFUNDED']);
+export const entitlementStatusEnum = appSchema.enum('entitlement_status', ['ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'PAUSED', 'EXPIRED', 'REVOKED', 'REFUNDED']);
 
 // ------------------------------------------------------------------ auth (read-only subset for the app role)
 export const authUsers = authSchema.table('user', {
@@ -178,6 +178,7 @@ export const entitlements = appSchema.table('entitlements', {
   productId: text('product_id'),
   externalRef: text('external_ref'),
   expiresAt: ts('expires_at'),
+  periodStartedAt: ts('period_started_at'),
   autoRenew: boolean('auto_renew'),
   lastEventAt: ts('last_event_at').notNull(),
   lastVerifiedAt: ts('last_verified_at').notNull(),

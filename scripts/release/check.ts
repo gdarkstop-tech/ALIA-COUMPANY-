@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { BRAND_NAME_AR, BRAND_NAME_EN } from '../../packages/shared/src/brand.ts';
 import { LEGAL_DOCUMENTS } from '../../packages/shared/src/legal.ts';
 import { brandConfig } from '../../packages/tokens/src/brand.ts';
-import { FORBIDDEN_BRAND_SPELLINGS, OFF_BY_DEFAULT_FEATURE_CLAIMS } from './brand-rules.ts';
+import { FORBIDDEN_BRAND_SPELLINGS, OFF_BY_DEFAULT_FEATURE_CLAIMS, PERSONAL_EMAIL_PATTERN, PLACEHOLDER_PATTERN } from './brand-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const failures: string[] = [];
@@ -65,14 +65,19 @@ for (const lang of ['en', 'ar']) {
   // Apple 2.3.1 / Google metadata policy: the listing may only promise what the build does. Features
   // that are OFF by default need RELEASE_ENABLED_FEATURES=<flag key> to be advertised.
   const enabled = (process.env.RELEASE_ENABLED_FEATURES ?? '').split(',').map((s) => s.trim());
-  const listing = [a.name, a.subtitle, a.keywords, a.promotionalText, a.description, g.title, g.shortDescription, g.fullDescription].join('\n');
+  const listing = [a.name, a.subtitle, a.keywords, a.promotionalText, a.description, a.whatsNew, g.title, g.shortDescription, g.fullDescription].join('\n');
   for (const claim of OFF_BY_DEFAULT_FEATURE_CLAIMS) {
     const hit = listing.match(claim.pattern);
     check(`${lang} listing does not advertise ${claim.flag} (off)`, enabled.includes(claim.flag) || !hit, hit?.[0]);
   }
-  gate(`${lang} listing has no placeholders`, !/<[A-Z_]+_TO_CONFIRM>|to be confirmed|\[to confirm/i.test(JSON.stringify(m)));
+  gate(`${lang} listing has no placeholders`, !PLACEHOLDER_PATTERN.test(JSON.stringify(m)), JSON.stringify(m).match(PLACEHOLDER_PATTERN)?.[0]);
 }
-gate('legal texts have no placeholders', !/to be confirmed|\[to confirm/i.test(JSON.stringify(LEGAL_DOCUMENTS)));
+for (const doc of Object.values(LEGAL_DOCUMENTS)) {
+  for (const lang of ['en', 'ar'] as const) {
+    const text = JSON.stringify(doc[lang]);
+    gate(`${doc.id} (${lang}) has no placeholders`, !PLACEHOLDER_PATTERN.test(text), text.match(PLACEHOLDER_PATTERN)?.[0]);
+  }
+}
 
 // ---------------------------------------------------------------- 3. icons (PNG header: width/height at 16/20, colour type at 25)
 function png(path: string) {
@@ -126,10 +131,15 @@ const secretHits = tracked
   .filter((f) => /\.(ts|tsx|js|json|env|example|md|yml|yaml)$/.test(f) && !f.includes('node_modules'))
   .filter((f) => /-----BEGIN (RSA |EC )?PRIVATE KEY-----|"private_key":\s*"-----BEGIN|AIza[0-9A-Za-z_-]{35}/.test(readFileSync(join(root, f), 'utf8')));
 check('no private keys / service-account keys / Google API keys in tracked files', secretHits.length === 0, secretHits.join(', '));
-// Real people's addresses (developer-account logins, staff) never belong in the repository.
+// Real people's addresses (developer-account logins, staff) never belong in the repository: every
+// tracked text file is scanned (binary files — a NUL byte in the first 8 KB — are skipped).
 const personal = tracked
-  .filter((f) => /\.(ts|tsx|js|json|md|yml|yaml|html|txt)$/.test(f) && !f.includes('node_modules'))
-  .filter((f) => /[\w.+-]+@(gmail|googlemail|yahoo|hotmail|outlook|live|icloud|me)\.com\b/i.test(readFileSync(join(root, f), 'utf8')));
+  .filter((f) => !f.includes('node_modules'))
+  .filter((f) => {
+    const buf = readFileSync(join(root, f));
+    if (buf.subarray(0, 8192).includes(0)) return false;
+    return PERSONAL_EMAIL_PATTERN.test(buf.toString('utf8'));
+  });
 check('no personal e-mail addresses in tracked files', personal.length === 0, personal.join(', '));
 
 // ---------------------------------------------------------------- report

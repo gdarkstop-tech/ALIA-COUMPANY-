@@ -84,10 +84,15 @@ export type PlanForClient = BillingPlan & {
 
 // ---------------------------------------------------------------- entitlements
 export const ENTITLEMENT_SOURCES = ['APPLE', 'GOOGLE', 'ADMIN_GRANT'] as const;
-export const ENTITLEMENT_STATUSES = ['ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'EXPIRED', 'REVOKED', 'REFUNDED'] as const;
+export const ENTITLEMENT_STATUSES = ['ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'PAUSED', 'EXPIRED', 'REVOKED', 'REFUNDED'] as const;
 export type EntitlementStatus = (typeof ENTITLEMENT_STATUSES)[number];
 /** Statuses that grant access. BILLING_RETRY grants nothing (Apple/Google stop service unless in grace). */
 export const ENTITLEMENT_ACCESS_STATUSES: readonly EntitlementStatus[] = ['ACTIVE', 'GRACE_PERIOD'];
+/**
+ * Statuses in which the store still owns the subscription (it may recover, resume or renew): the
+ * app must send the user to the store to manage it instead of offering a second purchase.
+ */
+export const STORE_MANAGED_STATUSES: readonly EntitlementStatus[] = ['ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'PAUSED'];
 
 export type Entitlement = {
   planCode: PlanCode;

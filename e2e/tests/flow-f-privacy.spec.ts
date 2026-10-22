@@ -10,8 +10,8 @@ test('Flow F — privacy center and in-app account deletion', async ({ page }) =
   const email = unique('flow-f');
   const password = 'E2e-Password-2026';
   const api = await apiSession(email, password, { signUp: true, name: 'Privacy Tester' });
-  await api.post('/v1/me/roles', { data: { role: 'PATIENT' } });
   await grantConsentsApi(api, true);
+  expect((await api.post('/v1/me/roles', { data: { role: 'PATIENT' } })).ok()).toBeTruthy();
   const created = await api.post('/v1/patients', {
     data: { displayName: 'Privacy Tester', dateOfBirth: '1991-02-02', sex: 'FEMALE', relationship: 'SELF', consentBasis: 'SELF', consentAttested: true, consentStatementVersion: 'v1' },
   });
@@ -63,7 +63,10 @@ test('Flow F — deep links cannot skip the consent gate', async ({ page }) => {
   const email = unique('flow-f-gate');
   const password = 'E2e-Password-2026';
   const api = await apiSession(email, password, { signUp: true, name: 'Gate Tester' });
-  await api.post('/v1/me/roles', { data: { role: 'PATIENT' } });
+  // Without the consents the API itself refuses to assign a role (server-side gate)…
+  const blocked = await api.post('/v1/me/roles', { data: { role: 'PATIENT' } });
+  expect(blocked.status()).toBe(403);
+  expect((await blocked.json()).error.code).toBe('CONSENT_REQUIRED');
 
   await signInMobile(page, email, password);
   await expect(byId(page, 'consent-gate')).toBeVisible();

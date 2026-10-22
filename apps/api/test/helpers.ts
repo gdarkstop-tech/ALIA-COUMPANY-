@@ -82,11 +82,12 @@ export async function signUp(
   if (res.statusCode !== 200) throw new Error(`sign-up failed ${res.statusCode}: ${res.body}`);
   const body = JSON.parse(res.body);
   const client = clientFor(app, cookieHeader(res.headers['set-cookie']), body.user.id, email);
+  // Same order as the app: documents are accepted before anything else is written.
+  if (opts.consents !== false) await grantConsents(client, opts.role === 'PATIENT' || opts.consents === 'all');
   if (opts.role) {
     const r = await client.req({ method: 'POST', url: '/v1/me/roles', body: { role: opts.role } });
     if (r.status !== 200) throw new Error(`role assignment failed: ${JSON.stringify(r.json)}`);
   }
-  if (opts.consents !== false) await grantConsents(client, opts.role === 'PATIENT' || opts.consents === 'all');
   return client;
 }
 

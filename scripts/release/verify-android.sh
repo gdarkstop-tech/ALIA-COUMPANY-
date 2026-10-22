@@ -6,6 +6,7 @@ set -euo pipefail
 APK="${1:?usage: verify-android.sh <app-release.apk>}"
 BT="${ANDROID_HOME:-/opt/android-sdk}/build-tools/$(ls "${ANDROID_HOME:-/opt/android-sdk}/build-tools" | sort -V | tail -1)"
 fail=0
+command -v readelf >/dev/null || { echo "✗ readelf not found (install binutils): cannot check 16 KB ELF alignment"; exit 1; }
 
 badging=$("$BT/aapt2" dump badging "$APK")
 target=$(sed -n "s/^targetSdkVersion:'\([0-9]*\)'.*/\1/p" <<<"$badging")
@@ -27,8 +28,12 @@ unzip -q -o "$APK" 'lib/arm64-v8a/*' 'lib/x86_64/*' -d "$tmp" || [ $? -eq 11 ] |
 n=0; bad=0
 for so in "$tmp"/lib/*/*.so; do
   [ -e "$so" ] || continue; n=$((n+1))
-  # Every LOAD segment must be ≥ 16 KB aligned (compared numerically, not as strings).
-  for align in $(readelf -lW "$so" | awk '/LOAD/{print $NF}'); do
+  # Every LOAD segment must be ≥ 16 KB aligned (compared numerically, not as strings). A library
+  # readelf cannot parse, or one without LOAD segments, counts as a failure — never a silent pass.
+  if ! hdr=$(readelf -lW "$so" 2>&1); then echo "✗ $(basename "$so"): readelf failed"; bad=$((bad+1)); continue; fi
+  aligns=$(awk '/LOAD/{print $NF}' <<<"$hdr")
+  [ -n "$aligns" ] || { echo "✗ $(basename "$so"): no LOAD segments found"; bad=$((bad+1)); continue; }
+  for align in $aligns; do
     if [ $((align)) -lt $((0x4000)) ]; then echo "✗ $(basename "$so") LOAD align $align"; bad=$((bad+1)); break; fi
   done
 done

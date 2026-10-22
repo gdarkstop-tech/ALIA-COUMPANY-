@@ -91,12 +91,13 @@ write(
 
 // Verified-link association files only with REAL values — never publish placeholders. The app ID
 // must be the one the store build uses (APP_ID_BASE, same default as apps/mobile/app.config.ts).
-const team = process.env.APPLE_TEAM_ID;
-const certs = process.env.ANDROID_CERT_SHA256;
+// An empty variable (common in CI templates) means "not supplied", not an invalid value.
+const team = process.env.APPLE_TEAM_ID?.trim() || undefined;
+const certs = process.env.ANDROID_CERT_SHA256?.trim() || undefined;
 const appId = process.env.APP_ID_BASE ?? 'com.aliagroup.dressmywound';
 if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(appId)) throw new Error(`APP_ID_BASE "${appId}" is not a reverse-DNS identifier`);
 if (team && !/^[A-Z0-9]{10}$/.test(team)) throw new Error('APPLE_TEAM_ID must be the 10-character Team ID from the Apple Developer account');
-const fingerprints = certs?.split(',').map((c) => c.trim().toUpperCase());
+const fingerprints = certs?.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
 if (fingerprints?.some((c) => !/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(c))) throw new Error('ANDROID_CERT_SHA256 must be SHA-256 fingerprints (AA:BB:…, 32 bytes) from Play Console → App integrity');
 mkdirSync(join(out, '.well-known'), { recursive: true });
 const template = (name: string) => JSON.parse(readFileSync(join(here, `well-known/${name}`), 'utf8').replaceAll('<APP_ID>', appId));

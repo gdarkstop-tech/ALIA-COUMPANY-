@@ -12,7 +12,8 @@ CREATE TYPE app.plan_code AS ENUM ('SILVER', 'GOLD', 'PLATINUM');
 CREATE TYPE app.payment_class AS ENUM ('PHYSICAL_PRODUCT', 'PHYSICAL_SERVICE', 'ELIGIBLE_PERSON_TO_PERSON_SERVICE', 'DIGITAL_SUBSCRIPTION', 'DIGITAL_FEATURE');
 CREATE TYPE app.billing_period AS ENUM ('MONTHLY', 'YEARLY');
 CREATE TYPE app.entitlement_source AS ENUM ('APPLE', 'GOOGLE', 'ADMIN_GRANT');
-CREATE TYPE app.entitlement_status AS ENUM ('ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'EXPIRED', 'REVOKED', 'REFUNDED');
+-- PAUSED: a Google Play subscription the user paused (no access, but still store-managed).
+CREATE TYPE app.entitlement_status AS ENUM ('ACTIVE', 'GRACE_PERIOD', 'BILLING_RETRY', 'PAUSED', 'EXPIRED', 'REVOKED', 'REFUNDED');
 
 -- ------------------------------------------------------------------ plans (admin-editable display + config)
 CREATE TABLE app.billing_plans (
@@ -103,6 +104,11 @@ CREATE TABLE app.entitlements (
   -- Apple originalTransactionId / Google purchaseToken (one subscription ↔ one account, forever).
   external_ref text,
   expires_at timestamptz,
+  -- Start of the billing period the current state describes (Apple: the transaction's purchase
+  -- date). Orders Apple events by their place in the subscription, not by when they were signed.
+  period_started_at timestamptz,
+  -- Google plan change: the purchase that replaced this one. A replaced purchase never grants again.
+  replaced_by text,
   auto_renew boolean,
   last_event_at timestamptz NOT NULL,
   last_verified_at timestamptz NOT NULL DEFAULT now(),
@@ -127,7 +133,7 @@ CREATE TABLE app.store_events (
   user_id text REFERENCES auth."user" ("id") ON DELETE SET NULL,
   event_at timestamptz NOT NULL,
   received_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  outcome text NOT NULL CHECK (outcome IN ('APPLIED', 'IGNORED_STALE', 'IGNORED_UNKNOWN_SUBSCRIPTION', 'IGNORED_NOT_SUBSCRIPTION', 'IGNORED_ACCOUNT_MISMATCH')),
+  outcome text NOT NULL CHECK (outcome IN ('APPLIED', 'IGNORED_STALE', 'IGNORED_UNKNOWN_SUBSCRIPTION', 'IGNORED_NOT_SUBSCRIPTION', 'IGNORED_ACCOUNT_MISMATCH', 'REPLACED')),
   -- Verified, non-sensitive summary only (never raw receipts or tokens).
   summary jsonb NOT NULL DEFAULT '{}'::jsonb,
   UNIQUE (source, external_event_id)
@@ -142,14 +148,16 @@ GRANT SELECT ON app.store_events TO ghayarly_app;
  * notifications are always acknowledged and retries do not pile up.
  *   - Serialised per subscription (advisory lock): a client verify racing the store's own
  *     notification, or two deliveries of the same notification, cannot both insert.
- *   - Idempotent: a repeated event id returns DUPLICATE.
- *   - Order-safe: an event older than the last applied one never moves the state backwards.
- *     Refund / revocation always wins for the CURRENT period, but a refund of an earlier billing
- *     period (expiry before the current one) leaves the paid current period intact.
+ *   - Idempotent: a repeated event id returns the FIRST delivery's outcome ('DUPLICATE' only when
+ *     that one was applied), so callers never act on an event that bound nothing.
+ *   - Order-safe. Apple events carry p_period_start (the transaction's purchase date): an event
+ *     about an earlier billing period never changes the current one, whatever its status. Events
+ *     without a period (Google — state is always re-fetched) are ordered by p_event_at; a refund
+ *     or revocation of an earlier period (expiry before the stored one) is ignored.
  *   - Account binding: a subscription belongs to the account whose token is on the purchase. It is
- *     re-bound only by a NEWER verified transaction carrying another account's token (e.g. an
- *     upgrade made from a different app account on the same Apple ID) or when the bound account
- *     was deleted; anything else is recorded as IGNORED_ACCOUNT_MISMATCH.
+ *     re-bound only by a verified transaction for a LATER billing period carrying another account's
+ *     token (e.g. an upgrade bought from a different app account on the same Apple ID), or when
+ *     the bound account was deleted; anything else is recorded as IGNORED_ACCOUNT_MISMATCH.
  *
  * p_user: the account the purchase's own token resolves to (client verify: the caller, after the
  * API checked the token; server notification: token owner or NULL).
@@ -157,7 +165,8 @@ GRANT SELECT ON app.store_events TO ghayarly_app;
 CREATE FUNCTION app.billing_apply_event(
   p_source app.entitlement_source, p_event_id text, p_event_type text, p_event_at timestamptz,
   p_external_ref text, p_user text, p_plan app.plan_code, p_product_id text,
-  p_status app.entitlement_status, p_expires_at timestamptz, p_auto_renew boolean, p_summary jsonb
+  p_status app.entitlement_status, p_expires_at timestamptz, p_auto_renew boolean, p_summary jsonb,
+  p_period_start timestamptz DEFAULT NULL
 ) RETURNS text
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = app, pg_temp AS $$
 DECLARE
@@ -166,20 +175,24 @@ DECLARE
   v_outcome text;
   v_user text;
   v_rebound boolean := false;
+  v_later boolean;
+  v_earlier boolean;
 BEGIN
   IF p_source = 'ADMIN_GRANT' THEN RAISE EXCEPTION 'USE_ADMIN_GRANT' USING ERRCODE = 'P0001'; END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended(p_source::text || ':' || p_external_ref, 0));
-  IF EXISTS (SELECT 1 FROM app.store_events WHERE source = p_source AND external_event_id = p_event_id) THEN
-    RETURN 'DUPLICATE';
-  END IF;
+  SELECT outcome INTO v_outcome FROM app.store_events WHERE source = p_source AND external_event_id = p_event_id;
+  IF FOUND THEN RETURN CASE WHEN v_outcome = 'APPLIED' THEN 'DUPLICATE' ELSE v_outcome END; END IF;
+  v_outcome := NULL;
 
   SELECT * INTO v_existing FROM app.entitlements WHERE source = p_source AND external_ref = p_external_ref FOR UPDATE;
   v_found := FOUND;
   v_user := coalesce(v_existing.user_id, p_user);
+  v_later := CASE WHEN p_period_start IS NOT NULL AND v_existing.period_started_at IS NOT NULL THEN p_period_start > v_existing.period_started_at
+                  ELSE p_event_at > v_existing.last_event_at END;
+  v_earlier := p_period_start IS NOT NULL AND v_existing.period_started_at IS NOT NULL AND p_period_start < v_existing.period_started_at;
 
   IF v_found AND p_user IS NOT NULL AND v_existing.user_id <> p_user THEN
-    IF p_event_at > v_existing.last_event_at
-       OR EXISTS (SELECT 1 FROM app.account_deletions d WHERE d.user_id = v_existing.user_id) THEN
+    IF v_later OR EXISTS (SELECT 1 FROM app.account_deletions d WHERE d.user_id = v_existing.user_id) THEN
       v_user := p_user;
       v_rebound := true;
     ELSE
@@ -191,19 +204,25 @@ BEGIN
     NULL;
   ELSIF v_user IS NULL THEN
     v_outcome := 'IGNORED_UNKNOWN_SUBSCRIPTION';
-  ELSIF v_found AND p_status IN ('REFUNDED', 'REVOKED') AND p_expires_at IS NOT NULL AND v_existing.expires_at IS NOT NULL
-        AND p_expires_at < v_existing.expires_at THEN
+  ELSIF v_found AND v_earlier THEN
+    v_outcome := 'IGNORED_STALE';  -- an earlier billing period (Apple), any status
+  ELSIF v_found AND v_existing.replaced_by IS NOT NULL AND p_status NOT IN ('REFUNDED', 'REVOKED') THEN
+    v_outcome := 'IGNORED_STALE';  -- superseded by a plan change: only a refund/revocation is still recorded
+  ELSIF v_found AND p_period_start IS NULL AND p_status IN ('REFUNDED', 'REVOKED') AND p_expires_at IS NOT NULL
+        AND v_existing.expires_at IS NOT NULL AND p_expires_at < v_existing.expires_at THEN
     v_outcome := 'IGNORED_STALE';  -- refund / revocation of an earlier billing period
-  ELSIF v_found AND p_event_at < v_existing.last_event_at AND p_status NOT IN ('REFUNDED', 'REVOKED') THEN
+  ELSIF v_found AND p_event_at < v_existing.last_event_at AND p_status NOT IN ('REFUNDED', 'REVOKED')
+        AND (p_period_start IS NULL OR p_period_start <= v_existing.period_started_at) THEN
     v_outcome := 'IGNORED_STALE';
   ELSIF v_found THEN
     UPDATE app.entitlements SET user_id = v_user, plan_code = p_plan, status = p_status, product_id = p_product_id, expires_at = p_expires_at,
-      auto_renew = p_auto_renew, last_event_at = greatest(last_event_at, p_event_at), last_verified_at = now()
+      period_started_at = coalesce(p_period_start, period_started_at), auto_renew = p_auto_renew,
+      last_event_at = greatest(last_event_at, p_event_at), last_verified_at = now()
     WHERE id = v_existing.id;
     v_outcome := 'APPLIED';
   ELSE
-    INSERT INTO app.entitlements (user_id, plan_code, source, status, product_id, external_ref, expires_at, auto_renew, last_event_at)
-    VALUES (v_user, p_plan, p_source, p_status, p_product_id, p_external_ref, p_expires_at, p_auto_renew, p_event_at);
+    INSERT INTO app.entitlements (user_id, plan_code, source, status, product_id, external_ref, expires_at, period_started_at, auto_renew, last_event_at)
+    VALUES (v_user, p_plan, p_source, p_status, p_product_id, p_external_ref, p_expires_at, p_period_start, p_auto_renew, p_event_at);
     v_outcome := 'APPLIED';
   END IF;
 
@@ -216,6 +235,34 @@ BEGIN
                                'reboundFrom', CASE WHEN v_rebound THEN v_existing.user_id END));
   END IF;
   RETURN v_outcome;
+END $$;
+
+/*
+ * Google Play plan change: the new purchase names the replaced one (linkedPurchaseToken). Once the
+ * new purchase is bound to an account, the replaced purchase stops granting access for that same
+ * account (Google requires apps to stop honouring the old token). Idempotent.
+ */
+CREATE FUNCTION app.billing_retire_replaced(p_source app.entitlement_source, p_old_ref text, p_new_ref text) RETURNS text
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = app, pg_temp AS $$
+DECLARE
+  v_owner text;
+  v_old app.entitlements;
+BEGIN
+  SELECT user_id INTO v_owner FROM app.entitlements WHERE source = p_source AND external_ref = p_new_ref;
+  IF v_owner IS NULL THEN RETURN 'IGNORED_UNKNOWN_SUBSCRIPTION'; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_source::text || ':' || p_old_ref, 0));
+  SELECT * INTO v_old FROM app.entitlements WHERE source = p_source AND external_ref = p_old_ref FOR UPDATE;
+  IF NOT FOUND OR v_old.user_id <> v_owner OR v_old.replaced_by IS NOT NULL THEN RETURN 'IGNORED_STALE'; END IF;
+  UPDATE app.entitlements
+     SET status = CASE WHEN status IN ('REFUNDED', 'REVOKED') THEN status ELSE 'EXPIRED' END,
+         expires_at = least(coalesce(expires_at, now()), now()), replaced_by = p_new_ref, last_verified_at = now()
+   WHERE id = v_old.id;
+  INSERT INTO app.store_events (source, external_event_id, event_type, external_ref, user_id, event_at, outcome, summary)
+  VALUES (p_source, 'replaced:' || p_old_ref || ':' || p_new_ref, 'REPLACED', p_old_ref, v_owner, now(), 'REPLACED', jsonb_build_object('replacedBy', 'linked purchase'))
+  ON CONFLICT (source, external_event_id) DO NOTHING;
+  INSERT INTO app.audit_log (actor_user_id, action, entity_type, entity_id, metadata)
+  VALUES (v_owner, 'billing.entitlement.replaced', 'entitlement', p_old_ref, jsonb_build_object('source', p_source));
+  RETURN 'REPLACED';
 END $$;
 
 -- Server notifications carry the purchase's account token; resolve it to the account (no RLS context).
@@ -267,6 +314,18 @@ END $$;
 CREATE TRIGGER feature_flags_billing_guard BEFORE UPDATE ON app.feature_flags
   FOR EACH ROW EXECUTE FUNCTION app.feature_flags_billing_guard();
 
+-- The invariant holds while subscriptions are on, not only at the moment they are switched on.
+CREATE FUNCTION app.billing_plans_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = app, pg_temp AS $$
+BEGIN
+  IF NEW.active AND NEW.family_profile_limit IS NULL
+     AND coalesce((SELECT enabled FROM app.feature_flags WHERE key = 'billing.store_subscriptions'), false) THEN
+    RAISE EXCEPTION 'PLAN_FAMILY_LIMITS_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER billing_plans_guard BEFORE INSERT OR UPDATE ON app.billing_plans FOR EACH ROW EXECUTE FUNCTION app.billing_plans_guard();
+
 -- Whether the CALLER may use store subscriptions now: the global flag, or a review / internal-test
 -- account (App Review must be able to buy the products submitted with the build).
 CREATE FUNCTION app.store_subscriptions_available() RETURNS boolean
@@ -276,7 +335,9 @@ $$;
 REVOKE ALL ON FUNCTION app.store_subscriptions_available() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.store_subscriptions_available() TO ghayarly_app;
 
-REVOKE ALL ON FUNCTION app.billing_apply_event(app.entitlement_source, text, text, timestamptz, text, text, app.plan_code, text, app.entitlement_status, timestamptz, boolean, jsonb),
+REVOKE ALL ON FUNCTION app.billing_apply_event(app.entitlement_source, text, text, timestamptz, text, text, app.plan_code, text, app.entitlement_status, timestamptz, boolean, jsonb, timestamptz),
+  app.billing_retire_replaced(app.entitlement_source, text, text),
   app.effective_plan(text), app.billing_user_for_token(text), app.billing_is_test_account(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app.billing_apply_event(app.entitlement_source, text, text, timestamptz, text, text, app.plan_code, text, app.entitlement_status, timestamptz, boolean, jsonb),
+GRANT EXECUTE ON FUNCTION app.billing_apply_event(app.entitlement_source, text, text, timestamptz, text, text, app.plan_code, text, app.entitlement_status, timestamptz, boolean, jsonb, timestamptz),
+  app.billing_retire_replaced(app.entitlement_source, text, text),
   app.effective_plan(text), app.billing_user_for_token(text), app.billing_is_test_account(text) TO ghayarly_app;

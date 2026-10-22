@@ -150,10 +150,27 @@ describe('authentication', () => {
     } finally {
       await owner.end();
     }
-    const signInByPhone = await post('/api/auth/phone-number/verify', { phoneNumber: phone, code: await otp(phone) });
+    const sessions = async () => {
+      const pool = ownerPool();
+      try {
+        return (await pool.query('select count(*)::int as n from auth."session" where "userId" = $1', [secured.userId])).rows[0].n as number;
+      } finally {
+        await pool.end();
+      }
+    };
+    const before = await sessions();
+    const code = await otp(phone);
+    // Without a valid code the answer is the ordinary wrong-code error: it does not reveal that the
+    // number belongs to a two-step-protected account.
+    const guess = await post('/api/auth/phone-number/verify', { phoneNumber: phone, code: code === '000000' ? '111111' : '000000' });
+    expect(guess.statusCode).toBe(400);
+    expect(JSON.parse(guess.body).code).not.toBe('USE_PASSWORD_SIGN_IN');
+    const signInByPhone = await post('/api/auth/phone-number/verify', { phoneNumber: phone, code });
     expect(signInByPhone.statusCode).toBe(403);
     expect(JSON.parse(signInByPhone.body).code).toBe('USE_PASSWORD_SIGN_IN');
     expect(signInByPhone.headers['set-cookie']).toBeUndefined();
+    // The session the verification created was destroyed, not merely hidden.
+    expect(await sessions()).toBe(before);
   });
 
   it('rejects phone numbers that are not Egyptian mobiles', async () => {

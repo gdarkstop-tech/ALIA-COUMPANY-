@@ -42,6 +42,14 @@ describe('patient profiles & family management', () => {
     expect(dup.json.error.code).toBe('SELF_PROFILE_EXISTS');
   });
 
+  it('concurrent requests cannot create two self profiles (creation is serialised per account)', async () => {
+    const racer = await signUp(app, { role: 'PATIENT' });
+    const body = { displayName: 'Racer', dateOfBirth: '1990-01-01', sex: 'MALE', relationship: 'SELF', consentBasis: 'SELF', ...consent };
+    const results = await Promise.all(Array.from({ length: 5 }, () => racer.req({ method: 'POST', url: '/v1/patients', body })));
+    expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+    expect(results.filter((r) => r.status === 409)).toHaveLength(4);
+  });
+
   it('requires explicit consent attestation for an adult family member', async () => {
     const missing = await caregiver.req({ method: 'POST', url: '/v1/patients', body: { displayName: 'Mother', dateOfBirth: '1955-01-01', sex: 'FEMALE', relationship: 'MOTHER', consentBasis: 'ADULT_CONSENT_ATTESTED', consentAttested: false, consentStatementVersion: 'v1' } });
     expect(missing.status).toBe(400);

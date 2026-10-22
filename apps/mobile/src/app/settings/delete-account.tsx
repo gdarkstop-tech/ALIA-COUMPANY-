@@ -1,4 +1,4 @@
-import { ACCOUNT_DELETION_CONFIRMATION, PHONE_ONLY_EMAIL_DOMAIN } from '@ghayarly/shared';
+import { ACCOUNT_DELETION_CONFIRMATION, PHONE_ONLY_EMAIL_DOMAIN, STORE_MANAGED_STATUSES } from '@ghayarly/shared';
 import { spacing } from '@ghayarly/tokens';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -56,10 +56,14 @@ export default function DeleteAccount() {
     }
   };
 
+  const storeSub = entitlements.data?.entitlements.find((e) => e.source !== 'ADMIN_GRANT' && STORE_MANAGED_STATUSES.includes(e.status));
+
   return (
     <Screen testID="delete-account" header={<Header back title={t('deletion.title')} />}>
       <Notice tone="danger" body={t('deletion.intro')} />
-      {entitlements.data?.storeManaged ? <Notice tone="warning" body={t('billing.activeStoreSubscription')} testID="delete-active-subscription" /> : null}
+      {storeSub ? (
+        <Notice tone="warning" testID="delete-active-subscription" body={t('billing.activeStoreSubscription', { store: t(storeSub.source === 'APPLE' ? 'billing.appStore' : 'billing.googlePlay') })} />
+      ) : null}
       <Card style={{ gap: spacing.sm }}>
         <Text variant="callout" weight="semibold">{t('deletion.deletedTitle')}</Text>
         {t('deletion.deletedItems').split(' · ').map((item) => (

@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadEnv } from '../src/config/env';
 import type { AppleStore, GoogleStore, Stores } from '../src/integrations/billing';
 import { AppError } from '../src/lib/errors';
-import { appleStatus, googleStatus, normalizeApple } from '../src/modules/billing/events';
+import { appleStatus, googleStatus, normalizeApple, type GoogleSubscriptionV2 } from '../src/modules/billing/events';
 import { buildServer } from '../src/server';
 import { createTestServer, ownerPool, signUp } from './helpers';
 
@@ -55,6 +55,15 @@ describe('store event normalization', () => {
     expect(googleStatus('SUBSCRIPTION_STATE_IN_GRACE_PERIOD', null, NOW)).toBe('GRACE_PERIOD');
     expect(googleStatus('SUBSCRIPTION_STATE_ON_HOLD', null, NOW)).toBe('BILLING_RETRY');
     expect(googleStatus('SUBSCRIPTION_STATE_PENDING', null, NOW)).toBeNull();
+    // Paused: no access, but still store-managed (the store resumes it) — never a fresh purchase.
+    expect(googleStatus('SUBSCRIPTION_STATE_PAUSED', null, NOW)).toBe('PAUSED');
+  });
+  it('treats refund requests and declined refunds as informational, and records the billing period', () => {
+    const tx = { originalTransactionId: '1', transactionId: '2', productId: 'x', purchaseDate: NOW.getTime() - DAY, expiresDate: NOW.getTime() + 29 * DAY };
+    for (const notificationType of ['CONSUMPTION_REQUEST', 'REFUND_DECLINED']) {
+      expect(normalizeApple({ tx, notification: { notificationType, notificationUUID: 'u', signedDate: NOW.getTime() }, now: NOW })).toBeNull();
+    }
+    expect(normalizeApple({ tx, now: NOW })?.periodStart?.getTime()).toBe(NOW.getTime() - DAY);
   });
   it('ignores non-subscription Apple transactions and flags sandbox purchases', () => {
     expect(normalizeApple({ tx: { originalTransactionId: '1', productId: 'x', type: 'Consumable' }, now: NOW })).toBeNull();
@@ -69,7 +78,7 @@ describe('store event normalization', () => {
 });
 
 // ---------------------------------------------------------------- service (fixture stores)
-type AppleFixture = { originalTransactionId: string; transactionId: string; productId: string; expiresDate: number; appAccountToken?: string; environment: string; signedDate: number; revocationDate?: number; type: string };
+type AppleFixture = { originalTransactionId: string; transactionId: string; productId: string; purchaseDate?: number; expiresDate: number; appAccountToken?: string; environment: string; signedDate: number; revocationDate?: number; type: string };
 const fixtures = new Map<string, AppleFixture>();
 const notifications = new Map<string, { notificationType: string; notificationUUID: string; signedDate: number; tx: AppleFixture }>();
 
@@ -249,6 +258,26 @@ describe('entitlement service', () => {
     expect((await u.req({ method: 'GET', url: '/v1/billing/entitlements' })).json.effectivePlan).toBe('GOLD');
   });
 
+  it('orders Apple events by billing period: a late notification about an earlier period never ends the current one', async () => {
+    const u = await signUp(app, { role: 'PATIENT' });
+    const token = (await u.req({ method: 'GET', url: '/v1/billing/account-token' })).json.appAccountToken as string;
+    const t0 = Date.now();
+    const renewal: AppleFixture = { originalTransactionId: `otx-order-${u.userId}`, transactionId: `renew-${u.userId}`, productId: 'com.example.dmw.gold.monthly', purchaseDate: t0 - DAY, expiresDate: t0 + 29 * DAY, appAccountToken: token, environment: 'Sandbox', signedDate: t0, type: 'Auto-Renewable Subscription' };
+    fixtures.set(`renew-${u.userId}`, renewal);
+    expect((await u.req({ method: 'POST', url: '/v1/billing/apple/verify', body: { signedTransactionInfo: `renew-${u.userId}` } })).json.effectivePlan).toBe('GOLD');
+    // Apple re-delivers an EXPIRED notification about the PREVIOUS period, signed after the renewal.
+    const late = `notif-expired-old-${u.userId}`;
+    notifications.set(late, { notificationType: 'EXPIRED', notificationUUID: `uuid-expired-old-${u.userId}`, signedDate: t0 + 60_000, tx: { ...renewal, transactionId: `first-${u.userId}`, purchaseDate: t0 - 31 * DAY, expiresDate: t0 - DAY } });
+    const n = await app.inject({ method: 'POST', url: '/webhooks/apple/app-store-notifications', payload: { signedPayload: late } });
+    expect(JSON.parse(n.body).outcome).toBe('IGNORED_STALE');
+    expect((await u.req({ method: 'GET', url: '/v1/billing/entitlements' })).json.effectivePlan).toBe('GOLD');
+    // A refund REQUEST is informational: it neither grants nor revokes.
+    const ask = `notif-consumption-${u.userId}`;
+    notifications.set(ask, { notificationType: 'CONSUMPTION_REQUEST', notificationUUID: `uuid-consumption-${u.userId}`, signedDate: t0 + 120_000, tx: renewal });
+    expect(JSON.parse((await app.inject({ method: 'POST', url: '/webhooks/apple/app-store-notifications', payload: { signedPayload: ask } })).body).outcome).toBe('IGNORED_NOT_SUBSCRIPTION');
+    expect((await u.req({ method: 'GET', url: '/v1/billing/entitlements' })).json.effectivePlan).toBe('GOLD');
+  });
+
   it('clients cannot write entitlements directly, even bypassing the API', async () => {
     const c = await signUp(app, { role: 'PATIENT' });
     const cl = await appPool.connect();
@@ -262,5 +291,103 @@ describe('entitlement service', () => {
       await cl.query('ROLLBACK');
       cl.release();
     }
+  });
+});
+
+// ---------------------------------------------------------------- Google Play (fixture store)
+describe('Google Play subscriptions', () => {
+  const subs = new Map<string, GoogleSubscriptionV2>();
+  const acknowledged: string[] = [];
+  const fixtureGoogle: GoogleStore = {
+    status: 'CONFIGURED',
+    getSubscription: async (token) => {
+      const s = subs.get(token);
+      if (!s) throw new AppError(422, 'INVALID_PURCHASE_TOKEN', 'unknown token');
+      return s;
+    },
+    acknowledge: async (_productId, token) => {
+      acknowledged.push(token);
+      const s = subs.get(token);
+      if (s) s.acknowledgementState = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED';
+    },
+    verifyPush: async (authorization) => {
+      if (authorization !== 'Bearer test-push') throw new AppError(401, 'UNAUTHORIZED', 'bad push');
+    },
+  };
+  let gapp: FastifyInstance;
+  const sub = (productId: string, accountToken: string, extra: Partial<GoogleSubscriptionV2> = {}): GoogleSubscriptionV2 => ({
+    subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+    latestOrderId: `GPA.${Math.random().toString(36).slice(2)}`,
+    acknowledgementState: 'ACKNOWLEDGEMENT_STATE_PENDING',
+    externalAccountIdentifiers: { obfuscatedExternalAccountId: accountToken },
+    lineItems: [{ productId, expiryTime: new Date(Date.now() + 30 * DAY).toISOString(), autoRenewingPlan: { autoRenewEnabled: true }, offerDetails: { basePlanId: 'monthly' } }],
+    ...extra,
+  });
+  const rtdn = (token: string, type: number, id: string) => ({
+    method: 'POST' as const,
+    url: '/webhooks/google/rtdn',
+    headers: { authorization: 'Bearer test-push' },
+    payload: { message: { messageId: id, data: Buffer.from(JSON.stringify({ packageName: 'com.example.dmw', eventTimeMillis: String(Date.now()), subscriptionNotification: { notificationType: type, purchaseToken: token } })).toString('base64') } },
+  });
+
+  beforeAll(async () => {
+    gapp = await buildServer(loadEnv({ ...process.env, GOOGLE_PLAY_PACKAGE_NAME: 'com.example.dmw' }), { stores: { apple: fixtureApple, google: fixtureGoogle } satisfies Stores });
+    await gapp.ready();
+    await owner.query(`update app.billing_plan_offers set google_product_id = 'dmw.gold', google_base_plan_id = 'monthly' where plan_code = 'GOLD' and period = 'MONTHLY'`);
+    await owner.query(`update app.billing_plan_offers set google_product_id = 'dmw.platinum', google_base_plan_id = 'monthly' where plan_code = 'PLATINUM' and period = 'MONTHLY'`);
+    await owner.query(`update app.billing_plans set family_profile_limit = 1 where code = 'SILVER'`);
+    await owner.query(`update app.feature_flags set enabled = true where key = 'billing.store_subscriptions'`);
+  });
+  afterAll(async () => {
+    await owner.query(`update app.billing_plan_offers set google_product_id = null, google_base_plan_id = null`);
+    await gapp.close();
+  });
+
+  it('a plan change replaces the old purchase in place: the replaced token never grants again', async () => {
+    const u = await signUp(gapp, { role: 'PATIENT' });
+    const token = (await u.req({ method: 'GET', url: '/v1/billing/account-token' })).json.appAccountToken as string;
+    const oldToken = `g-old-${u.userId}`;
+    const newToken = `g-new-${u.userId}`;
+    subs.set(oldToken, sub('dmw.gold', token));
+    const gold = await u.req({ method: 'POST', url: '/v1/billing/google/verify', body: { productId: 'dmw.gold', purchaseToken: oldToken } });
+    expect(gold.status).toBe(200);
+    expect(gold.json.effectivePlan).toBe('GOLD');
+    expect(acknowledged).toContain(oldToken);
+
+    // Upgrade through Play's replacement flow: the new purchase links the old one.
+    subs.set(newToken, sub('dmw.platinum', token, { linkedPurchaseToken: oldToken }));
+    const plat = await u.req({ method: 'POST', url: '/v1/billing/google/verify', body: { productId: 'dmw.platinum', purchaseToken: newToken } });
+    expect(plat.json.effectivePlan).toBe('PLATINUM');
+    const rows = (await owner.query(`select external_ref, status, replaced_by from app.entitlements where user_id = $1 order by created_at`, [u.userId])).rows;
+    expect(rows.find((r) => r.external_ref === oldToken)).toMatchObject({ status: 'EXPIRED', replaced_by: newToken });
+
+    // Even if Play still reported the old token as active, restoring it does not revive it.
+    const restore = await u.req({ method: 'POST', url: '/v1/billing/restore', body: { google: [{ productId: 'dmw.gold', purchaseToken: oldToken }] } });
+    expect(restore.status).toBe(200);
+    const after = (await owner.query(`select status from app.entitlements where external_ref = $1`, [oldToken])).rows[0];
+    expect(after.status).toBe('EXPIRED');
+    expect(restore.json.effectivePlan).toBe('PLATINUM');
+  });
+
+  it('a paused subscription grants nothing but stays store-managed (no second purchase offered)', async () => {
+    const u = await signUp(gapp, { role: 'PATIENT' });
+    const token = (await u.req({ method: 'GET', url: '/v1/billing/account-token' })).json.appAccountToken as string;
+    const t = `g-pause-${u.userId}`;
+    subs.set(t, sub('dmw.gold', token));
+    expect((await u.req({ method: 'POST', url: '/v1/billing/google/verify', body: { productId: 'dmw.gold', purchaseToken: t } })).json.effectivePlan).toBe('GOLD');
+    subs.set(t, { ...subs.get(t)!, subscriptionState: 'SUBSCRIPTION_STATE_PAUSED' });
+    const n = await gapp.inject(rtdn(t, 10, `msg-pause-${u.userId}`));
+    expect(JSON.parse(n.body).outcome).toBe('APPLIED');
+    const ent = (await u.req({ method: 'GET', url: '/v1/billing/entitlements' })).json;
+    expect(ent.effectivePlan).toBe('SILVER');
+    expect(ent.storeManaged).toBe(true);
+    expect(ent.entitlements[0].status).toBe('PAUSED');
+    // The same Pub/Sub message delivered twice is applied once.
+    expect(JSON.parse((await gapp.inject(rtdn(t, 10, `msg-pause-${u.userId}`))).body).outcome).toBe('DUPLICATE');
+  });
+
+  it('rejects push notifications without the Pub/Sub token', async () => {
+    const res = await gapp.inject({ ...rtdn('x'.repeat(20), 2, 'msg-unauth'), headers: { authorization: 'Bearer forged' } });
+    expect(res.statusCode).toBe(401);
   });
 });

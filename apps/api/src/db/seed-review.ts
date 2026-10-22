@@ -52,18 +52,29 @@ export async function seedReviewAccounts(log: (line: string) => void = console.l
       );
       let id = existing.rows[0]?.id;
       if (id && existing.rows[0]!.kind !== 'REVIEW') {
-        // Someone registered this address first (the pattern is public). Never adopt that account.
-        throw new Error(`${email} already belongs to a non-review account — use another REVIEW_EMAIL_DOMAIN or investigate`);
+        // Someone registered this address first (the pattern is public). Never adopt that account —
+        // not even one without a profile: it may be an interrupted earlier run, or someone else's.
+        throw new Error(
+          existing.rows[0]!.kind === null
+            ? `${email} exists without a profile (interrupted earlier run, or registered by someone else) — verify who created it, delete it, then re-run`
+            : `${email} already belongs to a non-review account — use another REVIEW_EMAIL_DOMAIN or investigate`,
+        );
       }
       if (!id) {
         const res = await auth.api.signUpEmail({ body: { email, password, name: a.name } });
         id = res.user.id;
+        // Mark it as a review account straight away, so an interruption after this point is resumable.
+        await owner.query(
+          `insert into app.user_profiles (user_id, display_name, locale, active_role, onboarding_completed_at, is_demo, account_kind)
+           values ($1, $2, 'en', $3, now(), true, 'REVIEW') on conflict (user_id) do update set account_kind = 'REVIEW', is_demo = true`,
+          [id, a.name, a.role],
+        );
       } else {
         // Rotation: the credentials handed to Apple / Google must be the ones just provided.
         const hash = await ctx.password.hash(password);
         const updated = await owner.query(`update auth."account" set password = $2, "updatedAt" = now() where "userId" = $1 and "providerId" = 'credential'`, [id, hash]);
         if (!updated.rowCount) {
-          await owner.query(`insert into auth."account" (id, "accountId", "providerId", "userId", password) values (gen_random_uuid()::text, $1, 'credential', $1, $2)`, [id, hash]);
+          await owner.query(`insert into auth."account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt") values (gen_random_uuid()::text, $1, 'credential', $1, $2, now(), now())`, [id, hash]);
         }
         await owner.query('delete from auth."session" where "userId" = $1', [id]);
       }

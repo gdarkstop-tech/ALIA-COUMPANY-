@@ -87,20 +87,26 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== '/phone-number/verify') return;
-        const body = (ctx.body ?? {}) as { phoneNumber?: string; updatePhoneNumber?: boolean };
+        const body = (ctx.body ?? {}) as { updatePhoneNumber?: boolean };
         // Re-binding the sign-in phone needs only a session plus a code sent to the NEW number, so a
         // stolen session could plant a permanent password-less way in. No app flow uses it.
         if (body.updatePhoneNumber) {
           throw APIError.from('FORBIDDEN', { code: 'PHONE_CHANGE_NOT_ALLOWED', message: 'Changing the sign-in phone number is not available' });
         }
-        // A phone code is a single factor: accounts with two-step verification sign in with their
-        // password and authenticator code instead.
-        if (body.phoneNumber) {
-          const user = await ctx.context.adapter.findOne<{ twoFactorEnabled?: boolean | null }>({ model: 'user', where: [{ field: 'phoneNumber', value: body.phoneNumber }] });
-          if (user?.twoFactorEnabled) {
-            throw APIError.from('FORBIDDEN', { code: 'USE_PASSWORD_SIGN_IN', message: 'Sign in with your email, password and authenticator code' });
-          }
-        }
+      }),
+      // A phone code is a single factor: accounts with two-step verification sign in with their
+      // password and authenticator code instead. Checked AFTER the code is verified, so the answer
+      // cannot be used to probe which numbers belong to protected accounts; the session the
+      // verification just created is destroyed and its cookie is never sent.
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/phone-number/verify') return;
+        const created = ctx.context.newSession;
+        if (!created) return;
+        const user = await ctx.context.adapter.findOne<{ twoFactorEnabled?: boolean | null }>({ model: 'user', where: [{ field: 'id', value: created.user.id }] });
+        if (!user?.twoFactorEnabled) return;
+        await ctx.context.internalAdapter.deleteSession(created.session.token);
+        ctx.context.responseHeaders?.delete('set-cookie');
+        throw APIError.from('FORBIDDEN', { code: 'USE_PASSWORD_SIGN_IN', message: 'Sign in with your email, password and authenticator code' });
       }),
     },
     plugins: [

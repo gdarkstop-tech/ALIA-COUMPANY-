@@ -1,4 +1,5 @@
 import {
+  STORE_MANAGED_STATUSES,
   appleVerifyBody,
   googleVerifyBody,
   resolvePaymentRail,
@@ -87,15 +88,27 @@ async function apply(tx: Tx, ev: NormalizedStoreEvent, plan: PlanCode, userId: s
   const res = await tx.execute<{ outcome: string }>(sql`select app.billing_apply_event(
     ${ev.source}::app.entitlement_source, ${ev.eventId}, ${ev.eventType}, ${ev.eventAt.toISOString()}::timestamptz,
     ${ev.externalRef}, ${userId}, ${plan}::app.plan_code, ${ev.productId}, ${ev.status}::app.entitlement_status,
-    ${ev.expiresAt ? ev.expiresAt.toISOString() : null}::timestamptz, ${ev.autoRenew}, ${JSON.stringify({ sandbox: ev.sandbox, productId: ev.productId })}::jsonb) as outcome`);
+    ${ev.expiresAt ? ev.expiresAt.toISOString() : null}::timestamptz, ${ev.autoRenew}, ${JSON.stringify({ sandbox: ev.sandbox, productId: ev.productId })}::jsonb,
+    ${ev.periodStart ? ev.periodStart.toISOString() : null}::timestamptz) as outcome`);
   return res.rows[0]!.outcome;
+}
+
+/**
+ * Google plan change (upgrade / downgrade): the new purchase names the one it replaces. Once the
+ * new purchase is bound, the old token must stop granting access (Play keeps it "active" until
+ * its own expiry otherwise). The linked token comes from the Play Developer API, never the client.
+ */
+async function retireReplaced(tx: Tx, ev: NormalizedStoreEvent, sub: GoogleSubscriptionV2, outcome: string): Promise<void> {
+  if (ev.source !== 'GOOGLE' || !sub.linkedPurchaseToken || sub.linkedPurchaseToken === ev.externalRef) return;
+  if (outcome !== 'APPLIED' && outcome !== 'DUPLICATE') return;
+  await tx.execute(sql`select app.billing_retire_replaced('GOOGLE'::app.entitlement_source, ${sub.linkedPurchaseToken}, ${ev.externalRef})`);
 }
 
 async function entitlementState(tx: Tx, userId: string): Promise<EntitlementsResponse> {
   const rows = await tx.select().from(entitlements).where(eq(entitlements.userId, userId));
   const plan = await tx.execute<{ plan: PlanCode }>(sql`select app.effective_plan(${userId}) as plan`);
   const list: Entitlement[] = rows.map((r) => ({ planCode: r.planCode, source: r.source, status: r.status, productId: r.productId, expiresAt: r.expiresAt, autoRenew: r.autoRenew, lastVerifiedAt: r.lastVerifiedAt }));
-  return { effectivePlan: plan.rows[0]!.plan, entitlements: list, storeManaged: list.some((e) => e.source !== 'ADMIN_GRANT' && (e.status === 'ACTIVE' || e.status === 'GRACE_PERIOD' || e.status === 'BILLING_RETRY')) };
+  return { effectivePlan: plan.rows[0]!.plan, entitlements: list, storeManaged: list.some((e) => e.source !== 'ADMIN_GRANT' && STORE_MANAGED_STATUSES.includes(e.status)) };
 }
 
 /**
@@ -103,7 +116,7 @@ async function entitlementState(tx: Tx, userId: string): Promise<EntitlementsRes
  * (a) the purchase's account token is the caller's, (b) sandbox purchases come from review /
  * internal-test accounts in production, (c) store subscriptions are enabled (or reviewer account).
  */
-async function verifyForUser(request: FastifyRequest, principal: Principal, ev: NormalizedStoreEvent): Promise<EntitlementsResponse & { outcome: string }> {
+async function verifyForUser(request: FastifyRequest, principal: Principal, ev: NormalizedStoreEvent, sub?: GoogleSubscriptionV2): Promise<EntitlementsResponse & { outcome: string }> {
   const { env } = request.server.services;
   return inContext(request, principal, async (tx) => {
     const kind = await accountKind(tx, principal.userId);
@@ -116,6 +129,7 @@ async function verifyForUser(request: FastifyRequest, principal: Principal, ev: 
     if (!plan) throw unprocessable('UNKNOWN_PRODUCT', 'This product is not a Dress My Wound plan');
     const outcome = await apply(tx, ev, plan, principal.userId);
     if (outcome === 'IGNORED_ACCOUNT_MISMATCH') throw forbidden('SUBSCRIPTION_BELONGS_TO_ANOTHER_ACCOUNT', 'This subscription is linked to another account');
+    if (sub) await retireReplaced(tx, ev, sub, outcome);
     return { ...(await entitlementState(tx, principal.userId)), outcome };
   });
 }
@@ -168,7 +182,7 @@ export async function billingRoutes(app: FastifyInstance) {
     const now = new Date();
     const ev = normalizeGoogle({ purchaseToken: body.purchaseToken, sub, eventId: `verify:${sub.latestOrderId ?? body.purchaseToken.slice(0, 40)}:${sub.subscriptionState}:${sub.lineItems?.[0]?.expiryTime ?? ''}`, eventType: 'CLIENT_VERIFY', eventAt: now, now });
     if (!ev || ev.productId !== body.productId) throw unprocessable('NOT_A_SUBSCRIPTION', 'Purchase is not an active subscription for this product');
-    const { outcome, ...state } = await verifyForUser(request, principal, ev);
+    const { outcome, ...state } = await verifyForUser(request, principal, ev, sub);
     await acknowledgeIfNeeded(stores, ev, sub, body.purchaseToken, outcome);
     return state;
   });
@@ -192,7 +206,7 @@ export async function billingRoutes(app: FastifyInstance) {
         const now = new Date();
         const ev = normalizeGoogle({ purchaseToken: g.purchaseToken, sub, eventId: `restore:${sub.latestOrderId ?? g.purchaseToken.slice(0, 40)}:${sub.subscriptionState}`, eventType: 'RESTORE', eventAt: now, now });
         if (ev) {
-          const { outcome } = await verifyForUser(request, principal, ev);
+          const { outcome } = await verifyForUser(request, principal, ev, sub);
           await acknowledgeIfNeeded(stores, ev, sub, g.purchaseToken, outcome);
         }
       } catch (e) {
@@ -244,13 +258,13 @@ export async function billingRoutes(app: FastifyInstance) {
       voided: Boolean(voided) && (!voided!.orderId || !sub.latestOrderId || voided!.orderId === sub.latestOrderId),
     });
     if (!ev) return reply.status(200).send({ ok: true, outcome: 'IGNORED_NOT_SUBSCRIPTION' });
-    const outcome = await applyServerEvent(ev);
+    const outcome = await applyServerEvent(ev, sub);
     await acknowledgeIfNeeded(stores, ev, sub, token, outcome);
     return reply.status(200).send({ ok: true, outcome });
   });
 
   /** Server notification: account resolved from the bound subscription or the purchase's account token. */
-  async function applyServerEvent(ev: NormalizedStoreEvent): Promise<string> {
+  async function applyServerEvent(ev: NormalizedStoreEvent, sub?: GoogleSubscriptionV2): Promise<string> {
     return withContext(db, { userId: null, demoMode: env.DEMO_MODE }, async (tx) => {
       const plan = await planForProduct(tx, ev);
       if (!plan) return 'IGNORED_UNKNOWN_PRODUCT';
@@ -263,7 +277,9 @@ export async function billingRoutes(app: FastifyInstance) {
         const r = await tx.execute<{ ok: boolean }>(sql`select app.billing_is_test_account(${userId ?? ''}) as ok`);
         if (!r.rows[0]?.ok) return 'IGNORED_SANDBOX';
       }
-      return apply(tx, ev, plan, userId);
+      const outcome = await apply(tx, ev, plan, userId);
+      if (sub) await retireReplaced(tx, ev, sub, outcome);
+      return outcome;
     });
   }
 }

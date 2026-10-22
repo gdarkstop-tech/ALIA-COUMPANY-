@@ -21,6 +21,11 @@ export type NormalizedStoreEvent = {
   basePlanId: string | null;
   status: EntitlementStatus;
   expiresAt: Date | null;
+  /**
+   * Start of the billing period this event describes (Apple purchaseDate of the transaction).
+   * Orders events about different periods; null for Google, whose state is always re-fetched.
+   */
+  periodStart: Date | null;
   autoRenew: boolean | null;
   /** StoreKit appAccountToken / Play obfuscatedExternalAccountId — binds a purchase to our account. */
   accountToken: string | null;
@@ -33,6 +38,8 @@ type AppleTx = {
   originalTransactionId?: string;
   transactionId?: string;
   productId?: string;
+  /** Start of this transaction's billing period (renewals get a new purchaseDate). */
+  purchaseDate?: number;
   expiresDate?: number;
   revocationDate?: number;
   appAccountToken?: string;
@@ -44,6 +51,11 @@ type AppleTx = {
 };
 type AppleRenewal = { autoRenewStatus?: number; isInBillingRetryPeriod?: boolean; gracePeriodExpiresDate?: number };
 
+/**
+ * Notification types that carry a transaction but say nothing new about access: a refund REQUEST
+ * (CONSUMPTION_REQUEST) or a DECLINED refund must not be read as a fresh grant / expiry.
+ */
+const APPLE_INFORMATIONAL = new Set(['CONSUMPTION_REQUEST', 'REFUND_DECLINED']);
 /** Apple notification types that tell us something about access (others are recorded but ignored). */
 const APPLE_TERMINAL: Record<string, EntitlementStatus> = { REFUND: 'REFUNDED', REVOKE: 'REVOKED', EXPIRED: 'EXPIRED', GRACE_PERIOD_EXPIRED: 'EXPIRED' };
 
@@ -69,6 +81,7 @@ export function normalizeApple(args: {
   if (tx.type && tx.type !== 'Auto-Renewable Subscription') return null;
   // A superseded transaction (re-signed later via Transaction.all) must never restore access.
   if (tx.isUpgraded) return null;
+  if (notification?.notificationType && APPLE_INFORMATIONAL.has(notification.notificationType)) return null;
   const { status, expiresAt } = appleStatus(tx, renewal, notification?.notificationType, now);
   const signed = notification?.signedDate ?? tx.signedDate ?? now.getTime();
   return {
@@ -81,6 +94,7 @@ export function normalizeApple(args: {
     basePlanId: null,
     status,
     expiresAt,
+    periodStart: tx.purchaseDate ? new Date(tx.purchaseDate) : null,
     autoRenew: renewal?.autoRenewStatus === undefined ? null : renewal.autoRenewStatus === 1,
     accountToken: tx.appAccountToken ?? null,
     sandbox: tx.environment !== undefined && tx.environment !== 'Production',
@@ -109,7 +123,8 @@ export function googleStatus(state: string | undefined, expiresAt: Date | null, 
       return 'GRACE_PERIOD';
     case 'SUBSCRIPTION_STATE_ON_HOLD':
       return 'BILLING_RETRY';
-    case 'SUBSCRIPTION_STATE_PAUSED':
+    case 'SUBSCRIPTION_STATE_PAUSED': // no access while paused, but the store will resume it
+      return 'PAUSED';
     case 'SUBSCRIPTION_STATE_EXPIRED':
       return 'EXPIRED';
     default: // PENDING, PENDING_PURCHASE_CANCELED, UNSPECIFIED → nothing to grant
@@ -134,6 +149,7 @@ export function normalizeGoogle(args: { purchaseToken: string; sub: GoogleSubscr
     basePlanId: item.offerDetails?.basePlanId ?? null,
     status,
     expiresAt,
+    periodStart: null,
     autoRenew: item.autoRenewingPlan?.autoRenewEnabled ?? null,
     accountToken: sub.externalAccountIdentifiers?.obfuscatedExternalAccountId ?? null,
     sandbox: Boolean(sub.testPurchase),
