@@ -116,7 +116,7 @@ Requirement: [verified-official] App Privacy details are required for new apps a
 | User ID (`…UserID`) | Yes | Yes | No | App Functionality | Account ID; purchase account token (1.15) | ✓ | same |
 | Other User Content (`…OtherUserContent`) | Yes | Yes | No | App Functionality | Free-text health notes; clinician bio and experience | ✓ | same |
 | Crash Data (`…CrashData`) | Yes | **No** | No | App Functionality | 1.16 | ✓ (`Linked=false`) | same |
-| Purchase History (`…PurchaseHistory`) | **Only when subscriptions are enabled** | Yes | No | App Functionality | 1.15 | **✗** (gap 6) | `none (gap)` |
+| Purchase History (`…PurchaseHistory`) | **Only when subscriptions are enabled** (review accounts can buy while the flag is off) | Yes | No | App Functionality | 1.15 | **✓** declared in the manifest (2026-10-22) | to add to the label |
 | Physical Address | Governorate and city only, no street address | — | — | — | 1.5, 1.8. **To confirm:** whether a partial address counts. The conservative choice is to declare it. | ✗ | `NEEDS_LEGAL_APPROVAL` |
 | Other data (clinician national ID and licence numbers) | Yes (clinicians) | Yes | No | App Functionality | 1.9. **To confirm:** which type covers identity-document numbers. | ✗ | `NEEDS_LEGAL_APPROVAL` |
 | Location, Photos or Videos, Audio, Contacts, Payment Info, Device ID, Product Interaction, Performance Data, Customer Support, Sensitive Info | **No** | — | — | — | See "Not collected" above | ✗ (correct) | verified by config inspection |
@@ -186,7 +186,7 @@ The generated file is `apps/mobile/ios/DressMyWound/PrivacyInfo.xcprivacy`, bund
 | `NSPrivacyAccessedAPICategoryFileTimestamp` | `C617.1` | Metadata of files inside the app container | same |
 | `NSPrivacyAccessedAPICategorySystemBootTime` | `35F9.1` | Measure elapsed time between in-app events | same |
 | `NSPrivacyAccessedAPICategoryDiskSpace` | `E174.1` | Check space before writing files | same. **To confirm** on the merged manifest which dependency needs it [A7]. |
-| `NSPrivacyCollectedDataTypes` | Name, EmailAddress, PhoneNumber, Health, UserID, OtherUserContent (each `Linked=true`); CrashData (`Linked=false`). All have `Tracking=false` and purpose `AppFunctionality`. | Matches section 2, except PurchaseHistory (gap 6) | `CODE_READY` · verified by automated test (`check.ts`: declares Health) and config inspection |
+| `NSPrivacyCollectedDataTypes` | Name, EmailAddress, PhoneNumber, Health, UserID, OtherUserContent, PurchaseHistory (each `Linked=true`); CrashData (`Linked=false`). All have `Tracking=false` and purpose `AppFunctionality`. | Matches section 2 | `CODE_READY` · verified by automated test (`check.ts`: declares Health) and config inspection |
 
 ### 4.2 Aggregation and third-party SDK manifests
 
@@ -314,7 +314,7 @@ These are findings from reading the code; none is fixed here.
 3. **Deletion ledger case** — partly fixed 2026-10-15: clinician credentials (ID and licence numbers) are deleted, verification notes cleared, and city, subspecialty and fee scrubbed (`compliance.test.ts`). Provider type, gender, specialty, years of experience and governorate stay with the retained payout records; the in-app and web "kept" lists do not say so yet.
 4. **Deletion does not touch subscription data.** `billing_accounts`, `entitlements` and `store_events` stay, linked to the tombstone, and this is not disclosed.
 5. **The email deletion path has no tooling and no stated completion time.** Apple requires a stated timeline for manual deletion [A3], and PDPL requires a response within 6 working days [EG1].
-6. **`NSPrivacyCollectedDataTypePurchaseHistory` is missing from `ios.privacyManifests`.** Add it before `billing.store_subscriptions` is enabled. Physical Address and the clinician-identifier type are to confirm.
+6. ~~`NSPrivacyCollectedDataTypePurchaseHistory` missing from `ios.privacyManifests`.~~ Fixed 2026-10-22 (declared, linked, App Functionality); the privacy policy draft now describes store subscription data. Physical Address and the clinician-identifier type are to confirm.
 7. **The privacy policy draft is incomplete** (section 12).
 8. **Crash reports can be correlated with an IP** through the default request logs (section 8).
 9. **No data export (access or portability) endpoint exists**, and no ticket queue tracks data-subject requests.
@@ -368,7 +368,7 @@ Source: `packages/shared/src/legal.ts` (`privacy`, `terms`, `health-consent`, `m
 | Category | Items |
 |---|---|
 | **Completed implementation** (`CODE_READY`) | DB-enforced health consent; append-only consent ledger; consent gate; explicit onboarding consent; Privacy center; in-app deletion for all roles; deletion web page source; anonymous error reports; privacy manifest; no tracking; permission blocking; `allowBackup=false`; HTTPS-only release config |
-| **Verified by automated test** | `apps/api/test/compliance.test.ts` (11), `rls.test.ts`, `patients.test.ts`, `billing.test.ts` (10), `scripts/release/check.ts` (46/46), `e2e/tests/flow-a-patient.spec.ts` and `flow-f-privacy.spec.ts` (Expo web only) |
+| **Verified by automated test** | `apps/api/test/compliance.test.ts` (11), `rls.test.ts`, `patients.test.ts`, `billing.test.ts` (15), `scripts/release/check.ts` (58/58 on 2026-10-22), `e2e/tests/flow-a-patient.spec.ts` and `flow-f-privacy.spec.ts` (Expo web only) |
 | **Verified by native build inspection** | Android permission set and absent `AD_ID` in the 2026-10-14 APK. That APK is debug-signed, predates `expo-iap` and contains a since-fixed JS crash, so **it must not be distributed**. |
 | **Requires developer account** | App Store Connect label; Play Data safety; hosting the privacy and deletion URLs; support mailbox; Xcode privacy report; TestFlight manifest check; hosting region; PDPC portal |
 | **Requires official assets** | None for privacy disclosures |

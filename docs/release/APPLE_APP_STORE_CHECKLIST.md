@@ -121,7 +121,7 @@ Requirements, all **[verified-official]**:
 
 | Item | Requirement (source) | Project state | Status | Verified |
 |---|---|---|---|---|
-| Collected data types in the manifest | **[verified-official]** Fixed type and purpose keys. https://developer.apple.com/documentation/bundleresources/describing-data-use-in-privacy-manifests | Name, EmailAddress, PhoneNumber, Health, UserID and OtherUserContent are declared as linked, not tracking, for AppFunctionality. CrashData is declared as **not linked**, matching the anonymous `/v1/telemetry/client-errors` reports. Still **to reconcile** in the PRIVACY doc: `PurchaseHistory` once store subscriptions are on, and how to classify governorate/city, emergency contact, date of birth/sex, session device type/IP, clinician licence data and cart contents. | CODE_READY, NEEDS_LEGAL_APPROVAL | verified by native build inspection; verified by automated test (`scripts/release/check.ts`: "privacy manifest declares health data") |
+| Collected data types in the manifest | **[verified-official]** Fixed type and purpose keys. https://developer.apple.com/documentation/bundleresources/describing-data-use-in-privacy-manifests | Name, EmailAddress, PhoneNumber, Health, UserID, OtherUserContent and PurchaseHistory (store subscription transactions) are declared as linked, not tracking, for AppFunctionality. CrashData is declared as **not linked**, matching the anonymous `/v1/telemetry/client-errors` reports. Still **to reconcile** in the PRIVACY doc: how to classify governorate/city, emergency contact, date of birth/sex, session device type/IP, clinician licence data and cart contents. | CODE_READY, NEEDS_LEGAL_APPROVAL | verified by native build inspection; verified by automated test (`scripts/release/check.ts`: "privacy manifest declares health data") |
 | App Privacy details (nutrition label) in App Store Connect | **[verified-official]** Required for new apps and updates. It covers third-party code and can be updated without an app update. https://developer.apple.com/app-store/app-privacy-details/ | **Answers: see `docs/release/PRIVACY_AND_DATA_DISCLOSURES.md`.** The starting point that matches the manifest: *Data Linked to You* (App Functionality) = Contact Info (name, email, phone), Health, User ID, Other User Content. *Data Not Linked to You* = Crash Data. *Used to Track You* = none. Cross-check with Xcode Product > Archive > Generate Privacy Report, which needs macOS. | NEEDS_ACCOUNT_ACTION, NEEDS_LEGAL_APPROVAL | not verified |
 | ATT / tracking | **[verified-official]** ATT applies only when the app tracks. https://developer.apple.com/app-store/user-privacy-and-data-use/ | No ad or attribution SDKs, no `NSUserTrackingUsageDescription`, no ATT prompt | CODE_READY | verified by native build inspection |
 | Purpose strings | **[verified-official]** Every protected resource the app uses needs a specific, localized purpose string. https://developer.apple.com/documentation/uikit/requesting-access-to-protected-resources | None are needed. There is no camera, photo library, location, contacts or Face ID use, and `expo-secure-store` runs with `faceIDPermission: false`. Store builds strip `NSLocalNetworkUsageDescription` and `NSBonjourServices` (`withReleaseHardening`). Add EN and AR strings when the wound-photo feature ships. | CODE_READY | verified by native build inspection; verified by automated test (`scripts/release/check.ts`: "no Face ID purpose string", "no dev-launcher local-network prompt in store builds") |
@@ -222,7 +222,7 @@ Limits are **[verified-official]**: https://developer.apple.com/help/app-store-c
 | Field | Limit | EN | AR | Status | Verified |
 |---|---|---|---|---|---|
 | Name | 2 to 30 characters | 14 | 6 | STORE_METADATA_READY | verified by automated test (`scripts/release/check.ts`) |
-| Subtitle | ≤ 30 characters; no unverifiable claims | 25 ("Family health & home care") | 29 | STORE_METADATA_READY, NEEDS_LEGAL_APPROVAL (see §7 (c)) | verified by automated test (`scripts/release/check.ts`) |
+| Subtitle | ≤ 30 characters; no unverifiable claims | 28 ("Your family's health records") | 19 ("السجل الصحي لعائلتك") | STORE_METADATA_READY, NEEDS_LEGAL_APPROVAL (see §7 (c)) | verified by automated test (`scripts/release/check.ts`) |
 | Promotional text | ≤ 170 characters | 105 | 87 | STORE_METADATA_READY | verified by automated test (`scripts/release/check.ts`) |
 | Description | ≤ 4000 characters, plain text | 1080 | 860 | STORE_METADATA_READY, NEEDS_LEGAL_APPROVAL | verified by automated test (`scripts/release/check.ts`) |
 | Keywords | ≤ 100 **bytes**; each > 2 characters; no app or company names | 94 B | 93 B | STORE_METADATA_READY | verified by automated test (`scripts/release/check.ts`: keywords exclude Dress My Wound / غير لي / TetraSol / Alia) |
@@ -370,11 +370,11 @@ Beta review details are also **[verified-official]**: contact, demo account flag
 - Payment-rail classifier; server-side Apple/Google verification and entitlements; `expo-iap` client (type-checked); Plans screen with Restore and Manage.
 - Review-account provisioning script; static support, legal and deletion site generator with an AASA template.
 
-**Verified by automated test (passing on 2026-10-15)**
-- 158 unit and API tests, including `apps/api/test/compliance.test.ts` (11) and `apps/api/test/billing.test.ts` (10).
-- `scripts/release/check.ts`: 46/46.
+**Verified by automated test (passing on 2026-10-22; current numbers in `RELEASE_STATUS.md`)**
+- 165 unit and API tests (`apps/api` 109 including the compliance and billing regression tests, tokens 43, shared 9, i18n 4).
+- `scripts/release/check.ts`: 58/58; `--submission` mode fails on the legal and listing placeholders, as it should until they are filled.
 - `expo-doctor`: 21/21; typecheck: 8/8 workspaces; lint clean.
-- Playwright on the Expo **web** build (a proxy, not native): flows A–F, `rtl-arabic.spec.ts`, and `a11y.spec.ts` 6/6 (WCAG 2.2 A/AA via axe-core, 44 px targets, no overflow at 320 and 390 px).
+- Playwright on the Expo **web** build (a proxy, not native): flows A–F (incl. a deep-link consent-gate test), `rtl-arabic.spec.ts`, and `a11y.spec.ts` 9/9 (WCAG 2.2 A/AA via axe-core, 44 px targets, no page overflow and no control clipped by its container at 320, 360 and 390 px).
 - No test covers native iOS behaviour.
 
 **Open engineering items: open (not CODE_READY)**
@@ -386,7 +386,7 @@ Beta review details are also **[verified-official]**: contact, demo account flag
 6. Universal Links: add a validated, auth-gated `/app/*` handler before setting `APP_LINK_DOMAIN`, and add AASA entries per variant (§4).
 7. Add `submit.production.ios` (`ascAppId`) to `eas.json`, or submit interactively (§15).
 8. Support page: add the legal address and a `+20` phone (§11). Add the `APPLE_IAP_*` variables to `apps/api/.env.example`.
-9. For option [B]: add `PurchaseHistory` to the manifest and the label, and add the paid-features line to the description (§5.2, §11).
+9. `PurchaseHistory` is now in the privacy manifest; also declare it in the App Privacy label, and for option [B] add the paid-features line to the description (§5.2, §11).
 10. Plan the April 2027 move to Xcode 27 / the iOS 27 SDK (SDK 58, or `enableSceneSupport`) (§2).
 11. `store/assets/PLACEHOLDER_ASSETS.md` is referenced in `packages/tokens/src/brand.ts` but does not exist.
 

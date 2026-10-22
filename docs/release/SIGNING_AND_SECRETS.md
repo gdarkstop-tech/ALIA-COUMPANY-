@@ -185,6 +185,8 @@ Rule: production and staging values live **only** in a secret manager, with sepa
 | `GOOGLE_PLAY_PACKAGE_NAME`, `GOOGLE_RTDN_AUDIENCE`, `GOOGLE_RTDN_SERVICE_ACCOUNT_EMAIL` | Billing and RTDN identity checks | no | all four Google vars needed, else `NOT_CONFIGURED` |
 | `REVIEW_ACCOUNT_PASSWORD`, `REVIEW_EMAIL_DOMAIN` | Operator script `review:seed` (with the owner URL) | **yes** (password) | ≥ 16 chars, not containing "demo", "password" or "review"; the domain must be company-controlled; production needs `--confirm-production`. Share only through App Store Connect / Play Console App access; rotate only **after** review ends (5.10). |
 | `SUPPORT_EMAIL`, `APPLE_TEAM_ID`, `ANDROID_CERT_SHA256` | Public support site build | no | placeholders until set |
+| `APP_ID_BASE` (site build) | App ID written into `apple-app-site-association` / `assetlinks.json` — must equal the store build's ID | no | must be reverse-DNS; Team ID and SHA-256 fingerprints are format-checked |
+| `TRUST_PROXY_HOPS` | Number of reverse proxies in front of the API in production; client IPs for every rate limit (incl. Better Auth) are read that many hops back | no | default 1; set to the real hosting topology, never "trust all" |
 
 **Production boot guard** (`loadEnv`): refuses `DEMO_MODE`, `DEV_TOOLS_ENABLED`, `MFA_ENFORCEMENT≠required`, `AUTH_REQUIRE_EMAIL_VERIFICATION=false`, `AUTH_SIGNIN_RATE_LIMIT>10`, any `DATABASE_URL_OWNER`, and placeholder `BETTER_AUTH_SECRET` values.
 
@@ -233,7 +235,7 @@ Optional: add an EAS build/submit job to CI using `EXPO_TOKEN` (**to confirm**).
 | Remove store credentials from the server | Adapters return `NOT_CONFIGURED` and nothing is granted | `CODE_READY` | verified by automated test (`apps/api/test/billing.test.ts`) |
 | No over-the-air updates | `expo-updates` was removed deliberately (commit `8c0e8ea`); `app.config.ts` has no `updates` or `runtimeVersion`. Every JS fix ships as a new store build and review. | `CODE_READY` | verified by config inspection |
 | Store-side: Apple phased release (pause) and Play staged rollout (halt) | Limits exposure of a bad build. Users who already updated keep it; recovery is a fix-forward build with a higher build number (`autoIncrement`). **To confirm**: not in the evidence file. | `NEEDS_ACCOUNT_ACTION` | not verified |
-| Credential compromise | Revoke the App Store Connect API key; rotate both Play service-account keys; request a Play upload-key reset (**[verified-official]** Google can reset a lost upload key [G1]); rotate `BETTER_AUTH_SECRET` and DB passwords (session impact **to confirm**); re-run `review:seed` with a new password. | `NEEDS_ACCOUNT_ACTION` | not verified |
+| Credential compromise | Revoke the App Store Connect API key; rotate both Play service-account keys; request a Play upload-key reset (**[verified-official]** Google can reset a lost upload key [G1]); rotate `BETTER_AUTH_SECRET` and DB passwords (session impact **to confirm**); re-run `review:seed` with a new password (it rotates the review password and signs out old sessions; it refuses to adopt an account it did not create). | `NEEDS_ACCOUNT_ACTION` | not verified |
 
 ---
 
@@ -244,7 +246,7 @@ Optional: add an EAS build/submit job to CI using `EXPO_TOKEN` (**to confirm**).
 - `.gitignore` signing patterns; release-check key scan; server boot guard; fail-closed store adapters; review-account seeding; server feature flags; no OTA.
 
 **Verified by test**
-- `scripts/release/check.ts` (46/46): no committed keys, iOS config invariants, production names.
+- `scripts/release/check.ts` (58/58 on 2026-10-22): no committed keys or personal e-mail addresses, iOS config invariants, production names; `--submission` also blocks placeholders.
 - `apps/api/test/auth.test.ts` (production guard), `apps/api/test/billing.test.ts` (fail-closed stores, flag gating), `apps/api/test/compliance.test.ts` (flags, review accounts).
 - Native build inspection: debug-signed Android APK/AAB and dev-client APK (6.10). **No iOS binary.**
 

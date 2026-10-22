@@ -69,7 +69,7 @@ Companion documents: [APPLE_APP_STORE_CHECKLIST.md](APPLE_APP_STORE_CHECKLIST.md
 export const FORBIDDEN_BRAND_SPELLINGS = ['Ghayarly', 'غيرني', 'غيّرلي', 'غيرلي'] as const;
 ```
 
-How the rule is enforced: `scripts/release/check.ts` (rule 1, run in CI as `pnpm release:check`) scans tracked files under `apps/{mobile,admin,site}/src`, `apps/mobile/app.config.ts`, `apps/site/build.ts`, `packages/i18n`, `packages/shared/src/legal*` and `store/metadata`, and fails on any match. The check is a case-sensitive substring match. On 2026-10-15, 46/46 checks passed.
+How the rule is enforced: `scripts/release/check.ts` (rule 1, run in CI as `pnpm release:check`) scans tracked files under `apps/{mobile,admin,site}/src`, `apps/api/src`, `packages/{i18n,shared,tokens}/src`, `apps/mobile/app.config.ts`, `apps/site/build.ts`, `packages/i18n`, `packages/shared/src/legal*` and `store/metadata`, and fails on any match. The check is a case-sensitive substring match. On 2026-10-15, 46/46 checks passed.
 
 **Internal slug.** The lower-case technical slug `ghayarly` stays on purpose, as `brand.ts` explains: it is the npm scope `@ghayarly/*`, the storage and cookie prefixes, and the demo-mode account e-mail domain `demo.ghayarly.test`. Renaming it would break migrations and live sessions. It is never shown as the product name. The demo e-mails can show up only in demo mode, in the sign-in field after a demo chip is tapped.
 
@@ -315,10 +315,10 @@ Components read only from tokens, so they need no code change. Remove the "TEMPO
   - the reduced-motion root config
   - the asset generator
 - **Verified by automated test:**
-  - `scripts/release/check.ts` (46/46: names, spellings, metadata limits, icon formats)
+  - `scripts/release/check.ts` (58/58 on 2026-10-22: canonical names, spellings, metadata limits, off-feature claims, icon formats)
   - `packages/tokens/test/contrast.test.ts` (43)
   - `apps/api/test/rls.test.ts` (TetraSol-only catalogue)
-  - `e2e/tests/a11y.spec.ts` (6/6, Expo web only)
+  - `e2e/tests/a11y.spec.ts` (9/9 at 320/360/390 px, Expo web only)
 - **Verified by native build inspection:** Android labels EN/AR (`BUILT`, debug-signed, not distributable); iOS prebuild display names (no binary).
 - **Requires a developer account (`NEEDS_ACCOUNT_ACTION`):** entering the names, keywords, icon, feature graphic and screenshots in App Store Connect and Play Console; native builds for screenshots.
 - **Requires official assets (`NEEDS_OFFICIAL_ASSETS`):** everything in §12 items 1–5; every file in §11.
