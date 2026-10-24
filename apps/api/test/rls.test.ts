@@ -246,8 +246,8 @@ describe('provider verification guardrails', () => {
   });
 });
 
-describe('TetraSol-only commerce', () => {
-  it('rejects any non-TetraSol product, even from a commerce manager', async () => {
+describe('company-brand-only commerce', () => {
+  it('rejects a product of a brand the company has not registered, even from a commerce manager', async () => {
     const cm = await signUp(app);
     await grantRole(cm.userId, 'COMMERCE_MANAGER');
     await as(cm.userId, async (c) => {
@@ -255,7 +255,11 @@ describe('TetraSol-only commerce', () => {
         c.query(
           "insert into app.products (slug, brand, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en) values ('other-brand', 'OtherBrand', 'a','a','a','a','a','a','a','a')",
         ),
-      ).rejects.toThrow(/check constraint/);
+      ).rejects.toThrow(/products_brand_company_owned/);
+    });
+    // …and a commerce manager cannot register a brand either (ADMIN-only, with ownership evidence).
+    await as(cm.userId, async (c) => {
+      await expect(c.query("insert into app.product_brands (name, owner_entity, ownership_reference) values ('OtherBrand', 'Someone', 'none')")).rejects.toThrow(/row-level security/);
     });
   });
 
@@ -269,7 +273,7 @@ describe('TetraSol-only commerce', () => {
 
   it('demo products are never visible outside demo mode', async () => {
     await owner.query(
-      "insert into app.products (slug, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, is_demo) values ('demo-rls-check', 'a','a','a','a','a','a','a','a', true) on conflict do nothing",
+      "insert into app.products (slug, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, is_demo, publication_status) values ('demo-rls-check', 'a','a','a','a','a','a','a','a', true, 'PUBLISHED') on conflict do nothing",
     );
     const inDemo = await as(alice.userId, (c) => c.query("select slug from app.products where slug = 'demo-rls-check'"), true);
     const outOfDemo = await as(alice.userId, (c) => c.query("select slug from app.products where slug = 'demo-rls-check'"), false);

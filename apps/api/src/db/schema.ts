@@ -51,6 +51,17 @@ export const specialtyEnum = appSchema.enum('specialty', [
 ]);
 export const stockStatusEnum = appSchema.enum('stock_status', ['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK', 'UNKNOWN']);
 export const contentApprovalStatusEnum = appSchema.enum('content_approval_status', ['PENDING_APPROVAL', 'APPROVED', 'RETIRED']);
+export const publicationStatusEnum = appSchema.enum('publication_status', ['DRAFT', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED']);
+export const stockReasonEnum = appSchema.enum('stock_reason', ['INITIAL', 'RESTOCK', 'SALE', 'RETURN', 'DAMAGE', 'CORRECTION']);
+export const discountKindEnum = appSchema.enum('discount_kind', ['PERCENT', 'FIXED_AMOUNT']);
+export const discountScopeEnum = appSchema.enum('discount_scope', ['ALL', 'CATEGORY', 'PRODUCT', 'VARIANT', 'BUNDLE']);
+export const accountStatusEnum = appSchema.enum('account_status', ['ACTIVE', 'SUSPENDED', 'BLOCKED']);
+export const statusReasonEnum = appSchema.enum('status_reason', [
+  'SAFETY_CONCERN', 'FRAUD_SUSPECTED', 'TERMS_VIOLATION', 'CREDENTIAL_ISSUE', 'HARASSMENT', 'PAYMENT_ABUSE', 'LEGAL_REQUEST', 'IDENTITY_VERIFICATION', 'OTHER', 'RESOLVED', 'APPEAL_GRANTED',
+]);
+export const statusActionEnum = appSchema.enum('status_action', ['SUSPEND', 'BLOCK', 'REACTIVATE', 'RESTRICT_BOOKINGS', 'LIFT_BOOKING_RESTRICTION', 'APPEAL_GRANTED']);
+export const appealStatusEnum = appSchema.enum('appeal_status', ['OPEN', 'GRANTED', 'DENIED', 'WITHDRAWN']);
+export const commerceEventTypeEnum = appSchema.enum('commerce_event_type', ['PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_PREVIEW', 'ORDER_PAID', 'ORDER_REFUNDED']);
 export const ledgerEntryTypeEnum = appSchema.enum('ledger_entry_type', ['VISIT_EARNING', 'PLATFORM_FEE', 'ADJUSTMENT', 'PAYOUT']);
 export const ledgerStatusEnum = appSchema.enum('ledger_status', ['PENDING', 'AVAILABLE', 'PAID_OUT']);
 export const accountKindEnum = appSchema.enum('account_kind', ['STANDARD', 'REVIEW', 'INTERNAL_TEST']);
@@ -99,6 +110,60 @@ export const userProfiles = appSchema.table('user_profiles', {
   accountKind: accountKindEnum('account_kind').notNull().default('STANDARD'),
   createdAt: ts('created_at').notNull().default(sql`now()`),
   updatedAt: ts('updated_at').notNull().default(sql`now()`),
+});
+
+/** Written only by app.set_account_status() / app.decide_appeal() (migration 0009). No row = ACTIVE. */
+export const accountStatus = appSchema.table('account_states', {
+  userId: text('user_id').primaryKey(),
+  status: accountStatusEnum('status').notNull(),
+  bookingsRestricted: boolean('bookings_restricted').notNull(),
+  reason: statusReasonEnum('reason'),
+  publicMessage: text('public_message'),
+  suspendedUntil: ts('suspended_until'),
+  updatedByUserId: text('updated_by_user_id'),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+export const accountStatusEvents = appSchema.table('account_status_events', {
+  id: uuid('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  action: statusActionEnum('action').notNull(),
+  fromStatus: accountStatusEnum('from_status').notNull(),
+  toStatus: accountStatusEnum('to_status').notNull(),
+  bookingsRestricted: boolean('bookings_restricted').notNull(),
+  reason: statusReasonEnum('reason').notNull(),
+  publicMessage: text('public_message'),
+  staffNote: text('staff_note').notNull(),
+  careContinuityNote: text('care_continuity_note'),
+  suspendedUntil: ts('suspended_until'),
+  actorUserId: text('actor_user_id'),
+  appealId: uuid('appeal_id'),
+  createdAt: ts('created_at').notNull(),
+});
+
+/** The person's own history without staff-internal notes (security-barrier view). */
+export const myAccountStatusEvents = appSchema.view('my_account_status_events', {
+  id: uuid('id').notNull(),
+  action: statusActionEnum('action').notNull(),
+  fromStatus: accountStatusEnum('from_status').notNull(),
+  toStatus: accountStatusEnum('to_status').notNull(),
+  bookingsRestricted: boolean('bookings_restricted').notNull(),
+  reason: statusReasonEnum('reason').notNull(),
+  publicMessage: text('public_message'),
+  suspendedUntil: ts('suspended_until'),
+  createdAt: ts('created_at').notNull(),
+}).existing();
+
+export const accountAppeals = appSchema.table('account_appeals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  eventId: uuid('event_id'),
+  message: text('message').notNull(),
+  status: appealStatusEnum('status').notNull().default('OPEN'),
+  decisionNote: text('decision_note'),
+  decidedByUserId: text('decided_by_user_id'),
+  decidedAt: ts('decided_at'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
 });
 
 export const settings = appSchema.table('settings', {
@@ -348,10 +413,30 @@ export const providerServices = appSchema.table(
 );
 
 // ------------------------------------------------------------------ commerce
+export const productBrands = appSchema.table('product_brands', {
+  name: text('name').primaryKey(),
+  ownerEntity: text('owner_entity').notNull(),
+  ownershipReference: text('ownership_reference').notNull(),
+  active: boolean('active').notNull().default(true),
+  createdByUserId: text('created_by_user_id'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+});
+
+export const productCategories = appSchema.table('product_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull(),
+  nameAr: text('name_ar').notNull(),
+  nameEn: text('name_en').notNull(),
+  sortOrder: integer('sort_order').notNull().default(100),
+  active: boolean('active').notNull().default(true),
+});
+
+/** Lifecycle and approval columns are guarded by app.products_guard() (migration 0008). */
 export const products = appSchema.table('products', {
   id: uuid('id').primaryKey().defaultRandom(),
   slug: text('slug').notNull(),
   brand: text('brand').notNull().default('TetraSol'),
+  categoryId: uuid('category_id'),
   nameAr: text('name_ar').notNull(),
   nameEn: text('name_en').notNull(),
   summaryAr: text('summary_ar').notNull(),
@@ -360,14 +445,27 @@ export const products = appSchema.table('products', {
   descriptionEn: text('description_en').notNull(),
   usageAr: text('usage_ar').notNull(),
   usageEn: text('usage_en').notNull(),
+  approvedUsesAr: text('approved_uses_ar').notNull().default(''),
+  approvedUsesEn: text('approved_uses_en').notNull().default(''),
+  warningsAr: text('warnings_ar').notNull().default(''),
+  warningsEn: text('warnings_en').notNull().default(''),
   contentStatus: contentApprovalStatusEnum('content_status').notNull().default('PENDING_APPROVAL'),
+  publicationStatus: publicationStatusEnum('publication_status').notNull().default('DRAFT'),
   approvalReference: text('approval_reference'),
+  approvedByUserId: text('approved_by_user_id'),
   approvedAt: ts('approved_at'),
+  publishedAt: ts('published_at'),
+  archivedAt: ts('archived_at'),
   regulatoryNote: text('regulatory_note'),
   sortOrder: integer('sort_order').notNull().default(100),
   isDemo: boolean('is_demo').notNull().default(false),
+  createdByUserId: text('created_by_user_id'),
+  updatedByUserId: text('updated_by_user_id'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+  updatedAt: ts('updated_at').notNull().default(sql`now()`),
 });
 
+/** stock_quantity changes only through app.adjust_stock() (ledgered in stock_movements). */
 export const productVariants = appSchema.table('product_variants', {
   id: uuid('id').primaryKey().defaultRandom(),
   productId: uuid('product_id').notNull(),
@@ -376,14 +474,92 @@ export const productVariants = appSchema.table('product_variants', {
   labelEn: text('label_en').notNull(),
   pricePiasters: integer('price_piasters').notNull(),
   stockStatus: stockStatusEnum('stock_status').notNull().default('UNKNOWN'),
+  stockQuantity: integer('stock_quantity'),
+  lowStockThreshold: integer('low_stock_threshold').notNull().default(5),
   active: boolean('active').notNull().default(true),
   sortOrder: integer('sort_order').notNull().default(100),
 });
 
+export const productImages = appSchema.table('product_images', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  productId: uuid('product_id').notNull(),
+  contentType: text('content_type').notNull(),
+  bytes: customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })('bytes').notNull(),
+  sha256: text('sha256').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  altAr: text('alt_ar').notNull().default(''),
+  altEn: text('alt_en').notNull().default(''),
+  sortOrder: integer('sort_order').notNull().default(100),
+  createdByUserId: text('created_by_user_id'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+});
+
+export const stockMovements = appSchema.table('stock_movements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  variantId: uuid('variant_id').notNull(),
+  delta: integer('delta').notNull(),
+  quantityAfter: integer('quantity_after').notNull(),
+  reason: stockReasonEnum('reason').notNull(),
+  note: text('note'),
+  actorUserId: text('actor_user_id'),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const discounts = appSchema.table('discounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  nameAr: text('name_ar').notNull(),
+  nameEn: text('name_en').notNull(),
+  code: text('code'),
+  kind: discountKindEnum('kind').notNull(),
+  value: integer('value').notNull(),
+  scope: discountScopeEnum('scope').notNull(),
+  targetId: uuid('target_id'),
+  minSubtotalPiasters: integer('min_subtotal_piasters').notNull().default(0),
+  startsAt: ts('starts_at').notNull().default(sql`now()`),
+  endsAt: ts('ends_at'),
+  active: boolean('active').notNull().default(false),
+  createdByUserId: text('created_by_user_id'),
+});
+
+export const productBundles = appSchema.table('product_bundles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull(),
+  nameAr: text('name_ar').notNull(),
+  nameEn: text('name_en').notNull(),
+  descriptionAr: text('description_ar').notNull().default(''),
+  descriptionEn: text('description_en').notNull().default(''),
+  pricePiasters: integer('price_piasters').notNull(),
+  publicationStatus: publicationStatusEnum('publication_status').notNull().default('DRAFT'),
+  publishedAt: ts('published_at'),
+  createdByUserId: text('created_by_user_id'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+});
+
+export const productBundleItems = appSchema.table(
+  'product_bundle_items',
+  { bundleId: uuid('bundle_id').notNull(), variantId: uuid('variant_id').notNull(), quantity: integer('quantity').notNull() },
+  (t) => [primaryKey({ columns: [t.bundleId, t.variantId] })],
+);
+
+/** Aggregate funnel events — no user identifiers by design. */
+export const commerceEvents = appSchema.table('commerce_events', {
+  id: integer('id').primaryKey(),
+  eventType: commerceEventTypeEnum('event_type').notNull(),
+  productId: uuid('product_id'),
+  variantId: uuid('variant_id'),
+  bundleId: uuid('bundle_id'),
+  quantity: integer('quantity').notNull(),
+  amountPiasters: integer('amount_piasters'),
+  occurredAt: ts('occurred_at').notNull(),
+});
+
+/** A cart line is either a product variant or a bundle (CHECK cart_item_kind). */
 export const cartItems = appSchema.table('cart_items', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id').notNull(),
-  variantId: uuid('variant_id').notNull(),
+  variantId: uuid('variant_id'),
+  bundleId: uuid('bundle_id'),
   quantity: integer('quantity').notNull(),
   forPatientId: uuid('for_patient_id'),
   createdAt: ts('created_at').notNull().default(sql`now()`),

@@ -1,5 +1,5 @@
 import { radii, spacing } from '@ghayarly/tokens';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -9,14 +9,24 @@ import { api, errorKey } from '@/lib/api';
 import { money } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Badge, Card, EmptyState, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Text } from '@/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Text, useToast } from '@/ui';
 
 export default function TetraSolStore() {
   const { t, pickL, locale } = useI18n();
   const { colors } = useTheme();
   const router = useRouter();
   const products = useQuery({ queryKey: ['products'], queryFn: () => api.store.products() });
+  const bundles = useQuery({ queryKey: ['bundles'], queryFn: () => api.store.bundles() });
   const cart = useCart();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const addBundle = useMutation({
+    mutationFn: (bundleId: string) => api.store.addToCart({ bundleId, quantity: 1 }),
+    onSuccess: (c) => {
+      qc.setQueryData(['cart'], c);
+      toast(t('store.added'));
+    },
+  });
   const count = cart.data?.itemCount ?? 0;
 
   return (
@@ -39,7 +49,10 @@ export default function TetraSolStore() {
         />
       }
       refreshing={products.isRefetching}
-      onRefresh={() => void products.refetch()}
+      onRefresh={() => {
+        void products.refetch();
+        void bundles.refetch();
+      }}
     >
       <Notice tone="info" icon="mci:shield-check-outline" body={t('store.exclusive')} />
       {products.data?.some((p) => p.isDemo) ? <Notice tone="demo" body={t('store.demoProductNotice')} testID="store-demo-notice" /> : null}
@@ -54,7 +67,7 @@ export default function TetraSolStore() {
           {products.data.map((p, i) => (
             <Animated.View key={p.id} entering={FadeInDown.delay(i * 60).duration(350)} style={{ width: '47.5%', flexGrow: 1 }}>
               <Card onPress={() => router.push({ pathname: '/patient/product/[slug]', params: { slug: p.slug } })} testID={`product-${p.slug}`} style={{ padding: spacing.md, gap: spacing.sm }}>
-                <ProductVisual height={110} demo={p.isDemo} />
+                <ProductVisual height={110} demo={p.isDemo} imageId={p.imageId} />
                 <Text variant="footnote" weight="semibold" numberOfLines={2} style={{ minHeight: 40 }}>{pickL(p, 'name')}</Text>
                 <Text variant="caption" color="textTertiary" numberOfLines={2}>{pickL(p, 'summary')}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs }}>
@@ -66,6 +79,27 @@ export default function TetraSolStore() {
           ))}
         </View>
       )}
+      {bundles.data?.length ? (
+        <Section title={t('store.bundles')}>
+          <View style={{ gap: spacing.md }} testID="bundle-list">
+            {bundles.data.map((b) => (
+              <Card key={b.id} testID={`bundle-${b.slug}`} style={{ gap: spacing.sm }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' }}>
+                  <Text variant="callout" weight="semibold" style={{ flexShrink: 1 }}>{pickL(b, 'name')}</Text>
+                  <Text variant="callout" weight="bold" tabular>{money(b.pricePiasters, locale)}</Text>
+                </View>
+                {pickL(b, 'description') ? <Text variant="caption" color="textSecondary">{pickL(b, 'description')}</Text> : null}
+                <Text variant="caption" weight="semibold" color="textTertiary">{t('store.bundleIncludes')}</Text>
+                {b.items.map((i, idx) => (
+                  <Text key={idx} variant="caption" color="textSecondary">• {pickL(i, 'productName')} · {pickL(i, 'variantLabel')} × {i.quantity}</Text>
+                ))}
+                {b.itemsValuePiasters > b.pricePiasters ? <Badge label={t('store.bundleSaving', { amount: money(b.itemsValuePiasters - b.pricePiasters, locale) })} tone="success" /> : null}
+                <Button testID={`add-bundle-${b.slug}`} label={t('store.addBundle')} variant="secondary" icon="shopping-cart" loading={addBundle.isPending && addBundle.variables === b.id} onPress={() => addBundle.mutate(b.id)} />
+              </Card>
+            ))}
+          </View>
+        </Section>
+      ) : null}
     </Screen>
   );
 }

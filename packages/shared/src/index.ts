@@ -9,3 +9,5 @@ export * from './brand';
 export * from './compliance';
 export * from './legal';
 export * from './billing';
+export * from './catalog';
+export * from './accounts';

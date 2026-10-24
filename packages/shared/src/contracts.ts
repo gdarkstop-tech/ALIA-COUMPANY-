@@ -71,6 +71,8 @@ export type MeResponse = {
     onboardingCompletedAt: string | null;
   };
   mfa: { required: boolean; enrolled: boolean; enforcement: 'required' | 'warn' };
+  /** Suspended / blocked accounts can only see why, appeal, or delete the account. */
+  account: import('./accounts').AccountStatusInfo;
   demoMode: boolean;
 };
 
@@ -354,7 +356,12 @@ export type ProductCard = {
   stockStatus: (typeof STOCK_STATUSES)[number];
   contentStatus: (typeof CONTENT_APPROVAL_STATUSES)[number];
   isDemo: boolean;
+  categoryId: string | null;
+  /** First product image (GET /v1/store/images/:id), or null. */
+  imageId: string | null;
 };
+
+export type StoreCategory = { id: string; slug: string; nameAr: string; nameEn: string };
 
 export type ProductDetail = ProductCard & {
   descriptionAr: string;
@@ -363,21 +370,45 @@ export type ProductDetail = ProductCard & {
   usageEn: string;
   approvalReference: string | null;
   regulatoryNote: string | null;
+  /** Brand-approved uses and warnings (empty until the brand owner supplies them). */
+  approvedUsesAr: string;
+  approvedUsesEn: string;
+  warningsAr: string;
+  warningsEn: string;
+  images: { id: string; altAr: string; altEn: string }[];
   variants: { id: string; sku: string; labelAr: string; labelEn: string; pricePiasters: number; stockStatus: (typeof STOCK_STATUSES)[number] }[];
 };
 
-export const addCartItemBody = z.object({
-  variantId: z.string().uuid(),
-  quantity: z.number().int().min(1).max(20),
-  forPatientId: z.string().uuid().optional().nullable(),
-});
+export type StoreBundle = {
+  id: string;
+  slug: string;
+  nameAr: string;
+  nameEn: string;
+  descriptionAr: string;
+  descriptionEn: string;
+  pricePiasters: number;
+  /** What the items cost separately, at current prices (the saving is computed, never typed in). */
+  itemsValuePiasters: number;
+  items: { productNameAr: string; productNameEn: string; variantLabelAr: string; variantLabelEn: string; quantity: number }[];
+};
+
+/** A cart line is a product variant OR a bundle. */
+export const addCartItemBody = z
+  .object({
+    variantId: z.string().uuid().optional(),
+    bundleId: z.string().uuid().optional(),
+    quantity: z.number().int().min(1).max(20),
+    forPatientId: z.string().uuid().optional().nullable(),
+  })
+  .refine((b) => Boolean(b.variantId) !== Boolean(b.bundleId), { message: 'Choose a product option or a bundle', path: ['variantId'] });
 export type AddCartItemBody = z.infer<typeof addCartItemBody>;
 
 export const updateCartItemBody = z.object({ quantity: z.number().int().min(1).max(20) });
 
 export type CartLine = {
   id: string;
-  variantId: string;
+  variantId: string | null;
+  bundleId: string | null;
   productSlug: string;
   productNameAr: string;
   productNameEn: string;
@@ -393,9 +424,15 @@ export type CartLine = {
 
 export type CartResponse = { lines: CartLine[]; subtotalPiasters: number; itemCount: number };
 
+export const checkoutPreviewBody = z.object({ discountCode: z.string().trim().max(24).optional() }).default({});
+
 export type CheckoutPreview = {
   lines: CartLine[];
   subtotalPiasters: number;
+  /** At most one discount applies: the largest saving among automatic discounts and the entered code. */
+  discount: { nameAr: string; nameEn: string; amountPiasters: number; code: string | null } | null;
+  /** Set when a code was entered but does not apply (unknown, expired, minimum not reached, or not the best). */
+  discountCodeRejected: boolean;
   deliveryFeePiasters: number | null;
   totalPiasters: number;
   currency: 'EGP';

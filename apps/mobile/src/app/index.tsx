@@ -40,6 +40,7 @@ export default function Index() {
   if (!signedIn || expired) return <Redirect href="/welcome" />;
   if (me.isPending) return <Splash />;
   if (me.error) return <ErrorState message={t(errorKey(me.error))} onRetry={() => void me.refetch()} />;
+  if (me.data.account.status !== 'ACTIVE') return <Redirect href="/account-restricted" />;
   // Current terms + privacy must be accepted before anything else (new accounts and document updates).
   if (consents.isPending) return <Splash />;
   if (consents.error) return <ErrorState message={t(errorKey(consents.error))} onRetry={() => void consents.refetch()} />;

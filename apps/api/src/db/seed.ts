@@ -270,8 +270,8 @@ export async function seed(log: (line: string) => void = console.log) {
     // ---------------------------------------------------------------- TetraSol placeholders (NOT real products)
     for (const [i, p] of DEMO_PRODUCTS.entries()) {
       const { rows } = await client.query<{ id: string }>(
-        `insert into app.products (slug, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, content_status, sort_order, is_demo)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING_APPROVAL', $10, true) returning id`,
+        `insert into app.products (slug, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, content_status, publication_status, published_at, sort_order, is_demo)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING_APPROVAL', 'PUBLISHED', now(), $10, true) returning id`,
         [
           p.slug,
           `TetraSol — عنصر تجريبي ${p.letterAr}`,

@@ -33,7 +33,6 @@ import type {
   ProviderDetail,
   ProviderSearchQuery,
   ProviderServicesBody,
-  Role,
   SystemStatus,
   UpdateAvailabilityBody,
   UpdateMeBody,
@@ -42,6 +41,20 @@ import type {
   VerificationDecisionBody,
   VerificationQueueItem,
   WorkingHoursBody,
+  AdminProduct,
+  AdminProductListItem,
+  Brand,
+  Bundle,
+  CatalogAnalytics,
+  Category,
+  Discount,
+  StoreBundle,
+  StoreCategory,
+  AccountStatusActionBody,
+  AdminUserDetail,
+  AdminUserListItem,
+  Appeal,
+  MyAccountStatus,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -96,7 +109,8 @@ export type AdminProviderSubmission = {
   isSelf: boolean;
 };
 
-export type AdminUser = { id: string; name: string; email: string; emailVerified: boolean; twoFactorEnabled: boolean; createdAt: string; roles: Role[] };
+/** @deprecated use AdminUserListItem */
+export type AdminUser = AdminUserListItem;
 export type ProviderServiceSelection = NursingService & { selected: boolean; pricePiasters: number | null };
 export type OutboxMessage = { id: number; channel: 'email' | 'sms'; to: string; subject?: string; body: string; purpose: string; createdAt: string };
 
@@ -149,6 +163,8 @@ export function createApiClient(options: ApiClientOptions) {
       consents: () => get<ConsentsResponse>('/v1/me/consents'),
       recordConsents: (body: RecordConsentBody) => post<ConsentsResponse>('/v1/me/consents', body),
       deleteAccount: (body: DeleteAccountBody) => post<DeleteAccountResponse>('/v1/me/account-deletion', body),
+      accountStatus: () => get<MyAccountStatus>('/v1/me/account-status'),
+      appeal: (body: { message: string; eventId?: string }) => post<Appeal>('/v1/me/appeals', body),
     },
     billing: {
       plans: (platform: 'ios' | 'android' | 'web') => get<PlanForClient[]>('/v1/billing/plans', { platform }),
@@ -193,7 +209,9 @@ export function createApiClient(options: ApiClientOptions) {
       addToCart: (body: AddCartItemBody) => post<CartResponse>('/v1/store/cart/items', body),
       updateCartItem: (id: string, quantity: number) => patch<CartResponse>(`/v1/store/cart/items/${id}`, { quantity }),
       removeCartItem: (id: string) => del<CartResponse>(`/v1/store/cart/items/${id}`),
-      checkoutPreview: () => post<CheckoutPreview>('/v1/store/checkout/preview'),
+      checkoutPreview: (body: { discountCode?: string } = {}) => post<CheckoutPreview>('/v1/store/checkout/preview', body),
+      bundles: () => get<StoreBundle[]>('/v1/store/bundles'),
+      categories: () => get<StoreCategory[]>('/v1/store/categories'),
     },
     dashboard: {
       patient: (patientId?: string) => get<PatientDashboard>('/v1/dashboard/patient', { patientId }),
@@ -206,9 +224,45 @@ export function createApiClient(options: ApiClientOptions) {
       decide: (userId: string, body: VerificationDecisionBody) => post<{ status: string }>(`/v1/admin/providers/${encodeURIComponent(userId)}/decision`, body),
       decideCredential: (id: string, body: CredentialDecisionBody) => post<Credential>(`/v1/admin/credentials/${id}/decision`, body),
       auditLog: (limit = 100) => get<AuditLogEntry[]>('/v1/admin/audit-log', { limit }),
-      users: () => get<AdminUser[]>('/v1/admin/users'),
+      users: (q: { q?: string; role?: string; status?: string; limit?: number; offset?: number } = {}) => get<AdminUserListItem[]>('/v1/admin/users', q),
+      user: (id: string) => get<AdminUserDetail>(`/v1/admin/users/${encodeURIComponent(id)}`),
+      setAccountStatus: (id: string, body: AccountStatusActionBody) => post<{ status: string }>(`/v1/admin/users/${encodeURIComponent(id)}/status`, body),
+      appeals: (status = 'OPEN') => get<Appeal[]>('/v1/admin/appeals', { status }),
+      decideAppeal: (id: string, body: { decision: 'GRANTED' | 'DENIED'; note: string }) => post<{ status: string }>(`/v1/admin/appeals/${id}/decision`, body),
       features: () => get<FeatureFlagAdmin[]>('/v1/admin/features'),
       setFeature: (key: string, body: { enabled: boolean; evidenceRef?: string | null }) => patch<FeatureFlagAdmin>(`/v1/admin/features/${encodeURIComponent(key)}`, body),
+    },
+    /** Admin Console catalogue (bodies are validated server-side by the zod schemas in @ghayarly/shared). */
+    catalog: {
+      brands: () => get<Brand[]>('/v1/admin/catalog/brands'),
+      createBrand: (body: { name: string; ownerEntity: string; ownershipReference: string }) => post<{ ok: true }>('/v1/admin/catalog/brands', body),
+      updateBrand: (name: string, body: { ownerEntity?: string; ownershipReference?: string; active?: boolean }) => patch<{ ok: true }>(`/v1/admin/catalog/brands/${encodeURIComponent(name)}`, body),
+      categories: () => get<Category[]>('/v1/admin/catalog/categories'),
+      createCategory: (body: { slug: string; nameAr: string; nameEn: string; sortOrder?: number }) => post<Category>('/v1/admin/catalog/categories', body),
+      updateCategory: (id: string, body: Partial<{ slug: string; nameAr: string; nameEn: string; sortOrder: number; active: boolean }>) => patch<Category>(`/v1/admin/catalog/categories/${id}`, body),
+      products: (q: { status?: string; q?: string } = {}) => get<AdminProductListItem[]>('/v1/admin/catalog/products', q),
+      product: (id: string) => get<AdminProduct>(`/v1/admin/catalog/products/${id}`),
+      createProduct: (body: Record<string, unknown>) => post<AdminProduct>('/v1/admin/catalog/products', body),
+      updateProduct: (id: string, body: Record<string, unknown>) => patch<AdminProduct>(`/v1/admin/catalog/products/${id}`, body),
+      approve: (id: string, approvalReference: string) => post<AdminProduct>(`/v1/admin/catalog/products/${id}/approve`, { approvalReference }),
+      withdrawApproval: (id: string) => post<AdminProduct>(`/v1/admin/catalog/products/${id}/withdraw-approval`),
+      setPublication: (id: string, status: 'PUBLISHED' | 'UNPUBLISHED' | 'ARCHIVED') => post<AdminProduct>(`/v1/admin/catalog/products/${id}/publication`, { status }),
+      deleteProduct: (id: string) => del<{ ok: true }>(`/v1/admin/catalog/products/${id}`),
+      addVariant: (productId: string, body: Record<string, unknown>) => post<AdminProduct>(`/v1/admin/catalog/products/${productId}/variants`, body),
+      updateVariant: (id: string, body: Record<string, unknown>) => patch<AdminProduct>(`/v1/admin/catalog/variants/${id}`, body),
+      adjustStock: (id: string, body: { delta: number; reason: string; note?: string }) => post<AdminProduct>(`/v1/admin/catalog/variants/${id}/stock`, body),
+      uploadImage: (productId: string, body: { contentType: string; dataBase64: string; altAr?: string; altEn?: string; sortOrder?: number }) => post<AdminProduct>(`/v1/admin/catalog/products/${productId}/images`, body),
+      updateImage: (id: string, body: { altAr?: string; altEn?: string; sortOrder?: number }) => patch<AdminProduct>(`/v1/admin/catalog/images/${id}`, body),
+      deleteImage: (id: string) => del<AdminProduct>(`/v1/admin/catalog/images/${id}`),
+      discounts: () => get<Discount[]>('/v1/admin/catalog/discounts'),
+      createDiscount: (body: Record<string, unknown>) => post<Discount>('/v1/admin/catalog/discounts', body),
+      updateDiscount: (id: string, body: { active?: boolean; endsAt?: string | null; nameAr?: string; nameEn?: string }) => patch<Discount>(`/v1/admin/catalog/discounts/${id}`, body),
+      bundles: () => get<Bundle[]>('/v1/admin/catalog/bundles'),
+      createBundle: (body: Record<string, unknown>) => post<Bundle>('/v1/admin/catalog/bundles', body),
+      updateBundle: (id: string, body: Record<string, unknown>) => patch<Bundle>(`/v1/admin/catalog/bundles/${id}`, body),
+      setBundleItems: (id: string, items: { variantId: string; quantity: number }[]) => put<Bundle>(`/v1/admin/catalog/bundles/${id}/items`, { items }),
+      setBundlePublication: (id: string, status: 'PUBLISHED' | 'UNPUBLISHED' | 'ARCHIVED') => post<Bundle>(`/v1/admin/catalog/bundles/${id}/publication`, { status }),
+      analytics: (days = 30) => get<CatalogAnalytics>('/v1/admin/catalog/analytics', { days }),
     },
     dev: {
       outbox: (q?: { to?: string; purpose?: string }) => get<{ notice: string; messages: OutboxMessage[] }>('/dev/outbox', q),

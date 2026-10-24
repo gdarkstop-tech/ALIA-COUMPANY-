@@ -13,8 +13,8 @@ beforeAll(async () => {
   const pool = ownerPool();
   try {
     const { rows } = await pool.query<{ id: string }>(
-      `insert into app.products (slug, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, is_demo)
-       values ('demo-store-test', 'TetraSol — تجريبي', 'TetraSol — Demo', 's', 's', 'd', 'd', 'u', 'u', true)
+      `insert into app.products (slug, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, is_demo, publication_status)
+       values ('demo-store-test', 'TetraSol — تجريبي', 'TetraSol — Demo', 's', 's', 'd', 'd', 'u', 'u', true, 'PUBLISHED')
        on conflict (slug) do update set name_en = excluded.name_en returning id`,
     );
     const v = await pool.query<{ id: string }>(

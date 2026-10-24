@@ -1,9 +1,9 @@
-import { hasPermission, requiresMfa, type Permission, type Role } from '@ghayarly/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { hasPermission, requiresMfa, type AccountStatusInfo, type Permission, type Role } from '@ghayarly/shared';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { withContext, type RequestContext, type Tx } from '../db/client';
-import { userRoles } from '../db/schema';
+import { accountStatus, userRoles } from '../db/schema';
 import { forbidden, unauthorized } from './errors';
 
 export type Principal = {
@@ -19,6 +19,8 @@ export type Principal = {
     twoFactorEnabled: boolean;
   };
   roles: Role[];
+  /** Effective account status (an elapsed suspension counts as ACTIVE). */
+  account: AccountStatusInfo;
 };
 
 declare module 'fastify' {
@@ -41,12 +43,26 @@ export async function getPrincipal(request: FastifyRequest): Promise<Principal |
     return null;
   }
   const u = session.user as typeof session.user & { phoneNumber?: string | null; phoneNumberVerified?: boolean | null; twoFactorEnabled?: boolean | null };
-  const roles = await withContext(db, { userId: u.id, demoMode: env.DEMO_MODE }, (tx) =>
-    tx
+  const { roles, account } = await withContext(db, { userId: u.id, demoMode: env.DEMO_MODE }, async (tx) => {
+    const roles = await tx
       .select({ role: userRoles.role })
       .from(userRoles)
-      .where(and(eq(userRoles.userId, u.id), isNull(userRoles.revokedAt))),
-  );
+      .where(and(eq(userRoles.userId, u.id), isNull(userRoles.revokedAt)));
+    const [row] = await tx
+      .select({ s: accountStatus, effective: sql<AccountStatusInfo['status']>`app.account_status_of(${u.id})` })
+      .from(accountStatus)
+      .where(eq(accountStatus.userId, u.id));
+    const account: AccountStatusInfo = row
+      ? {
+          status: row.effective,
+          bookingsRestricted: row.s.bookingsRestricted,
+          reason: row.effective === 'ACTIVE' && !row.s.bookingsRestricted ? null : row.s.reason,
+          publicMessage: row.effective === 'ACTIVE' && !row.s.bookingsRestricted ? null : row.s.publicMessage,
+          suspendedUntil: row.effective === 'SUSPENDED' && row.s.suspendedUntil ? new Date(row.s.suspendedUntil).toISOString() : null,
+        }
+      : { status: 'ACTIVE', bookingsRestricted: false, reason: null, publicMessage: null, suspendedUntil: null };
+    return { roles, account };
+  });
   request.principalCache = {
     userId: u.id,
     sessionId: session.session.id,
@@ -60,6 +76,7 @@ export async function getPrincipal(request: FastifyRequest): Promise<Principal |
       twoFactorEnabled: Boolean(u.twoFactorEnabled),
     },
     roles: roles.map((r) => r.role),
+    account,
   };
   return request.principalCache;
 }
@@ -83,6 +100,14 @@ export async function requireRole(request: FastifyRequest, ...roles: Role[]): Pr
 export async function requirePermission(request: FastifyRequest, permission: Permission): Promise<Principal> {
   const principal = await requirePrincipal(request);
   if (!hasPermission(principal.roles, permission)) throw forbidden('PERMISSION_REQUIRED', `Missing permission ${permission}`);
+  enforceMfa(request, principal);
+  return principal;
+}
+
+/** As requirePermission, for screens shared by several duties (e.g. catalogue editors and clinical approvers). */
+export async function requireAnyPermission(request: FastifyRequest, ...permissions: Permission[]): Promise<Principal> {
+  const principal = await requirePrincipal(request);
+  if (!permissions.some((p) => hasPermission(principal.roles, p))) throw forbidden('PERMISSION_REQUIRED', `Requires one of: ${permissions.join(', ')}`);
   enforceMfa(request, principal);
   return principal;
 }

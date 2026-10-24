@@ -185,8 +185,8 @@ describe('review account isolation', () => {
     // The public TetraSol catalogue is not personal data: reviewers review what real users get.
     const slug = `review-visible-${Date.now()}`;
     await owner.query(
-      `insert into app.products (slug, brand, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, content_status, approval_reference, approved_at)
-       values ($1, 'TetraSol', 'a','a','a','a','a','a','a','a', 'APPROVED', 'TEST-REF-1', now())`,
+      `insert into app.products (slug, brand, name_ar, name_en, summary_ar, summary_en, description_ar, description_en, usage_ar, usage_en, content_status, approval_reference, approved_at, publication_status)
+       values ($1, 'TetraSol', 'a','a','a','a','a','a','a','a', 'APPROVED', 'TEST-REF-1', now(), 'PUBLISHED')`,
       [slug],
     );
     const cl = await appPool.connect();

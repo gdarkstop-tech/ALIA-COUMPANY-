@@ -67,7 +67,7 @@ export default function ProductDetail() {
         </View>
       }
     >
-      <ProductVisual height={200} demo={p.isDemo} />
+      <ProductVisual height={200} demo={p.isDemo} imageId={p.images[0]?.id} alt={p.images[0] ? pickL(p.images[0], 'alt') || t('store.productImage') : undefined} />
       <View style={{ gap: spacing.sm }}>
         <Text variant="title2" testID="product-name">{pickL(p, 'name')}</Text>
         <Text variant="callout" color="textSecondary">{pickL(p, 'summary')}</Text>
@@ -122,9 +122,15 @@ export default function ProductDetail() {
       <Section title={t('store.approvedInfo')}>
         <Card><Text variant="callout" color="textSecondary">{pickL(p, 'description')}</Text></Card>
       </Section>
+      {pickL(p, 'approvedUses') ? (
+        <Section title={t('store.approvedUses')}>
+          <Card testID="product-approved-uses"><Text variant="callout" color="textSecondary">{pickL(p, 'approvedUses')}</Text></Card>
+        </Section>
+      ) : null}
       <Section title={t('store.usage')}>
         <Card><Text variant="callout" color="textSecondary">{pickL(p, 'usage')}</Text></Card>
       </Section>
+      {pickL(p, 'warnings') ? <Notice tone="warning" icon="alert-triangle" title={t('store.warnings')} body={pickL(p, 'warnings')} testID="product-warnings" /> : null}
       <Section title={t('store.regulatory')}>
         <Card>
           <Text variant="footnote" color="textSecondary">{p.approvalReference ?? t('store.noApprovalRef')}</Text>

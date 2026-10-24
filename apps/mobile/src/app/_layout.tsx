@@ -5,7 +5,7 @@ import {
   IBMPlexSansArabic_700Bold,
   useFonts,
 } from '@expo-google-fonts/ibm-plex-sans-arabic';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -67,17 +67,24 @@ function Shell() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ IBMPlexSansArabic_400Regular, IBMPlexSansArabic_500Medium, IBMPlexSansArabic_600SemiBold, IBMPlexSansArabic_700Bold });
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: (count, error) => !(error instanceof ApiError && error.status > 0 && error.status < 500) && count < 2,
-            staleTime: 15_000,
-          },
+  const [queryClient] = useState(() => {
+    // An account suspended or blocked mid-session: refresh /me so the gates show the restriction
+    // screen (the API refuses everything else anyway).
+    const onError = (error: unknown) => {
+      if (error instanceof ApiError && (error.code === 'ACCOUNT_SUSPENDED' || error.code === 'ACCOUNT_BLOCKED')) void client.invalidateQueries({ queryKey: ['me'] });
+    };
+    const client: QueryClient = new QueryClient({
+      queryCache: new QueryCache({ onError }),
+      mutationCache: new MutationCache({ onError }),
+      defaultOptions: {
+        queries: {
+          retry: (count, error) => !(error instanceof ApiError && error.status > 0 && error.status < 500) && count < 2,
+          staleTime: 15_000,
         },
-      }),
-  );
+      },
+    });
+    return client;
+  });
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       {/* Respect the OS "Reduce motion" setting for every Reanimated animation. */}

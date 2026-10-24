@@ -7,18 +7,16 @@ import {
   type AuditLogEntry,
   type VerificationQueueItem,
 } from '@ghayarly/shared';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   auditLog,
-  authUsers,
   providerCredentials,
   providerProfiles,
   providerVerificationEvents,
   providerWorkingHours,
   userProfiles,
-  userRoles,
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
 import { notFound, unprocessable } from '../../lib/errors';
@@ -165,26 +163,6 @@ export async function adminRoutes(app: FastifyInstance) {
         entityId: a.entityId,
         metadata: a.metadata,
         createdAt: a.occurredAt,
-      }));
-    });
-  });
-
-  app.get('/users', async (request) => {
-    const principal = await requirePermission(request, 'users.read');
-    return inContext(request, principal, async (tx) => {
-      const users = await tx.select().from(authUsers).orderBy(desc(authUsers.createdAt)).limit(200);
-      const roles = await tx
-        .select({ userId: userRoles.userId, role: userRoles.role })
-        .from(userRoles)
-        .where(and(inArray(userRoles.userId, users.map((u) => u.id).concat('')), isNull(userRoles.revokedAt)));
-      return users.map((u) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        emailVerified: u.emailVerified,
-        twoFactorEnabled: Boolean(u.twoFactorEnabled),
-        createdAt: u.createdAt,
-        roles: roles.filter((r) => r.userId === u.id).map((r) => r.role),
       }));
     });
   });

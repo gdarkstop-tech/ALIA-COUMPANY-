@@ -67,6 +67,9 @@ export default function ClinicianToday() {
           </Animated.View>
 
           {!d.mfaEnrolled ? <Notice tone="warning" icon="lock" body={t('provider.mfaWarning')} /> : null}
+          {me.data?.account.bookingsRestricted ? (
+            <Notice tone="warning" icon="alert-triangle" testID="bookings-restricted" body={t('accounts.clinicianRestricted', { message: me.data.account.publicMessage ?? t(`accounts.reason_${me.data.account.reason ?? 'OTHER'}`) })} />
+          ) : null}
 
           <Animated.View entering={FadeInDown.delay(60).duration(380)}>
             <Card onPress={() => router.push('/clinician/availability')}>

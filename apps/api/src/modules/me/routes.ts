@@ -32,6 +32,7 @@ export async function meRoutes(app: FastifyInstance) {
       onboardingCompletedAt: profile.onboardingCompletedAt,
     },
     mfa: { required: requiresMfa(roles), enrolled: principal.user.twoFactorEnabled, enforcement: env.MFA_ENFORCEMENT },
+    account: principal.account,
     demoMode: env.DEMO_MODE,
   });
 

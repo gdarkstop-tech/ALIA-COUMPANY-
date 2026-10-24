@@ -16,6 +16,8 @@ import { createPaymentGateway, type PaymentGateway } from './integrations/paymen
 import { AppError, fromPgError } from './lib/errors';
 import { getPrincipal, inContext, registerPrincipal } from './lib/principal';
 import { adminRoutes } from './modules/admin/routes';
+import { adminCatalogRoutes } from './modules/catalog/admin';
+import { accountRoutes } from './modules/accounts/routes';
 import { complianceRoutes } from './modules/compliance/routes';
 import { billingRoutes } from './modules/billing/routes';
 import { createStores, type Stores } from './integrations/billing';
@@ -129,6 +131,28 @@ export async function buildServer(env: Env, overrides: { stores?: Stores } = {})
 
   registerPrincipal(app);
 
+  // Suspended / blocked accounts: everything is refused except seeing why, appealing, deleting the
+  // account and anonymous crash reports. The database removes their roles and permissions too.
+  const RESTRICTED_ALLOWED: { method: string; path: RegExp }[] = [
+    { method: 'GET', path: /^\/v1\/me$/ },
+    { method: 'GET', path: /^\/v1\/me\/account-status$/ },
+    { method: 'GET', path: /^\/v1\/me\/appeals$/ },
+    { method: 'POST', path: /^\/v1\/me\/appeals$/ },
+    { method: 'POST', path: /^\/v1\/me\/account-deletion$/ },
+    { method: 'GET', path: /^\/v1\/me\/consents$/ },
+    { method: 'GET', path: /^\/v1\/system\// },
+    { method: 'POST', path: /^\/v1\/telemetry\// },
+  ];
+  app.addHook('preHandler', async (request) => {
+    if (!request.url.startsWith('/v1/') || request.method === 'OPTIONS') return;
+    const principal = await getPrincipal(request);
+    if (!principal || principal.account.status === 'ACTIVE') return;
+    const path = request.url.split('?')[0]!;
+    const method = request.method === 'HEAD' ? 'GET' : request.method;
+    if (RESTRICTED_ALLOWED.some((r) => r.method === method && r.path.test(path))) return;
+    throw new AppError(403, principal.account.status === 'BLOCKED' ? 'ACCOUNT_BLOCKED' : 'ACCOUNT_SUSPENDED', 'This account is restricted');
+  });
+
   // Terms of Use + Privacy Policy acceptance is enforced here for every state-changing /v1 request,
   // not only by the app's consent screen (deep links, old app builds and other clients). Exempt:
   // answering the consents themselves, account deletion (declining the terms means deleting the
@@ -149,6 +173,7 @@ export async function buildServer(env: Env, overrides: { stores?: Stores } = {})
   await registerAuthRoutes(app);
   await app.register(systemRoutes);
   await app.register(meRoutes, { prefix: '/v1' });
+  await app.register(accountRoutes, { prefix: '/v1' });
   await app.register(complianceRoutes, { prefix: '/v1' });
   await app.register(billingRoutes);
   await app.register(patientRoutes, { prefix: '/v1' });
@@ -157,6 +182,7 @@ export async function buildServer(env: Env, overrides: { stores?: Stores } = {})
   await app.register(storeRoutes, { prefix: '/v1' });
   await app.register(dashboardRoutes, { prefix: '/v1' });
   await app.register(adminRoutes, { prefix: '/v1/admin' });
+  await app.register(adminCatalogRoutes, { prefix: '/v1/admin/catalog' });
   if (env.DEV_TOOLS_ENABLED && env.NODE_ENV !== 'production') await app.register(devRoutes, { prefix: '/dev' });
 
   return app;

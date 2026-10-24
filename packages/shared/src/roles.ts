@@ -43,6 +43,16 @@ export const PERMISSIONS = [
   'users.read',
   'users.roles.grant',
   'safety.reports.read',
+  /** Approve customer-facing medical product text (separately from editing it). */
+  'catalog.content.approve',
+  /** Register company-owned brands the store may sell. */
+  'catalog.brands.manage',
+  /** Suspend / block / reactivate accounts and restrict clinician bookings. */
+  'users.status.manage',
+  'users.appeals.decide',
+  /** AI providers, model routing, prices, quotas and budgets. */
+  'ai.config.manage',
+  'ai.usage.read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -64,10 +74,17 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'audit.read',
     'users.read',
     'users.roles.grant',
+    'catalog.content.approve',
+    'catalog.brands.manage',
+    'users.status.manage',
+    'users.appeals.decide',
+    'ai.config.manage',
+    'ai.usage.read',
   ],
-  CLINICAL_REVIEWER: ['provider.verification.review', 'provider.verification.decide'],
+  // Clinical reviewers approve medical product text; commerce managers can edit it but never approve.
+  CLINICAL_REVIEWER: ['provider.verification.review', 'provider.verification.decide', 'catalog.content.approve'],
   SUPPORT: ['users.read', 'provider.verification.review'],
-  TRUST_AND_SAFETY: ['audit.read', 'safety.reports.read', 'users.read'],
+  TRUST_AND_SAFETY: ['audit.read', 'safety.reports.read', 'users.read', 'users.status.manage', 'users.appeals.decide'],
   COMMERCE_MANAGER: ['catalog.tetrasol.manage'],
 };
 

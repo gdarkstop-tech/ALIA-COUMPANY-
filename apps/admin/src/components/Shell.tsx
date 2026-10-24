@@ -8,13 +8,16 @@ import { api, ApiError } from '@/lib/api';
 import { authClient } from '@/lib/auth-client';
 import { useI18n } from './Providers';
 
-const NAV: { href: string; key: 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security'; icon: string; permission?: Permission }[] = [
-  { href: '/', key: 'admin.overview', icon: '◎', permission: 'provider.verification.review' },
-  { href: '/verification', key: 'admin.verification', icon: '✓', permission: 'provider.verification.review' },
-  { href: '/users', key: 'admin.users', icon: '◍', permission: 'users.read' },
-  { href: '/audit', key: 'admin.audit', icon: '≡', permission: 'audit.read' },
+type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav';
+// `permissions`: shown when the account holds ANY of them (the API and the database enforce each action).
+const NAV: { href: string; key: NavKey; icon: string; permissions?: Permission[] }[] = [
+  { href: '/', key: 'admin.overview', icon: '◎', permissions: ['provider.verification.review'] },
+  { href: '/verification', key: 'admin.verification', icon: '✓', permissions: ['provider.verification.review'] },
+  { href: '/catalog', key: 'catalog.nav', icon: '▦', permissions: ['catalog.tetrasol.manage', 'catalog.content.approve'] },
+  { href: '/users', key: 'admin.users', icon: '◍', permissions: ['users.read'] },
+  { href: '/audit', key: 'admin.audit', icon: '≡', permissions: ['audit.read'] },
   // ADMIN-only (the API and the database both enforce the ADMIN role).
-  { href: '/features', key: 'admin.features', icon: '⚑', permission: 'users.roles.grant' },
+  { href: '/features', key: 'admin.features', icon: '⚑', permissions: ['users.roles.grant'] },
   { href: '/security', key: 'admin.security', icon: '⚿' },
 ];
 
@@ -65,7 +68,7 @@ export function Shell({ children, title, actions }: { children: ReactNode; title
             <small>{t('admin.consoleSubtitle')}</small>
           </div>
         </div>
-        {NAV.filter((n) => !n.permission || hasPermission(roles, n.permission)).map((n) => (
+        {NAV.filter((n) => !n.permissions || n.permissions.some((p) => hasPermission(roles, p))).map((n) => (
           <Link key={n.href} href={n.href} className={`nav-item ${(n.href === '/' ? pathname === '/' : pathname.startsWith(n.href)) ? 'active' : ''}`} data-testid={`nav-${n.href.replace('/', '') || 'overview'}`}>
             <span aria-hidden>{n.icon}</span>
             {t(n.key)}
