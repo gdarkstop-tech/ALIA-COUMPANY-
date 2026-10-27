@@ -1,47 +1,59 @@
 import OpenAI from 'openai';
-import { AiProviderError, notConfigured, type AiProvider, type AiResult } from './types';
+import { AiProviderError, notConfigured, type AiProvider, type AiProviderCode, type AiResult } from './types';
+
+type ResponsesOptions = {
+  code: Extract<AiProviderCode, 'OPENAI' | 'GROK'>;
+  label: string;
+  apiKey: string | undefined;
+  baseURL?: string;
+  timeoutMs: number;
+  /** OpenAI takes `instructions`; xAI's documented examples send the system prompt as an input message. */
+  systemAs: 'instructions' | 'message';
+  /** OpenAI's documented abuse-monitoring identifier; not sent where it is not documented. */
+  sendSafetyIdentifier: boolean;
+  /** Adapter tests only (no network, no key). */
+  fetchImpl?: typeof fetch;
+};
 
 /**
- * OpenAI Responses API through the official SDK. Not exercised against the live API in this
- * build (no business-owned key is configured); request/response mapping is covered by adapter
- * tests with a stubbed HTTP layer. Reasoning-effort options are model-specific and are not sent.
+ * Responses API through the official OpenAI SDK — OpenAI itself, and xAI, whose API follows the
+ * same shape at its own base URL. `store: false` everywhere: neither provider keeps the exchange for
+ * later retrieval (xAI otherwise stores responses for 30 days). Not exercised against the live APIs
+ * in this build (no business-owned keys); mapping is covered by adapter tests with a stubbed HTTP layer.
  */
-export function createOpenAiProvider(apiKey: string | undefined, timeoutMs: number, fetchImpl?: typeof fetch): AiProvider {
-  if (!apiKey) return notConfigured('OPENAI');
-  const client = new OpenAI({ apiKey, maxRetries: 2, timeout: timeoutMs, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
+export function createResponsesProvider(o: ResponsesOptions): AiProvider {
+  if (!o.apiKey) return notConfigured(o.code);
+  const client = new OpenAI({ apiKey: o.apiKey, baseURL: o.baseURL, maxRetries: 2, timeout: o.timeoutMs, ...(o.fetchImpl ? { fetch: o.fetchImpl } : {}) });
 
   const toError = (e: unknown): AiProviderError => {
-    if (e instanceof OpenAI.AuthenticationError || e instanceof OpenAI.PermissionDeniedError) return new AiProviderError('OPENAI', 'AUTH', 'OpenAI rejected the credentials');
-    if (e instanceof OpenAI.RateLimitError) return new AiProviderError('OPENAI', 'RATE_LIMIT', 'OpenAI rate limit');
-    if (e instanceof OpenAI.BadRequestError || e instanceof OpenAI.NotFoundError || e instanceof OpenAI.UnprocessableEntityError) return new AiProviderError('OPENAI', 'BAD_REQUEST', `OpenAI refused the request: ${e.message}`);
-    if (e instanceof OpenAI.APIConnectionTimeoutError) return new AiProviderError('OPENAI', 'TIMEOUT', 'OpenAI timed out');
-    if (e instanceof OpenAI.APIConnectionError) return new AiProviderError('OPENAI', 'NETWORK', 'Could not reach OpenAI');
-    if (e instanceof OpenAI.APIError) return new AiProviderError('OPENAI', (e.status ?? 500) >= 500 ? 'OVERLOADED' : 'UPSTREAM', `OpenAI error ${e.status ?? ''}`.trim());
-    return new AiProviderError('OPENAI', 'UPSTREAM', 'Unexpected OpenAI failure');
+    if (e instanceof OpenAI.AuthenticationError || e instanceof OpenAI.PermissionDeniedError) return new AiProviderError(o.code, 'AUTH', `${o.label} rejected the credentials`);
+    if (e instanceof OpenAI.RateLimitError) return new AiProviderError(o.code, 'RATE_LIMIT', `${o.label} rate limit`);
+    if (e instanceof OpenAI.BadRequestError || e instanceof OpenAI.NotFoundError || e instanceof OpenAI.UnprocessableEntityError) return new AiProviderError(o.code, 'BAD_REQUEST', `${o.label} refused the request: ${e.message}`);
+    if (e instanceof OpenAI.APIConnectionTimeoutError) return new AiProviderError(o.code, 'TIMEOUT', `${o.label} timed out`);
+    if (e instanceof OpenAI.APIConnectionError) return new AiProviderError(o.code, 'NETWORK', `Could not reach ${o.label}`);
+    if (e instanceof OpenAI.APIError) return new AiProviderError(o.code, (e.status ?? 500) >= 500 ? 'OVERLOADED' : 'UPSTREAM', `${o.label} error ${e.status ?? ''}`.trim());
+    return new AiProviderError(o.code, 'UPSTREAM', `Unexpected ${o.label} failure`);
   };
 
   return {
-    code: 'OPENAI',
+    code: o.code,
     status: 'CONFIGURED',
     async complete(req): Promise<AiResult> {
       let res: OpenAI.Responses.Response;
       try {
+        const turns = req.messages.map((m) => ({ role: m.role, content: m.content }));
         res = await client.responses.create({
           model: req.model,
-          instructions: req.system,
-          input: req.messages.map((m) => ({ role: m.role, content: m.content })),
+          ...(o.systemAs === 'instructions' ? { instructions: req.system, input: turns } : { input: [{ role: 'system' as const, content: req.system }, ...turns] }),
           max_output_tokens: req.maxOutputTokens,
-          safety_identifier: req.endUserRef,
+          ...(o.sendSafetyIdentifier ? { safety_identifier: req.endUserRef } : {}),
           store: false,
         });
       } catch (e) {
         throw toError(e);
       }
-      const usage = {
-        inputTokens: (res.usage?.input_tokens ?? 0) - (res.usage?.input_tokens_details?.cached_tokens ?? 0),
-        outputTokens: res.usage?.output_tokens ?? 0,
-        cacheReadTokens: res.usage?.input_tokens_details?.cached_tokens ?? 0,
-      };
+      const cached = res.usage?.input_tokens_details?.cached_tokens ?? 0;
+      const usage = { inputTokens: (res.usage?.input_tokens ?? 0) - cached, outputTokens: res.usage?.output_tokens ?? 0, cacheReadTokens: cached };
       const refused = res.output.some((item) => item.type === 'message' && item.content.some((c) => c.type === 'refusal'));
       if (refused) return { outcome: 'REFUSED', text: '', servedModel: res.model, usage, refusalCategory: null };
       const truncated = res.status === 'incomplete' && res.incomplete_details?.reason === 'max_output_tokens';
@@ -57,4 +69,14 @@ export function createOpenAiProvider(apiKey: string | undefined, timeoutMs: numb
       }
     },
   };
+}
+
+export function createOpenAiProvider(apiKey: string | undefined, timeoutMs: number, fetchImpl?: typeof fetch): AiProvider {
+  return createResponsesProvider({ code: 'OPENAI', label: 'OpenAI', apiKey, timeoutMs, systemAs: 'instructions', sendSafetyIdentifier: true, fetchImpl });
+}
+
+export const XAI_BASE_URL = 'https://api.x.ai/v1';
+
+export function createGrokProvider(apiKey: string | undefined, timeoutMs: number, baseURL = XAI_BASE_URL, fetchImpl?: typeof fetch): AiProvider {
+  return createResponsesProvider({ code: 'GROK', label: 'xAI', apiKey, baseURL, timeoutMs, systemAs: 'message', sendSafetyIdentifier: false, fetchImpl });
 }

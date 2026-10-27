@@ -61,6 +61,10 @@ import type {
   AiConversationDetail,
   AiModelAdmin,
   AiReply,
+  AiEvalCase,
+  AiEvalResult,
+  AiEvalRun,
+  AiEvaluationOverview,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -234,8 +238,21 @@ export function createApiClient(options: ApiClientOptions) {
       createModel: (body: Record<string, unknown>) => post<AiModelAdmin>('/v1/admin/ai/models', body),
       updateModel: (id: string, body: Record<string, unknown>) => patch<AiModelAdmin>(`/v1/admin/ai/models/${id}`, body),
       updateRoute: (key: string, body: Record<string, unknown>) => patch<AiControlCentre>(`/v1/admin/ai/routes/${encodeURIComponent(key)}`, body),
+      addCandidate: (key: string, body: Record<string, unknown>) => post<AiControlCentre>(`/v1/admin/ai/routes/${encodeURIComponent(key)}/candidates`, body),
+      updateCandidate: (id: string, body: Record<string, unknown>) => patch<AiControlCentre>(`/v1/admin/ai/candidates/${id}`, body),
+      removeCandidate: (id: string) => del<AiControlCentre>(`/v1/admin/ai/candidates/${id}`),
       updateQuota: (body: { plan?: string; role?: string; metric: string; weeklyLimit: number }) => patch<AiControlCentre>('/v1/admin/ai/quotas', body),
       setBudget: (monthlyLimitMicros: number | null) => put<AiControlCentre>('/v1/admin/ai/budget', { monthlyLimitMicros }),
+      setPlanBudget: (body: { plan: string; userMonthlyLimitMicros: number | null; planMonthlyLimitMicros: number | null }) => put<AiControlCentre>('/v1/admin/ai/plan-budgets', body),
+      evaluation: () => get<AiEvaluationOverview>('/v1/admin/ai/evaluation'),
+      createCase: (body: Record<string, unknown>) => post<AiEvalCase>('/v1/admin/ai/evaluation/cases', body),
+      updateCase: (id: string, body: Record<string, unknown>) => patch<AiEvalCase>(`/v1/admin/ai/evaluation/cases/${id}`, body),
+      reviewCase: (id: string, decision: 'REVIEWED' | 'RETIRED') => post<AiEvalCase>(`/v1/admin/ai/evaluation/cases/${id}/review`, { decision }),
+      startRun: (modelId: string, routeKey = 'patient.chat') => post<AiEvalRun>('/v1/admin/ai/evaluation/runs', { modelId, routeKey }),
+      run: (id: string) => get<AiEvalRun & { results: AiEvalResult[] }>(`/v1/admin/ai/evaluation/runs/${id}`),
+      reviewResult: (id: string, body: { accuracy: number; hallucination: boolean; unsafe: boolean; arabicQuality?: number | null; notes?: string }) => post<{ ok: true }>(`/v1/admin/ai/evaluation/results/${id}/review`, body),
+      approveModel: (body: { routeKey: string; modelId: string; runId: string; note: string }) => post<{ id: string }>('/v1/admin/ai/evaluation/approvals', body),
+      revokeApproval: (id: string, note: string) => post<{ ok: true }>(`/v1/admin/ai/evaluation/approvals/${id}/revoke`, { note }),
       healthCheck: (code: string, modelId: string) => post<{ provider: string; configured: boolean; ok: boolean; detail: string; checkedAt: string; environment: string }>(`/v1/admin/ai/providers/${code}/health-check`, { modelId }),
     },
     dashboard: {

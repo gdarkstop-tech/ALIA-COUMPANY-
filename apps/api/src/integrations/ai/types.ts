@@ -3,7 +3,8 @@
  * src/integrations/ai knows which vendor answered. Credentials stay in the backend environment
  * (secret manager) and never reach the database, the logs, the model prompt or the apps.
  */
-export type AiProviderCode = 'ANTHROPIC' | 'OPENAI' | 'GEMINI' | 'SIMULATED';
+export const AI_PROVIDER_CODES = ['ANTHROPIC', 'OPENAI', 'GEMINI', 'QWEN', 'GROK', 'KIMI', 'MEDGEMMA', 'SIMULATED'] as const;
+export type AiProviderCode = (typeof AI_PROVIDER_CODES)[number];
 export type AiEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type AiTurn = { role: 'user' | 'assistant'; content: string };
 

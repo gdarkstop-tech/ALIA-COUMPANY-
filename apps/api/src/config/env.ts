@@ -77,13 +77,26 @@ const schema = z.object({
   AI_ANTHROPIC_API_KEY: z.string().min(10).optional(),
   AI_OPENAI_API_KEY: z.string().min(10).optional(),
   AI_GEMINI_API_KEY: z.string().min(10).optional(),
+  /** Alibaba Cloud Model Studio: key and base URL belong to one workspace and region (no default). */
+  AI_QWEN_API_KEY: z.string().min(10).optional(),
+  AI_QWEN_BASE_URL: z.string().url().optional(),
+  /** xAI API (Grok). */
+  AI_GROK_API_KEY: z.string().min(10).optional(),
+  AI_GROK_BASE_URL: z.string().url().optional(),
+  /** Moonshot Kimi API (global endpoint by default; China-mainland keys need their own base URL). */
+  AI_KIMI_API_KEY: z.string().min(10).optional(),
+  AI_KIMI_BASE_URL: z.string().url().optional(),
+  /** Company-operated MedGemma endpoint (OpenAI-compatible, e.g. vLLM) and its bearer key. */
+  AI_MEDGEMMA_BASE_URL: z.string().url().optional(),
+  AI_MEDGEMMA_API_KEY: z.string().min(16).optional(),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(600_000).default(120_000),
 });
 
 export type Env = z.infer<typeof schema>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  const parsed = schema.safeParse(source);
+  // A blank line copied from .env.example (`AI_QWEN_API_KEY=`) means "not set", not an invalid value.
+  const parsed = schema.safeParse(Object.fromEntries(Object.entries(source).filter(([, v]) => v !== '')));
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
@@ -98,6 +111,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (env.AUTH_SIGNIN_RATE_LIMIT && env.AUTH_SIGNIN_RATE_LIMIT > 10) problems.push('AUTH_SIGNIN_RATE_LIMIT must be ≤ 10 in production');
     if (env.DATABASE_URL_OWNER) problems.push('DATABASE_URL_OWNER must not be provided to the production server process');
     if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
+    for (const [name, url] of [['AI_QWEN_BASE_URL', env.AI_QWEN_BASE_URL], ['AI_GROK_BASE_URL', env.AI_GROK_BASE_URL], ['AI_KIMI_BASE_URL', env.AI_KIMI_BASE_URL], ['AI_MEDGEMMA_BASE_URL', env.AI_MEDGEMMA_BASE_URL]] as const) {
+      if (url && !url.startsWith('https://')) problems.push(`${name} must use https in production (patient data in transit)`);
+    }
     if (problems.length) throw new Error(`Refusing to start with unsafe production configuration:\n  - ${problems.join('\n  - ')}`);
   }
   return env;

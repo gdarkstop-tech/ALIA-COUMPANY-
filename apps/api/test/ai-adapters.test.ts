@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createAnthropicProvider } from '../src/integrations/ai/anthropic';
-import { createOpenAiProvider } from '../src/integrations/ai/openai';
+import { createChatCompletionsProvider } from '../src/integrations/ai/chat-completions';
+import { createAiProviders } from '../src/integrations/ai';
+import { createGrokProvider, createOpenAiProvider } from '../src/integrations/ai/openai';
+import { loadEnv } from '../src/config/env';
 import { AiProviderError, type AiRequest } from '../src/integrations/ai/types';
 
 /**
@@ -142,5 +145,74 @@ describe('OpenAI adapter', () => {
     expect((await createOpenAiProvider('sk-openai-test', 5000, refused.impl).complete(request)).outcome).toBe('REFUSED');
     const cut = stub([{ status: 200, body: response({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } }) }]);
     expect((await createOpenAiProvider('sk-openai-test', 5000, cut.impl).complete(request)).outcome).toBe('TRUNCATED');
+  });
+});
+
+describe('xAI (Grok) adapter', () => {
+  const response = { id: 'resp_x', object: 'response', created_at: 1, model: 'grok-4.3', status: 'completed', output: [{ type: 'message', id: 'm', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Keep it clean.', annotations: [] }] }], usage: { input_tokens: 50, input_tokens_details: { cached_tokens: 0 }, output_tokens: 10, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 60 } };
+  it('uses the xAI base URL, sends the policy as a system message, stores nothing and sends no undocumented fields', async () => {
+    const { impl, calls } = stub([{ status: 200, body: response }]);
+    const r = await createGrokProvider('xai-test-key-0000', 5000, undefined, impl).complete({ ...request, model: 'grok-4.3' });
+    expect(r).toMatchObject({ outcome: 'ANSWERED', text: 'Keep it clean.', usage: { inputTokens: 50, outputTokens: 10 } });
+    expect(calls[0]!.url).toBe('https://api.x.ai/v1/responses');
+    expect(calls[0]!.body).toMatchObject({ model: 'grok-4.3', store: false, max_output_tokens: 1024, input: [{ role: 'system', content: 'POLICY' }, { role: 'user' }] });
+    for (const absent of ['instructions', 'safety_identifier', 'temperature']) expect(calls[0]!.body).not.toHaveProperty(absent);
+  });
+});
+
+describe('Chat Completions adapters (Qwen, Kimi, MedGemma endpoint)', () => {
+  const completion = (over: Record<string, unknown> = {}) => ({
+    id: 'c1', object: 'chat.completion', created: 1, model: 'kimi-k3',
+    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: ' Rinse with clean water. ', refusal: null } }],
+    usage: { prompt_tokens: 373, completion_tokens: 112, total_tokens: 485, prompt_tokens_details: { cached_tokens: 100 } },
+    ...over,
+  });
+  const make = (code: 'QWEN' | 'KIMI' | 'MEDGEMMA', baseURL: string, impl: typeof fetch) => createChatCompletionsProvider({ code, label: code, apiKey: 'test-key-0000000000000', baseURL, timeoutMs: 5000, fetchImpl: impl });
+
+  it('sends the policy as the system message to the configured base URL and splits cached input', async () => {
+    const { impl, calls } = stub([{ status: 200, body: completion() }]);
+    const r = await make('KIMI', 'https://api.moonshot.ai/v1', impl).complete({ ...request, model: 'kimi-k3' });
+    expect(r).toMatchObject({ outcome: 'ANSWERED', text: 'Rinse with clean water.', usage: { inputTokens: 273, outputTokens: 112, cacheReadTokens: 100 } });
+    expect(calls[0]!.url).toBe('https://api.moonshot.ai/v1/chat/completions');
+    expect(calls[0]!.headers.get('authorization')).toBe('Bearer test-key-0000000000000');
+    expect(calls[0]!.body).toMatchObject({ model: 'kimi-k3', max_tokens: 1024, messages: [{ role: 'system', content: 'POLICY' }, { role: 'user', content: request.messages[0]!.content }] });
+    for (const absent of ['user', 'temperature', 'tools']) expect(calls[0]!.body).not.toHaveProperty(absent);
+  });
+
+  it('maps truncation, content filtering and provider moderation errors', async () => {
+    const cut = stub([{ status: 200, body: completion({ choices: [{ index: 0, finish_reason: 'length', message: { role: 'assistant', content: 'Partial', refusal: null } }] }) }]);
+    expect((await make('QWEN', 'https://ws.example.invalid/compatible-mode/v1', cut.impl).complete(request)).outcome).toBe('TRUNCATED');
+    const filtered = stub([{ status: 200, body: completion({ choices: [{ index: 0, finish_reason: 'content_filter', message: { role: 'assistant', content: null, refusal: null } }] }) }]);
+    expect((await make('QWEN', 'https://ws.example.invalid/compatible-mode/v1', filtered.impl).complete(request)).outcome).toBe('REFUSED');
+    const moderated = stub([{ status: 400, body: { error: { code: 'data_inspection_failed', message: 'Input data may contain inappropriate content.' } } }]);
+    expect(await make('QWEN', 'https://ws.example.invalid/compatible-mode/v1', moderated.impl).complete(request)).toMatchObject({ outcome: 'REFUSED', refusalCategory: 'provider_moderation' });
+    const auth = stub([{ status: 401, body: { error: { message: 'bad key' } } }]);
+    await expect(make('MEDGEMMA', 'https://medgemma.example.invalid/v1', auth.impl).complete(request)).rejects.toMatchObject({ kind: 'AUTH', retryable: false });
+  });
+
+  it('health check lists models (no generation) and reports a missing model', async () => {
+    const { impl, calls } = stub([{ status: 200, body: { object: 'list', data: [{ id: 'google/medgemma-1.5-4b-it', object: 'model', created: 1, owned_by: 'vllm' }] } }]);
+    const p = make('MEDGEMMA', 'https://medgemma.example.invalid/v1', impl);
+    expect((await p.healthCheck('google/medgemma-1.5-4b-it')).ok).toBe(true);
+    expect((await p.healthCheck('other-model')).detail).toBe('MODEL_NOT_LISTED');
+    expect(calls.every((c) => c.url.endsWith('/v1/models'))).toBe(true);
+  });
+});
+
+describe('configuration', () => {
+  const base = { ...process.env } as Record<string, string>;
+  it('a provider is NOT_CONFIGURED until every required secret is present (Qwen needs its workspace URL)', () => {
+    const ai = createAiProviders(loadEnv({ ...base, AI_QWEN_API_KEY: 'sk-qwen-test-0000', AI_KIMI_API_KEY: 'sk-kimi-test-0000' }));
+    expect(ai.QWEN.status).toBe('NOT_CONFIGURED');
+    expect(ai.KIMI.status).toBe('CONFIGURED');
+    expect(ai.MEDGEMMA.status).toBe('NOT_CONFIGURED');
+    expect(createAiProviders(loadEnv({ ...base, AI_QWEN_API_KEY: 'sk-qwen-test-0000', AI_QWEN_BASE_URL: 'https://ws.example.invalid/compatible-mode/v1' })).QWEN.status).toBe('CONFIGURED');
+  });
+  it('blank values copied from .env.example mean "not set"', () => {
+    expect(createAiProviders(loadEnv({ ...base, AI_QWEN_API_KEY: '', AI_QWEN_BASE_URL: '', AI_MEDGEMMA_BASE_URL: '' })).QWEN.status).toBe('NOT_CONFIGURED');
+  });
+  it('production refuses plaintext endpoints for patient data', () => {
+    const prod = { ...base, NODE_ENV: 'production', DEMO_MODE: 'false', DEV_TOOLS_ENABLED: 'false', MFA_ENFORCEMENT: 'required', AUTH_REQUIRE_EMAIL_VERIFICATION: 'true', DATABASE_URL_OWNER: '', BETTER_AUTH_SECRET: 'prod-like-secret-0123456789abcdefghijklmnopqrstuvwxyz' };
+    expect(() => loadEnv({ ...prod, AI_MEDGEMMA_BASE_URL: 'http://10.0.0.5:8000/v1', AI_MEDGEMMA_API_KEY: 'medgemma-key-000000' })).toThrow(/AI_MEDGEMMA_BASE_URL must use https/);
   });
 });

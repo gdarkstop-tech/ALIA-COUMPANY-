@@ -3,8 +3,8 @@ import { apiSession, byId, DEMO_PASSWORD, shot, signInMobile } from './helpers';
 
 const TESTER = 'ai.tester@demo.ghayarly.test';
 const ADMIN = 'admin.demo@demo.ghayarly.test';
-type Tier = { tier: string; modelId: string; fallbackModelId: string | null; effort: string };
-type Route = { key: string; enabled: boolean; tiers: Tier[] };
+type Candidate = { id: string; tier: string; modelId: string };
+type Route = { key: string; enabled: boolean; candidates: Candidate[] };
 
 /**
  * Flow F3 — Health assistant, pre-launch: `ai.assistant` stays OFF (regulated), so only the seeded
@@ -16,6 +16,7 @@ test.describe('Flow F3 — AI health assistant (internal test account, simulated
   let admin: Awaited<ReturnType<typeof apiSession>>;
   let tester: Awaited<ReturnType<typeof apiSession>>;
   let original: Route;
+  let added: string[] = [];
 
   const setAiConsent = async (granted: boolean) => {
     const state = await (await tester.get('/v1/me/consents')).json();
@@ -30,10 +31,13 @@ test.describe('Flow F3 — AI health assistant (internal test account, simulated
     const cc = await (await admin.get('/v1/admin/ai/control-centre')).json();
     original = cc.routes.find((r: Route) => r.key === 'patient.chat');
     const simulated = cc.models.find((m: { provider: string }) => m.provider === 'SIMULATED');
-    const res = await admin.patch('/v1/admin/ai/routes/patient.chat', {
-      data: { enabled: true, tiers: original.tiers.map((t) => ({ ...t, modelId: simulated.id, fallbackModelId: null })) },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    // The simulator becomes the first candidate of every tier (internal test accounts only).
+    for (const tier of ['BASIC', 'ADVANCED', 'PREMIUM']) {
+      const res = await admin.post('/v1/admin/ai/routes/patient.chat/candidates', { data: { tier, modelId: simulated.id, priority: 1 } });
+      expect(res.ok(), await res.text()).toBeTruthy();
+      added.push((await res.json()).routes.find((r: Route) => r.key === 'patient.chat').candidates.find((c: Candidate) => c.tier === tier && c.modelId === simulated.id).id);
+    }
+    expect((await admin.patch('/v1/admin/ai/routes/patient.chat', { data: { enabled: true } })).ok()).toBeTruthy();
     // Start from "not consented", and with a profile of their own (the home screen needs one).
     await setAiConsent(false);
     if (!(await (await tester.get('/v1/patients')).json()).length) {
@@ -45,7 +49,9 @@ test.describe('Flow F3 — AI health assistant (internal test account, simulated
   });
 
   test.afterAll(async () => {
-    await admin.patch('/v1/admin/ai/routes/patient.chat', { data: { enabled: original.enabled, tiers: original.tiers } });
+    for (const id of added) await admin.delete(`/v1/admin/ai/candidates/${id}`);
+    added = [];
+    await admin.patch('/v1/admin/ai/routes/patient.chat', { data: { enabled: original.enabled } });
     await setAiConsent(false);
   });
 

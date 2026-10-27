@@ -23,7 +23,7 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Tx } from '../../db/client';
 import { aiConversations, aiMessages, userProfiles } from '../../db/schema';
-import { AiProviderError, type AiProviderCode, type AiResult, type AiTurn } from '../../integrations/ai';
+import { AiProviderError, configuredProviders, type AiProviderCode, type AiResult, type AiTurn } from '../../integrations/ai';
 import { AppError, notFound } from '../../lib/errors';
 import { inContext, requirePrincipal, type Principal } from '../../lib/principal';
 import { sessionKey } from '../../lib/rateLimitKey';
@@ -36,15 +36,11 @@ const HISTORY_CHARS = 24_000;
 const idParam = z.object({ id: z.string().uuid() });
 const iso = (v: string) => new Date(v).toISOString();
 
-type Reservation = {
-  reservation_id: string;
-  provider: AiProviderCode;
-  model_id: string;
-  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-  max_output_tokens: number;
-  fallback_provider: AiProviderCode | null;
-  fallback_model_id: string | null;
-};
+type Candidate = { provider: AiProviderCode; modelId: string; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; paid: boolean };
+type Reservation = { reservation_id: string; candidates: Candidate[]; max_output_tokens: number };
+
+/** The providers this server can call, as a PostgreSQL array literal for the router. */
+const providerArray = (codes: AiProviderCode[]) => sql`${`{${codes.join(',')}}`}::app.ai_provider[]`;
 
 function messageDto(m: typeof aiMessages.$inferSelect): AiChatMessage {
   return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], content: m.content, createdAt: iso(m.createdAt) };
@@ -65,12 +61,17 @@ export async function aiRoutes(app: FastifyInstance) {
 
   async function assistantStatus(request: FastifyRequest, principal: Principal): Promise<AiAssistantStatus> {
     return inContext(request, principal, async (tx) => {
-      const r = await tx.execute<{ feature_on: boolean; internal_test: boolean; consented: boolean; route_on: boolean; provider: AiProviderCode | null; model_active: boolean | null }>(
-        sql`select * from app.ai_route_status(${ROUTE})`,
+      const r = await tx.execute<{ feature_on: boolean; internal_test: boolean; consented: boolean; route_on: boolean; eligible: number; eligible_free: number; budget_ok: boolean }>(
+        sql`select * from app.ai_route_status(${ROUTE}, ${providerArray(configuredProviders(ai))})`,
       );
       const s = r.rows[0];
-      const providerReady = Boolean(s?.provider && s.model_active && s.route_on && ai[s.provider].status === 'CONFIGURED');
-      const unavailableReason = !s || (!s.feature_on && !s.internal_test) ? 'FEATURE_DISABLED' : !providerReady ? 'NOT_CONFIGURED' : !s.consented ? 'CONSENT_REQUIRED' : null;
+      // Same eligibility rules as the router (configured, active, approved models for this plan tier).
+      const unavailableReason: AiAssistantStatus['unavailableReason'] =
+        !s || (!s.feature_on && !s.internal_test) ? 'FEATURE_DISABLED'
+        : !s.route_on || s.eligible === 0 ? 'NOT_CONFIGURED'
+        : s.eligible_free === 0 && !s.budget_ok ? 'PAUSED'
+        : !s.consented ? 'CONSENT_REQUIRED'
+        : null;
       return { unavailableReason, allowance: unavailableReason === 'FEATURE_DISABLED' ? null : await allowance(tx) };
     });
   }
@@ -139,12 +140,16 @@ export async function aiRoutes(app: FastifyInstance) {
         const [m] = await tx.select().from(aiMessages).where(eq(aiMessages.id, r.rows[0]!.id));
         return { emergency: messageDto(m!), allowance: await allowance(tx) } as const;
       }
-      const reservation = (await tx.execute<Reservation>(sql`select * from app.ai_reserve(${ROUTE}, 1)`)).rows[0]!;
+      const summary = c.patientId ? await patientSummary(tx, c.patientId) : null;
+      // The router sees only the size of the request and its language, never its content.
+      const requestChars = [...content].length + (summary ? [...summary].length : 0);
+      const reservation = (
+        await tx.execute<Reservation>(sql`select * from app.ai_reserve(${ROUTE}, 1, ${providerArray(configuredProviders(ai))}, ${requestChars}, ${locale})`)
+      ).rows[0]!;
       await tx.insert(aiMessages).values({ conversationId: id, userId: principal.userId, role: 'user', content });
       if (!c.title) await tx.update(aiConversations).set({ title: content.slice(0, 60) }).where(eq(aiConversations.id, id));
       // History: the person's own messages and the assistant's real answers, newest last.
       const history = (await tx.select().from(aiMessages).where(and(eq(aiMessages.conversationId, id), inArray(aiMessages.kind, ['MESSAGE', 'SIMULATED']))).orderBy(desc(aiMessages.createdAt)).limit(HISTORY_MESSAGES)).reverse();
-      const summary = c.patientId ? await patientSummary(tx, c.patientId) : null;
       return { reservation, history, summary, locale } as const;
     });
     if ('emergency' in prep) return { message: prep.emergency!, allowance: prep.allowance ?? null };
@@ -160,19 +165,21 @@ export async function aiRoutes(app: FastifyInstance) {
     while (turns[0]?.role === 'assistant') turns.shift();
     if (summary && turns[0]) turns[0] = { role: 'user', content: `${summary}\n\n${turns[0].content}` };
 
-    // 3. Provider call(s), outside the database transaction.
-    const request_ = { system: ASSISTANT_POLICY, messages: turns, maxOutputTokens: reservation.max_output_tokens, effort: reservation.effort, requestId: request.id, endUserRef: endUserRef(principal.userId) };
+    // 3. Provider call(s), outside the database transaction: the first eligible candidate, then —
+    //    only for a retryable failure — one fallback, preferring a different provider.
+    const base = { system: ASSISTANT_POLICY, messages: turns, maxOutputTokens: reservation.max_output_tokens, requestId: request.id, endUserRef: endUserRef(principal.userId) };
+    const [primary, ...rest] = reservation.candidates;
     let result: AiResult | null = null;
-    let servedBy: AiProviderCode = reservation.provider;
+    let servedBy: AiProviderCode = primary!.provider;
     try {
-      result = await ai[reservation.provider].complete({ ...request_, model: reservation.model_id });
+      result = await ai[primary!.provider].complete({ ...base, model: primary!.modelId, effort: primary!.effort });
     } catch (e) {
-      const retry = e instanceof AiProviderError && e.retryable && reservation.fallback_provider && reservation.fallback_model_id && ai[reservation.fallback_provider].status === 'CONFIGURED';
-      request.log.warn({ provider: reservation.provider, kind: e instanceof AiProviderError ? e.kind : 'UNKNOWN', fallback: Boolean(retry) }, 'ai provider call failed');
-      if (retry) {
+      const fallback = e instanceof AiProviderError && e.retryable ? (rest.find((c) => c.provider !== primary!.provider) ?? rest[0]) : undefined;
+      request.log.warn({ provider: primary!.provider, kind: e instanceof AiProviderError ? e.kind : 'UNKNOWN', fallback: fallback?.provider ?? null }, 'ai provider call failed');
+      if (fallback) {
         try {
-          servedBy = reservation.fallback_provider!;
-          result = await ai[servedBy].complete({ ...request_, model: reservation.fallback_model_id! });
+          servedBy = fallback.provider;
+          result = await ai[fallback.provider].complete({ ...base, model: fallback.modelId, effort: fallback.effort });
         } catch (e2) {
           request.log.warn({ provider: servedBy, kind: e2 instanceof AiProviderError ? e2.kind : 'UNKNOWN' }, 'ai fallback call failed');
         }

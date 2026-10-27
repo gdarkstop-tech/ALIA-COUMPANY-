@@ -1,80 +1,101 @@
-# AI gateway — status, setup and cost control
+# DMW Medical AI — gateway status, setup and cost control
 
-**Verified on:** 2026-10-27 · Design: [ADR 0008](../adr/0008-ai-gateway.md)
+**Verified on:** 2026-10-27 · Design: [ADR 0008](../adr/0008-ai-gateway.md), [ADR 0009](../adr/0009-model-registry-routing-evaluation.md)
 
-> **Status:** the gateway, quotas, cost metering, admin control centre and the patient text chat
-> are `CODE_READY`. **No AI provider is configured** (`NOT_CONFIGURED` for Anthropic, OpenAI and
-> Gemini), no model price has been verified, no monthly cap is set, and `ai.assistant` is OFF.
-> No real AI answer has been produced by this system. The chat has only been exercised with the
-> development simulator, whose answers are labelled "SIMULATED".
+> **Status:** the multi-provider gateway, model registry, eligibility-based routing, evaluation
+> suite, quotas, budgets, cost metering, admin control centre and the patient text chat are
+> `CODE_READY`. **No AI provider is configured on any environment** — Anthropic, OpenAI, Gemini,
+> Qwen, Grok, Kimi and MedGemma are all `NOT_CONFIGURED` — no model price is verified, no monthly
+> cap is set, no model has patient-data or clinical approval, and `ai.assistant` is OFF. **No real
+> AI answer has been produced by this system.** Every run so far used scripted providers in automated
+> tests or the labelled development simulator.
 
 ## 1. What exists
 
 | Part | Where | Verified by |
 |---|---|---|
-| Provider adapters: Anthropic (Messages API, official SDK), OpenAI (Responses API), Gemini (`@google/genai`), simulator | `apps/api/src/integrations/ai/` | `apps/api/test/ai-adapters.test.ts` (8): real Anthropic/OpenAI adapters against a stubbed HTTP layer (request shape, usage, refusals, truncation, retries). Gemini: type checking only. **Not verified against the live APIs** (no keys). |
-| Gateway: reserve → call → settle, fallback model, emergency short-circuit | `apps/api/src/modules/ai/routes.ts`, migration `0011_ai_gateway.sql` | `apps/api/test/ai.test.ts` (13) |
-| Weekly allowances (Silver 50 / Gold 150 / Platinum 400 chat messages; 5 / 15 / 35 analyses; 180 / 1,200 / 2,700 voice seconds), Monday 00:00 Cairo reset, clinicians 0 by default | `app.ai_plan_quotas`, `app.ai_role_quotas` | `ai.test.ts`: concurrent requests at the limit — exactly the allowance succeeds |
-| Monthly spending cap, verified prices, audit of every change | `app.ai_budget`, `app.ai_models`, trigger `app.ai_config_audit` | `ai.test.ts` |
-| AI consent (off by default), privacy-centre switch, legal notice | migration `0010_ai_consent.sql`, `packages/shared/src/legal.ts` (`ai-assistant-consent`) | `ai.test.ts`, E2E `flow-f-assistant` |
-| Patient chat (mobile): availability from the server, allowance, opt-in profile summary, emergency card with call button, delete conversation | `apps/mobile/src/app/patient/assistant/` | E2E `flow-f-assistant` (web harness) |
-| AI control centre (admin) | `apps/admin/src/app/ai/page.tsx` | E2E `flow-e-ai` |
+| Adapters: Anthropic (Messages API), OpenAI and xAI Grok (Responses API, `store: false`), Gemini (`@google/genai`), Qwen / Kimi / MedGemma endpoint (OpenAI-compatible Chat Completions), simulator | `apps/api/src/integrations/ai/` | `test/ai-adapters.test.ts` (15): real adapters against a **stubbed HTTP layer** (request shape, usage incl. cache, refusals, moderation errors, truncation, retries, health checks, env rules). Gemini: type checking only. **None verified against a live API** (no keys). |
+| Model registry: capabilities, hosting, region, known limitations, verified prices, patient-data approval | `app.ai_models` (migrations 0011, 0013); Admin → AI → Models | `test/ai-routing.test.ts` |
+| Router: ordered candidates per route and tier; eligibility (configured, active, capability, data approval, clinical approval, budgets); complexity and language preference; one fallback on a retryable failure, preferring another provider | `app.ai_route_candidates`, `app.ai_reserve()` | `ai-routing.test.ts` (complexity, language, unconfigured provider skipped, budgets, concurrency), `ai.test.ts` (fallback) |
+| Evaluation suite: 25 synthetic EN/AR starter cases (DRAFT), deterministic screens, runs metered into company spend, clinical scoring, approval thresholds, revocation | `app.ai_eval_*`, `app.ai_model_route_approvals`; Admin → AI → Evaluation | `ai-routing.test.ts` (review by non-author, version bump on edit, unsafe answer blocks approval, approval enables STANDARD patients, revocation stops routing) |
+| Weekly allowances (Silver 50 / Gold 150 / Platinum 400 messages; 5 / 15 / 35 analyses; 180 / 1,200 / 2,700 voice seconds), Monday 00:00 Cairo reset; per-person concurrency limit across devices | `app.ai_plan_quotas`, `app.ai_routes.max_concurrent_per_user` | `ai.test.ts`, `ai-routing.test.ts` |
+| Budgets: company monthly cap, per-plan and per-person monthly caps, alerts at 50 / 80 / 100 % | `app.ai_budget`, `app.ai_plan_budgets`, `app.ai_budget_alerts` | `ai-routing.test.ts` |
+| AI consent (off by default), privacy-centre switch, legal notice | migration 0010, `packages/shared/src/legal.ts` | `ai.test.ts`, E2E `flow-f-assistant` |
+| Patient chat (mobile): availability from the server, allowance, opt-in profile summary, emergency card with call button, delete conversation | `apps/mobile/src/app/patient/assistant/` | E2E `flow-f-assistant` (**web harness only**) |
+| AI control centre: Overview, Models, Routing, Evaluation | `apps/admin/src/app/ai/` | E2E `flow-e-ai` |
 
-Only analyses and voice **quotas** exist; analysis (documents, lab reports) and voice features are
-not built.
+Not built yet (later slices): realtime voice, lab/document scanning, health analytics, clinician
+copilots, curated medical knowledge, product knowledge, AI response reporting, wound and imaging
+research. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
+have no adapter yet.
 
 ## 2. Configure a provider (exact steps)
 
-Each provider shows `NOT_CONFIGURED` until its key is present in the API's environment.
+1. **Business-owned account** (an Alia Group organisation, never a personal Claude / ChatGPT
+   subscription): Anthropic Console, OpenAI Platform, Google AI Studio or Vertex AI (**paid tier**:
+   the free tier may use content to improve Google products), Alibaba Cloud Model Studio (choose
+   the region; keys and endpoints are workspace- and region-specific), xAI Console, Kimi platform
+   (global or China-mainland — keys are region-locked). Set billing, a provider-side spending limit
+   and rate limits there. With legal, review the commercial terms, DPA, retention options and
+   processing region; they go into the AI notice placeholder and the privacy policy.
+2. **Secrets — API server's secret manager only**, one value per environment:
 
-1. **Business-owned account.** Create (or use) an organisation account owned by Alia Group, not a
-   personal one:
-   - Anthropic: Claude Console → organisation → workspace for this app → API key.
-   - OpenAI: OpenAI Platform → organisation → project for this app → API key.
-   - Google: Google AI Studio or Vertex AI in a company Google Cloud project → API key / service.
-   Set billing, a provider-side spending limit and rate limits in that console. Review the provider's
-   commercial terms, data-processing addendum, data-retention options and processing region with
-   legal (they go into the `ai-assistant-consent` placeholder and the privacy policy).
-2. **Store the key only in the API server's secret manager**, one value per environment:
-
-   | Variable | Provider |
+   | Variables | Provider |
    |---|---|
    | `AI_ANTHROPIC_API_KEY` | Anthropic |
    | `AI_OPENAI_API_KEY` | OpenAI |
    | `AI_GEMINI_API_KEY` | Google Gemini |
-   | `AI_REQUEST_TIMEOUT_MS` (optional, default 120000) | all |
+   | `AI_QWEN_API_KEY` + `AI_QWEN_BASE_URL` (e.g. `https://<WorkspaceId>.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`) | Alibaba Qwen |
+   | `AI_GROK_API_KEY` (optional `AI_GROK_BASE_URL`, default `https://api.x.ai/v1`) | xAI Grok |
+   | `AI_KIMI_API_KEY` (optional `AI_KIMI_BASE_URL`, default `https://api.moonshot.ai/v1`) | Moonshot Kimi |
+   | `AI_MEDGEMMA_BASE_URL` + `AI_MEDGEMMA_API_KEY` | MedGemma endpoint |
+   | `AI_REQUEST_TIMEOUT_MS` (default 120000) | all |
 
-   Never put a key in the repository, in `EXPO_PUBLIC_*` / EAS variables, in the mobile app, in the
-   admin console or in the database. `pnpm release:check` fails if a key pattern is committed.
-3. Restart the API. In **Admin → AI control centre → Providers** the row turns `Configured`.
-   Use **Check connection**: it calls the provider's model-metadata endpoint (no generation, not billed).
-4. **Models and prices.** The Anthropic rows are seeded *inactive and unverified* with reference
-   prices (USD per 1M tokens, cached 2026-10-06: Opus 5.5 $4 in / $20 out / $0.20 cache read;
-   Sonnet 5.5 $2 / $10 / $0.20; Haiku 5.5 $0.10 / $0.50). Compare each price with the provider's
-   current price list or your contract, fix it if needed, record the source, then **Mark prices
-   verified** and **Activate**. The database refuses to activate a paid model without a verified price.
-   Add OpenAI/Gemini models with **Add model** (they start inactive and unverified).
-5. **Routing.** For `patient.chat`, pick the model, optional fallback (used when the provider fails
-   or is overloaded) and effort for each tier (Silver = Basic, Gold = Advanced, Platinum = Premium),
-   then enable the route.
-6. **Monthly cap.** Set a cap in US dollars. Until one is set, paid models are blocked
-   (`AI_BUDGET_NOT_SET`); when metered spend reaches it they stop for everyone (`AI_BUDGET_EXHAUSTED`).
-7. **Internal testing.** Only `INTERNAL_TEST` accounts can use the assistant while `ai.assistant`
-   is off. In development the seed creates `ai.tester@demo.ghayarly.test` (synthetic). In other
-   environments an operator sets `account_kind` with the owner database role (never via the app).
-8. **Launch.** Enabling `ai.assistant` for everyone needs the evidence reference the database asks
-   for: clinical-safety and AI-governance review (HEALTHCARE_REVIEW R3), EDA position (R2), PDPC
-   licence / cross-border permit if the provider processes data outside Egypt (R13), legal approval
-   of the AI notice, and store disclosures (Apple 5.1.2(i) explicit permission before sharing data
-   with third-party AI — implemented as the AI consent switch; Google Play AI-generated content rules).
+   Never in the repository, `EXPO_PUBLIC_*` / EAS variables, the apps, the admin console or the
+   database. Production refuses non-https AI base URLs. `pnpm release:check` scans tracked files
+   for Anthropic, OpenAI and Google key patterns.
+3. Restart the API. Admin → AI → Overview shows the provider `Configured`; **Check connection** makes
+   a model-metadata request (no generation, not billed).
+4. **Models** (Admin → AI → Models). Reference rows are seeded *inactive and unverified* from the
+   providers' pages (fetched 2026-10-27): Anthropic Opus/Sonnet/Haiku 5.5; OpenAI `gpt-6.1-terra`,
+   `gpt-6-luna`; Gemini `gemini-3.8-flash`, `gemini-3.1-flash-lite`; xAI `grok-4.3`, `grok-4.7`;
+   Kimi `kimi-k3`, `kimi-k3.1-pro` (no price); Qwen `qwen-plus` (no price); MedGemma
+   `google/medgemma-1.5-4b-it` (self-hosted; no price). Confirm each model is available to the
+   company account, enter or correct prices with their source, **Mark prices verified**, **Activate**.
+5. **Patient-data approval** (holder of `ai.data.approve`): enter the DPA / privacy-terms reference.
+   Without it a model never serves a real patient on a route that carries patient data.
+6. **Evaluation and clinical approval**: a clinical reviewer reviews (and may rewrite) the starter
+   cases; an administrator runs the evaluation on the model (spends budget); the reviewer scores
+   every answer and, if the thresholds are met with no unsafe answer, approves the model for
+   `patient.chat`. Only then can STANDARD accounts be routed to it.
+7. **Routing** (Admin → AI → Routing): add the model as a candidate per tier (priority, optional
+   language / SIMPLE-COMPLEX tag, effort), enable the route. The table shows why any candidate would
+   be skipped.
+8. **Budgets**: set the company monthly cap (required for any paid model), optionally per-plan and
+   per-person caps.
+9. **Launch** of `ai.assistant` for everyone still needs the evidence reference the database asks for
+   (clinical-safety and AI-governance review R3, EDA position R2, PDPC licence / cross-border permit
+   R13 if processing is outside Egypt), legal approval of the AI notice, and store disclosures.
+
+### MedGemma specifics
+- Model card (HAI-DEF terms): outputs are preliminary and not intended to directly inform diagnosis,
+  patient management or treatment; **not evaluated for multi-turn use**; safety evaluated mainly in
+  English. Distribution as a hosted service brings obligations under the HAI-DEF terms (legal review).
+- Hosting: run it on company infrastructure behind an OpenAI-compatible server (e.g. vLLM) with a
+  bearer key, or a managed endpoint exposing the same API. Vertex AI endpoints authenticate with
+  short-lived Google credentials, which this adapter does not mint — put an authenticating gateway
+  in front, or extend the adapter. GPU size, cost and region must be decided before deployment;
+  nothing was downloaded or deployed in this build.
+- Intended first use: structured extraction from lab reports (later slice), only after evaluation on
+  that task. It is not routed to multi-turn patient chat by default.
 
 ## 3. Cost metering
 
-- Cost per request = provider-reported tokens × verified price of the model that actually served it
-  (input, output and cache-read priced separately; Anthropic server-side fallback attempts are all
-  metered). Without a verified price the cost is the requested model's price, marked *estimated*.
-- Refusals by the provider and failures release the allowance; emergencies never reach a model.
-- The cap is checked when a request is reserved, so requests already in flight can exceed it by
-  at most one answer each.
-- **Missing billing data:** no verified prices, no monthly cap, no provider invoices to reconcile
-  against. Provider prices are not assumed free and are not hard-coded as final.
+- Cost per request = provider-reported tokens × verified price of the model that served it (input,
+  output, cache-read; all Anthropic server-side fallback attempts metered). Without a verified price
+  the cost is marked *estimated*. Evaluation runs count toward company spend.
+- Refusals and failures release the allowance; emergencies never reach a model.
+- Caps are checked when a request is reserved, so requests already in flight can exceed a cap by at
+  most one answer each.
+- **Missing billing data:** no verified prices, no caps, no provider invoices to reconcile against;
+  Kimi, Qwen and MedGemma prices are unknown. Prices are not assumed free and are not final until verified.

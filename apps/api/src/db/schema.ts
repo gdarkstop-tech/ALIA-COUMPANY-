@@ -61,7 +61,7 @@ export const statusReasonEnum = appSchema.enum('status_reason', [
 ]);
 export const statusActionEnum = appSchema.enum('status_action', ['SUSPEND', 'BLOCK', 'REACTIVATE', 'RESTRICT_BOOKINGS', 'LIFT_BOOKING_RESTRICTION', 'APPEAL_GRANTED']);
 export const appealStatusEnum = appSchema.enum('appeal_status', ['OPEN', 'GRANTED', 'DENIED', 'WITHDRAWN']);
-export const aiProviderEnum = appSchema.enum('ai_provider', ['ANTHROPIC', 'OPENAI', 'GEMINI', 'SIMULATED']);
+export const aiProviderEnum = appSchema.enum('ai_provider', ['ANTHROPIC', 'OPENAI', 'GEMINI', 'SIMULATED', 'QWEN', 'GROK', 'KIMI', 'MEDGEMMA']);
 export const aiMetricEnum = appSchema.enum('ai_metric', ['CHAT_MESSAGES', 'ANALYSES', 'VOICE_SECONDS']);
 export const aiModelTierEnum = appSchema.enum('ai_model_tier', ['BASIC', 'ADVANCED', 'PREMIUM']);
 export const commerceEventTypeEnum = appSchema.enum('commerce_event_type', ['PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_PREVIEW', 'ORDER_PAID', 'ORDER_REFUNDED']);
@@ -596,6 +596,14 @@ export const aiModels = appSchema.table('ai_models', {
   priceSource: text('price_source'),
   priceVerifiedAt: ts('price_verified_at'),
   active: boolean('active').notNull().default(false),
+  // Registry (migration 0013)
+  capabilities: text('capabilities').array().notNull().default(sql`ARRAY['CHAT']`),
+  medicalSpecialized: boolean('medical_specialized').notNull().default(false),
+  hosting: text('hosting').notNull().default('PROVIDER_API'),
+  dataRegion: text('data_region'),
+  notes: text('notes'),
+  patientDataApprovalRef: text('patient_data_approval_ref'),
+  patientDataApprovedAt: ts('patient_data_approved_at'),
 });
 
 export const aiRoutes = appSchema.table('ai_routes', {
@@ -605,19 +613,124 @@ export const aiRoutes = appSchema.table('ai_routes', {
   metric: aiMetricEnum('metric').notNull(),
   enabled: boolean('enabled').notNull().default(false),
   maxOutputTokens: integer('max_output_tokens').notNull(),
+  carriesPatientData: boolean('carries_patient_data').notNull(),
+  requiredCapability: text('required_capability').notNull(),
+  requireClinicalApproval: boolean('require_clinical_approval').notNull(),
+  complexityRouting: boolean('complexity_routing').notNull(),
+  simpleMaxChars: integer('simple_max_chars').notNull(),
+  maxConcurrentPerUser: integer('max_concurrent_per_user').notNull(),
 });
 
-export const aiRouteModels = appSchema.table(
-  'ai_route_models',
-  {
-    routeKey: text('route_key').notNull(),
-    tier: aiModelTierEnum('tier').notNull(),
-    model: uuid('model').notNull(),
-    fallbackModel: uuid('fallback_model'),
-    effort: text('effort').notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.routeKey, t.tier] })],
-);
+/** Ordered routing candidates per plan tier (migration 0013); the database picks eligible ones. */
+export const aiRouteCandidates = appSchema.table('ai_route_candidates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  routeKey: text('route_key').notNull(),
+  tier: aiModelTierEnum('tier').notNull(),
+  model: uuid('model').notNull(),
+  complexity: text('complexity').notNull().default('ANY'),
+  language: text('language').notNull().default('ANY'),
+  priority: integer('priority').notNull().default(100),
+  effort: text('effort').notNull().default('medium'),
+  enabled: boolean('enabled').notNull().default(true),
+});
+
+export const aiPlanBudgets = appSchema.table('ai_plan_budgets', {
+  planCode: planCodeEnum('plan_code').primaryKey(),
+  userMonthlyLimitMicros: bigint('user_monthly_limit_micros', { mode: 'number' }),
+  planMonthlyLimitMicros: bigint('plan_monthly_limit_micros', { mode: 'number' }),
+});
+
+export const aiBudgetAlerts = appSchema.table('ai_budget_alerts', {
+  id: uuid('id').primaryKey(),
+  scope: text('scope').notNull(),
+  planCode: planCodeEnum('plan_code'),
+  month: text('month').notNull(),
+  thresholdPct: integer('threshold_pct').notNull(),
+  spendMicros: bigint('spend_micros', { mode: 'number' }).notNull(),
+  limitMicros: bigint('limit_micros', { mode: 'number' }).notNull(),
+  createdAt: ts('created_at').notNull(),
+});
+
+// ------------------------------------------------------------------ medical AI evaluation suite (migration 0013)
+/** Synthetic cases only; they count once clinically reviewed. */
+export const aiEvalCases = appSchema.table('ai_eval_cases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  code: text('code').notNull(),
+  category: text('category').notNull(),
+  language: text('language').notNull(),
+  prompt: text('prompt').notNull(),
+  context: text('context'),
+  expectedBehavior: text('expected_behavior').notNull(),
+  checks: jsonb('checks').$type<Record<string, unknown>>().notNull(),
+  status: text('status').notNull().default('DRAFT'),
+  version: integer('version').notNull().default(1),
+  authoredByUserId: text('authored_by_user_id'),
+  reviewedByUserId: text('reviewed_by_user_id'),
+  reviewedAt: ts('reviewed_at'),
+  updatedAt: ts('updated_at').notNull().default(sql`now()`),
+});
+
+export const aiEvalRuns = appSchema.table('ai_eval_runs', {
+  id: uuid('id').primaryKey(),
+  model: uuid('model').notNull(),
+  provider: aiProviderEnum('provider').notNull(),
+  modelId: text('model_id').notNull(),
+  routeKey: text('route_key').notNull(),
+  policyVersion: text('policy_version').notNull(),
+  status: text('status').notNull(),
+  failure: text('failure'),
+  caseCount: integer('case_count').notNull(),
+  completedCount: integer('completed_count').notNull(),
+  automatedPassCount: integer('automated_pass_count').notNull(),
+  inputTokens: bigint('input_tokens', { mode: 'number' }).notNull(),
+  outputTokens: bigint('output_tokens', { mode: 'number' }).notNull(),
+  costMicros: bigint('cost_micros', { mode: 'number' }).notNull(),
+  costEstimated: boolean('cost_estimated').notNull(),
+  startedByUserId: text('started_by_user_id'),
+  startedAt: ts('started_at').notNull(),
+  finishedAt: ts('finished_at'),
+});
+
+export const aiEvalResults = appSchema.table('ai_eval_results', {
+  id: uuid('id').primaryKey(),
+  runId: uuid('run_id').notNull(),
+  caseId: uuid('case_id').notNull(),
+  caseVersion: integer('case_version').notNull(),
+  caseCode: text('case_code').notNull(),
+  category: text('category').notNull(),
+  language: text('language').notNull(),
+  status: text('status').notNull(),
+  output: text('output'),
+  outcome: text('outcome'),
+  servedModel: text('served_model'),
+  latencyMs: integer('latency_ms'),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  costMicros: bigint('cost_micros', { mode: 'number' }),
+  automatedChecks: jsonb('automated_checks').$type<Record<string, unknown>>(),
+  automatedPass: boolean('automated_pass'),
+  reviewedByUserId: text('reviewed_by_user_id'),
+  reviewedAt: ts('reviewed_at'),
+  accuracy: integer('accuracy'),
+  hallucination: boolean('hallucination'),
+  unsafe: boolean('unsafe'),
+  arabicQuality: integer('arabic_quality'),
+  reviewNotes: text('review_notes'),
+});
+
+export const aiModelRouteApprovals = appSchema.table('ai_model_route_approvals', {
+  id: uuid('id').primaryKey(),
+  routeKey: text('route_key').notNull(),
+  model: uuid('model').notNull(),
+  runId: uuid('run_id').notNull(),
+  policyVersion: text('policy_version').notNull(),
+  summary: jsonb('summary').$type<Record<string, unknown>>().notNull(),
+  note: text('note').notNull(),
+  approvedByUserId: text('approved_by_user_id'),
+  approvedAt: ts('approved_at').notNull(),
+  revokedAt: ts('revoked_at'),
+  revokeNote: text('revoke_note'),
+});
 
 export const aiPlanQuotas = appSchema.table(
   'ai_plan_quotas',

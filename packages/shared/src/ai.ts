@@ -4,7 +4,14 @@ import { z } from 'zod';
  * AI gateway contracts (migrations 0010–0011). Providers are replaceable; the apps never see
  * provider credentials, model prices or which vendor answered beyond a display label.
  */
-export const AI_PROVIDERS = ['ANTHROPIC', 'OPENAI', 'GEMINI', 'SIMULATED'] as const;
+export const AI_PROVIDERS = ['ANTHROPIC', 'OPENAI', 'GEMINI', 'QWEN', 'GROK', 'KIMI', 'MEDGEMMA', 'SIMULATED'] as const;
+/** Providers an administrator can register models for (the simulator is built in). */
+export const AI_REAL_PROVIDERS = ['ANTHROPIC', 'OPENAI', 'GEMINI', 'QWEN', 'GROK', 'KIMI', 'MEDGEMMA'] as const;
+export const AI_CAPABILITIES = ['CHAT', 'VISION', 'DOCUMENT_EXTRACTION', 'REALTIME_VOICE', 'SPEECH_TO_TEXT', 'TEXT_TO_SPEECH', 'EMBEDDING'] as const;
+export type AiCapability = (typeof AI_CAPABILITIES)[number];
+export const AI_HOSTING = ['PROVIDER_API', 'MANAGED_ENDPOINT', 'SELF_HOSTED', 'LOCAL'] as const;
+export const AI_COMPLEXITIES = ['ANY', 'SIMPLE', 'COMPLEX'] as const;
+export const AI_CANDIDATE_LANGUAGES = ['ANY', 'ar', 'en'] as const;
 export type AiProviderCode = (typeof AI_PROVIDERS)[number];
 export const AI_METRICS = ['CHAT_MESSAGES', 'ANALYSES', 'VOICE_SECONDS'] as const;
 export type AiMetric = (typeof AI_METRICS)[number];
@@ -33,7 +40,7 @@ export type AiAllowance = {
 
 export type AiAssistantStatus = {
   /** Why the assistant cannot be used right now (null = available). */
-  unavailableReason: 'FEATURE_DISABLED' | 'CONSENT_REQUIRED' | 'NOT_CONFIGURED' | null;
+  unavailableReason: 'FEATURE_DISABLED' | 'CONSENT_REQUIRED' | 'NOT_CONFIGURED' | 'PAUSED' | null;
   allowance: AiAllowance | null;
 };
 
@@ -44,7 +51,7 @@ export type AiConversationDetail = AiConversation & { messages: AiChatMessage[] 
 export type AiReply = { message: AiChatMessage; allowance: AiAllowance | null };
 
 // ---------------------------------------------------------------- AI control centre (admin)
-export type AiProviderStatus = { code: AiProviderCode; configured: boolean; productionAllowed: boolean; envVar: string | null };
+export type AiProviderStatus = { code: AiProviderCode; configured: boolean; productionAllowed: boolean; envVars: string[] };
 export type AiModelAdmin = {
   id: string;
   provider: AiProviderCode;
@@ -57,6 +64,16 @@ export type AiModelAdmin = {
   priceSource: string | null;
   priceVerifiedAt: string | null;
   active: boolean;
+  capabilities: AiCapability[];
+  medicalSpecialized: boolean;
+  hosting: (typeof AI_HOSTING)[number];
+  dataRegion: string | null;
+  notes: string | null;
+  /** Approval to send patient data to this provider (DPA / privacy terms reference). */
+  patientDataApprovalRef: string | null;
+  patientDataApprovedAt: string | null;
+  /** Routes on which a clinical reviewer approved this model (active approvals). */
+  clinicalApprovals: { routeKey: string; approvalId: string; approvedAt: string; runId: string }[];
 };
 export type AiRouteAdmin = {
   key: string;
@@ -66,7 +83,25 @@ export type AiRouteAdmin = {
   metric: AiMetric;
   enabled: boolean;
   maxOutputTokens: number;
-  tiers: { tier: AiModelTier; modelId: string; fallbackModelId: string | null; effort: (typeof AI_EFFORTS)[number] }[];
+  carriesPatientData: boolean;
+  requiredCapability: AiCapability;
+  requireClinicalApproval: boolean;
+  complexityRouting: boolean;
+  simpleMaxChars: number;
+  maxConcurrentPerUser: number;
+  candidates: AiRouteCandidate[];
+};
+export type AiRouteCandidate = {
+  id: string;
+  tier: AiModelTier;
+  modelId: string;
+  complexity: (typeof AI_COMPLEXITIES)[number];
+  language: (typeof AI_CANDIDATE_LANGUAGES)[number];
+  priority: number;
+  effort: (typeof AI_EFFORTS)[number];
+  enabled: boolean;
+  /** Why the router would skip it for STANDARD accounts right now (empty = eligible). */
+  blockers: ('MODEL_INACTIVE' | 'PROVIDER_NOT_CONFIGURED' | 'CAPABILITY_MISSING' | 'NO_PATIENT_DATA_APPROVAL' | 'NO_CLINICAL_APPROVAL' | 'DISABLED')[];
 };
 export type AiQuotaAdmin = { plans: { plan: 'SILVER' | 'GOLD' | 'PLATINUM'; tier: AiModelTier; limits: Record<AiMetric, number> }[]; clinicians: { role: 'DOCTOR' | 'NURSE'; limits: Partial<Record<AiMetric, number>> }[] };
 export type AiUsageSummary = {
@@ -78,11 +113,22 @@ export type AiUsageSummary = {
   /** No personal data: counts only. */
   activeUsers: number;
 };
-export type AiControlCentre = { providers: AiProviderStatus[]; models: AiModelAdmin[]; routes: AiRouteAdmin[]; quotas: AiQuotaAdmin; usage: AiUsageSummary };
+export type AiPlanBudget = { plan: 'SILVER' | 'GOLD' | 'PLATINUM'; userMonthlyLimitMicros: number | null; planMonthlyLimitMicros: number | null; planMonthSpendMicros: number };
+export type AiBudgetAlert = { scope: 'COMPANY' | 'PLAN'; plan: string | null; month: string; thresholdPct: number; spendMicros: number; limitMicros: number; createdAt: string };
+export type AiControlCentre = {
+  providers: AiProviderStatus[];
+  models: AiModelAdmin[];
+  routes: AiRouteAdmin[];
+  quotas: AiQuotaAdmin;
+  usage: AiUsageSummary;
+  planBudgets: AiPlanBudget[];
+  alerts: AiBudgetAlert[];
+};
 
 const micros = z.number().int().min(0).max(1_000_000_000_000);
+const capabilities = z.array(z.enum(AI_CAPABILITIES)).min(1).max(7);
 export const aiModelCreateBody = z.object({
-  provider: z.enum(['ANTHROPIC', 'OPENAI', 'GEMINI']),
+  provider: z.enum(AI_REAL_PROVIDERS),
   modelId: z.string().trim().regex(/^[A-Za-z0-9._:/-]{2,100}$/),
   displayName: z.string().trim().min(2).max(80),
   inputPriceMicros: micros.nullable(),
@@ -90,6 +136,11 @@ export const aiModelCreateBody = z.object({
   cacheReadPriceMicros: micros.nullable().optional(),
   /** Where the price comes from (the provider's pricing page, contract, date). */
   priceSource: z.string().trim().min(3).max(300),
+  capabilities: capabilities.default(['CHAT']),
+  medicalSpecialized: z.boolean().default(false),
+  hosting: z.enum(['PROVIDER_API', 'MANAGED_ENDPOINT', 'SELF_HOSTED']).default('PROVIDER_API'),
+  dataRegion: z.string().trim().min(2).max(80).nullable().optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
 });
 export const aiModelPatchBody = z
   .object({
@@ -101,15 +152,46 @@ export const aiModelPatchBody = z
     /** true = "I checked these prices against the provider today" (records who and when). */
     verifyPrice: z.boolean(),
     active: z.boolean(),
+    capabilities,
+    medicalSpecialized: z.boolean(),
+    hosting: z.enum(['PROVIDER_API', 'MANAGED_ENDPOINT', 'SELF_HOSTED']),
+    dataRegion: z.string().trim().min(2).max(80).nullable(),
+    notes: z.string().trim().max(1000).nullable(),
+    /** Data-processing approval (ai.data.approve): a DPA / privacy-terms reference, or null to withdraw it. */
+    patientDataApprovalRef: z.string().trim().min(3).max(300).nullable(),
   })
   .partial();
 export const aiRoutePatchBody = z
   .object({
     enabled: z.boolean(),
     maxOutputTokens: z.number().int().min(256).max(32_000),
-    tiers: z.array(z.object({ tier: z.enum(AI_MODEL_TIERS), modelId: z.string().uuid(), fallbackModelId: z.string().uuid().nullable(), effort: z.enum(AI_EFFORTS) })).max(3),
+    complexityRouting: z.boolean(),
+    simpleMaxChars: z.number().int().min(20).max(4000),
+    maxConcurrentPerUser: z.number().int().min(1).max(10),
   })
   .partial();
+export const aiCandidateCreateBody = z.object({
+  tier: z.enum(AI_MODEL_TIERS),
+  modelId: z.string().uuid(),
+  complexity: z.enum(AI_COMPLEXITIES).default('ANY'),
+  language: z.enum(AI_CANDIDATE_LANGUAGES).default('ANY'),
+  priority: z.number().int().min(1).max(1000).default(100),
+  effort: z.enum(AI_EFFORTS).default('medium'),
+});
+export const aiCandidatePatchBody = z
+  .object({
+    complexity: z.enum(AI_COMPLEXITIES),
+    language: z.enum(AI_CANDIDATE_LANGUAGES),
+    priority: z.number().int().min(1).max(1000),
+    effort: z.enum(AI_EFFORTS),
+    enabled: z.boolean(),
+  })
+  .partial();
+export const aiPlanBudgetBody = z.object({
+  plan: z.enum(['SILVER', 'GOLD', 'PLATINUM']),
+  userMonthlyLimitMicros: micros.nullable(),
+  planMonthlyLimitMicros: micros.nullable(),
+});
 export const aiQuotaPatchBody = z.object({
   plan: z.enum(['SILVER', 'GOLD', 'PLATINUM']).optional(),
   role: z.enum(['DOCTOR', 'NURSE']).optional(),
@@ -117,3 +199,102 @@ export const aiQuotaPatchBody = z.object({
   weeklyLimit: z.number().int().min(0).max(1_000_000),
 }).refine((b) => Boolean(b.plan) !== Boolean(b.role), { message: 'Choose a plan or a clinician role', path: ['plan'] });
 export const aiBudgetBody = z.object({ monthlyLimitMicros: micros.nullable() });
+
+// ---------------------------------------------------------------- medical AI evaluation suite
+export const AI_EVAL_CATEGORIES = ['EMERGENCY', 'LAB_REPORT', 'WOUND_CARE', 'MEDICATION', 'PATIENT_HISTORY', 'TERMINOLOGY', 'DOCUMENTATION', 'PRODUCT_INFO', 'PROMPT_INJECTION', 'PRIVACY'] as const;
+export type AiEvalCategory = (typeof AI_EVAL_CATEGORIES)[number];
+/** Deterministic screens (case-insensitive regular expressions); clinicians judge accuracy. */
+export const aiEvalChecks = z
+  .object({
+    mustIncludeAll: z.array(z.string().min(1).max(300)).max(10),
+    mustIncludeAny: z.array(z.string().min(1).max(300)).max(10),
+    mustNotInclude: z.array(z.string().min(1).max(300)).max(10),
+    requireLanguage: z.enum(['ar', 'en']),
+    maxChars: z.number().int().min(50).max(12_000),
+  })
+  .partial()
+  .strict()
+  .refine((c) => [...(c.mustIncludeAll ?? []), ...(c.mustIncludeAny ?? []), ...(c.mustNotInclude ?? [])].every(isValidRegex), { message: 'Every check must be a valid regular expression' });
+export type AiEvalChecks = z.infer<typeof aiEvalChecks>;
+function isValidRegex(p: string) {
+  try {
+    new RegExp(p, 'iu');
+    return true;
+  } catch {
+    return false;
+  }
+}
+export const aiEvalCaseBody = z.object({
+  code: z.string().trim().regex(/^[A-Z0-9][A-Z0-9_-]{2,40}$/),
+  category: z.enum(AI_EVAL_CATEGORIES),
+  language: z.enum(['ar', 'en']),
+  prompt: z.string().trim().min(3).max(4000),
+  context: z.string().trim().max(8000).nullable().optional(),
+  expectedBehavior: z.string().trim().min(10).max(2000),
+  checks: aiEvalChecks.default({}),
+});
+export const aiEvalResultReviewBody = z.object({
+  accuracy: z.number().int().min(1).max(5),
+  hallucination: z.boolean(),
+  unsafe: z.boolean(),
+  arabicQuality: z.number().int().min(1).max(5).nullable().optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+export type AiEvalCase = {
+  id: string;
+  code: string;
+  category: AiEvalCategory;
+  language: 'ar' | 'en';
+  prompt: string;
+  context: string | null;
+  expectedBehavior: string;
+  checks: AiEvalChecks;
+  status: 'DRAFT' | 'REVIEWED' | 'RETIRED';
+  version: number;
+  authoredByMe: boolean;
+  reviewedAt: string | null;
+};
+export type AiEvalSummary = { cases: number; done: number; automatedPassRate: number | null; reviewed: number; unsafe: number; hallucinations: number; meanAccuracy: number | null; meanArabicQuality: number | null; meanLatencyMs: number | null };
+export type AiEvalRun = {
+  id: string;
+  modelRef: string;
+  provider: AiProviderCode;
+  modelId: string;
+  routeKey: string;
+  policyVersion: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+  failure: string | null;
+  caseCount: number;
+  completedCount: number;
+  automatedPassCount: number;
+  costMicros: number;
+  costEstimated: boolean;
+  startedAt: string;
+  finishedAt: string | null;
+  summary: AiEvalSummary;
+};
+export type AiEvalResult = {
+  id: string;
+  caseCode: string;
+  caseVersion: number;
+  category: AiEvalCategory;
+  language: 'ar' | 'en';
+  status: 'PENDING' | 'DONE' | 'ERROR';
+  prompt: string | null;
+  expectedBehavior: string | null;
+  output: string | null;
+  outcome: string | null;
+  latencyMs: number | null;
+  costMicros: number | null;
+  automatedChecks: { name: string; passed: boolean; detail?: string }[] | null;
+  automatedPass: boolean | null;
+  review: { accuracy: number; hallucination: boolean; unsafe: boolean; arabicQuality: number | null; notes: string | null; reviewedAt: string } | null;
+};
+export type AiModelApproval = { id: string; routeKey: string; modelRef: string; modelId: string; provider: AiProviderCode; runId: string; policyVersion: string; note: string; approvedAt: string; revokedAt: string | null; revokeNote: string | null };
+export type AiEvaluationOverview = {
+  cases: AiEvalCase[];
+  runs: AiEvalRun[];
+  approvals: AiModelApproval[];
+  thresholds: { minCases: number; minAutomatedPassRate: number; minMeanAccuracy: number; maxHallucinationRate: number };
+  currentPolicyVersion: string;
+};

@@ -70,7 +70,7 @@ beforeEach(() => {
 });
 afterAll(async () => {
   await owner.query("update app.ai_routes set enabled = false where key = 'patient.chat'");
-  await owner.query("update app.ai_route_models set fallback_model = null where route_key = 'patient.chat'");
+  await owner.query("delete from app.ai_route_candidates where route_key = 'patient.chat' and model = (select id from app.ai_models where model_id = 'simulated-echo')");
   await owner.query("update app.ai_plan_quotas set weekly_limit = 50 where plan_code = 'SILVER' and metric = 'CHAT_MESSAGES'");
   await owner.query('update app.ai_budget set monthly_limit_micros = null');
   await owner.end();
@@ -147,12 +147,13 @@ describe('a message', () => {
     expect(failed.json.error.code).toBe('AI_UNAVAILABLE');
     expect((await c.req({ method: 'GET', url: '/v1/ai/assistant' })).json.allowance.used).toBe(0);
 
-    await owner.query("update app.ai_route_models set fallback_model = (select id from app.ai_models where model_id = 'simulated-echo') where route_key = 'patient.chat' and tier = 'BASIC'");
+    // A second, lower-priority candidate from another provider (the development simulator here).
+    await owner.query("insert into app.ai_route_candidates (route_key, tier, model, priority) select 'patient.chat', 'BASIC', id, 20 from app.ai_models where model_id = 'simulated-echo'");
     const rescued = await send(c, id, 'What is a hydrocolloid dressing?');
     expect(rescued.status).toBe(200);
     expect(rescued.json.message.kind).toBe('SIMULATED');
     expect(rescued.json.message.content).toContain('SIMULATED');
-    await owner.query("update app.ai_route_models set fallback_model = null where route_key = 'patient.chat'");
+    await owner.query("delete from app.ai_route_candidates where route_key = 'patient.chat' and model = (select id from app.ai_models where model_id = 'simulated-echo')");
   });
 
   it('a profile summary is shared only when chosen, as data, without name or contact details', async () => {
@@ -220,7 +221,8 @@ describe('privacy and integrity', () => {
     const cc = await admin.req({ method: 'GET', url: '/v1/admin/ai/control-centre' });
     expect(cc.status).toBe(200);
     expect(JSON.stringify(cc.json)).not.toContain('private question');
-    expect(cc.json.providers.find((p: { code: string }) => p.code === 'OPENAI')).toMatchObject({ configured: false, envVar: 'AI_OPENAI_API_KEY' });
+    expect(cc.json.providers.find((p: { code: string }) => p.code === 'OPENAI')).toMatchObject({ configured: false, envVars: ['AI_OPENAI_API_KEY'] });
+    expect(cc.json.providers.find((p: { code: string }) => p.code === 'QWEN')).toMatchObject({ configured: false, envVars: ['AI_QWEN_API_KEY', 'AI_QWEN_BASE_URL'] });
   });
 
   it('deleting the account deletes its conversations', async () => {

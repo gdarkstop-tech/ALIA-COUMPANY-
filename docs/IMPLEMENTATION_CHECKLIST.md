@@ -42,7 +42,7 @@ Legend: **DONE** (implemented, tested) · **PARTIAL** (works, scope incomplete) 
 | Payments (Paymob) | NOT_CONFIGURED | Gateway abstraction in place; refuses to create intents; checkout is preview only |
 | SMS / email delivery | NOT_CONFIGURED | Dev outbox adapter only (development); production sends fail loudly |
 | Private object storage (documents, wound photos) | NOT_CONFIGURED | MinIO in compose; adapter + signed URLs not yet wired; credential documents not uploadable |
-| Medical AI | NOT_CONFIGURED (gateway built, no provider key) | `ai.assistant` OFF; internal test accounts only; development simulator only. Setup: `docs/release/AI_GATEWAY.md` |
+| Medical AI | NOT_CONFIGURED (multi-provider gateway built, no provider key) | `ai.assistant` OFF; internal test accounts only; development simulator only. Setup: `docs/release/AI_GATEWAY.md` |
 | Push notifications, maps | NOT_CONFIGURED | |
 | MFA enforcement | PARTIAL | Enforced on staff endpoints when `MFA_ENFORCEMENT=required` (mandatory in prod); clinician enforcement on patient-data endpoints arrives with M3 |
 | Email verification | PARTIAL | Emails sent to dev outbox; required in production config |
@@ -68,13 +68,23 @@ codes, bundles, categories, approval gates, analytics), store subscriptions with
 entitlements (flag OFF). Not started: orders & tracking, Buy Again, QR onboarding, health credits,
 care programs, paid checkout (Paymob not configured).
 
-## Milestone 5 — Medical AI — PARTIAL (first vertical slice)
-Done: provider-agnostic gateway (Anthropic / OpenAI / Gemini adapters, fallback, health checks),
-weekly plan quotas with atomic reservation, cost metering against verified prices, monthly cap,
-AI control centre, AI consent, patient text assistant with deterministic emergency handling (ADR 0008).
-Not started: voice, document/lab analysis, doctor/nurse copilots and clinician-approved drafts,
-curated RAG on approved product information, wound documentation comparison, AI content reporting;
-diagnostic AI stays behind disabled flags.
+## Milestone 5 — Medical AI (DMW Medical AI) — IN PROGRESS
+Scope correction (2026-10-27): medical AI only; the creative / marketing image-generation studio and
+Midjourney are out of scope for this phase.
+
+| Slice | Status | Notes |
+| --- | --- | --- |
+| 0 — Gateway foundation (ADR 0008) | DONE | Reserve → call → settle, quotas, cap, consent, patient text chat, control centre |
+| 1 — Multi-model gateway (ADR 0009) | DONE (no live provider) | Qwen, Grok, Kimi, MedGemma adapters; registry; eligibility routing; budgets; concurrency; evaluation suite with clinical approval. All providers NOT_CONFIGURED |
+| 2 — Real patient AI | TODO | Report AI response, assistant name/preferences, operator smoke test with a real key |
+| 3 — Curated medical knowledge | TODO | Approved articles, retrieval with citations |
+| 4 — Realtime voice | TODO | |
+| 5 — Lab and document AI | TODO | |
+| 6 — Health analytics | TODO | |
+| 7 — Clinician copilots | TODO | Needs care relationships (Milestone 3) |
+| 8 — Company-product knowledge | TODO | |
+| 10 — Admin cost / finance | PARTIAL | Spend, plan caps and alerts done; finance views TODO |
+| 11 — Wound and imaging research | TODO | Diagnostic features stay behind disabled flags |
 
 ## Milestone 6 — Production hardening — NOT STARTED
 Security testing, performance, accessibility audit, device testing, CI/CD, observability,

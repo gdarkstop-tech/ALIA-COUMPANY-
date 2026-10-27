@@ -2,6 +2,7 @@
  * Deterministic safety layer around the AI assistant. These rules run in code, before and around
  * the model — the model is never the safety boundary.
  */
+import { createHash } from 'node:crypto';
 import { ageInYears } from '@ghayarly/shared';
 import { and, eq } from 'drizzle-orm';
 import type { Tx } from '../../db/client';
@@ -83,6 +84,9 @@ Context and instructions:
 Style:
 - Answer in the language the person wrote in (Arabic: clear Modern Standard Arabic that Egyptian readers find natural; English otherwise).
 - Be brief: a short answer first, then at most a few bullet points. End with when to seek care if relevant.`;
+
+/** Identifies the policy text a model was evaluated under (approvals record it). */
+export const POLICY_VERSION = createHash('sha256').update(ASSISTANT_POLICY).digest('hex').slice(0, 16);
 
 /**
  * The minimum needed to make general information relevant: age band, sex, active allergies,

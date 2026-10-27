@@ -19,7 +19,7 @@ h3 { font-size: 16px; font-weight: 600; }
 .subtle { color: var(--color-text-tertiary); font-size: 13px; }
 .mono { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
 
-.shell { display: grid; grid-template-columns: 264px 1fr; min-height: 100vh; }
+.shell { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
 .sidebar { background: var(--color-surface-inverse); color: var(--color-text-inverse); padding: 24px 16px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; align-items: center; gap: 12px; padding: 4px 8px 24px; }
 .brand-mark { width: 38px; height: 38px; border-radius: 10px; }
@@ -28,7 +28,7 @@ h3 { font-size: 16px; font-weight: 600; }
 .nav-item:hover { opacity: 1; background: rgba(255,255,255,0.06); text-decoration: none; }
 .nav-item.active { opacity: 1; background: rgba(114,196,188,0.16); color: #AADDD8; }
 .sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; font-size: 13px; opacity: 0.85; }
-.main { padding: 28px 40px 64px; max-width: 1200px; width: 100%; }
+.main { padding: 28px 40px 64px; max-width: 1200px; width: 100%; min-width: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -36,7 +36,7 @@ h3 { font-size: 16px; font-weight: 600; }
 .grid { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: 2fr 1fr; }
 .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 960px) { .shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; } .grid-2, .grid-4 { grid-template-columns: 1fr; } .main { padding: 20px 16px; } }
+@media (max-width: 960px) { .shell { grid-template-columns: minmax(0, 1fr); } .sidebar { position: static; height: auto; } .grid-2, .grid-4 { grid-template-columns: 1fr; } .main { padding: 20px 16px; } }
 
 .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 20px; padding: 22px; box-shadow: 0 6px 18px var(--color-shadow); }
 .card.tight { padding: 0; overflow: hidden; }
