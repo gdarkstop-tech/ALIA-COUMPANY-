@@ -13,6 +13,7 @@ const TABS = [
   { href: '/ai/models', key: 'aiAdmin.tabModels', any: ['ai.config.manage', 'ai.usage.read'] },
   { href: '/ai/routing', key: 'aiAdmin.tabRouting', any: ['ai.config.manage', 'ai.usage.read'] },
   { href: '/ai/evaluation', key: 'aiAdmin.tabEvaluation', any: ['ai.eval.manage', 'ai.clinical.review', 'ai.config.manage'] },
+  { href: '/ai/knowledge', key: 'aiAdmin.tabKnowledge', any: ['knowledge.manage', 'ai.clinical.review'] },
   { href: '/ai/safety', key: 'aiAdmin.tabSafety', any: ['ai.safety.review'] },
 ] as const satisfies readonly { href: string; key: string; any: readonly Permission[] }[];
 

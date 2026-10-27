@@ -61,6 +61,8 @@ export const PERMISSIONS = [
   'ai.clinical.review',
   /** Work the queue of reported AI answers (content access is audited). */
   'ai.safety.review',
+  /** Write and edit medical knowledge articles (a clinical reviewer approves them). */
+  'knowledge.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -90,10 +92,11 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'ai.usage.read',
     'ai.eval.manage',
     'ai.data.approve',
+    'knowledge.manage',
   ],
   // Clinical reviewers approve medical product text and AI models for medical routes; commerce
   // managers can edit product text but never approve it.
-  CLINICAL_REVIEWER: ['provider.verification.review', 'provider.verification.decide', 'catalog.content.approve', 'ai.clinical.review', 'ai.safety.review'],
+  CLINICAL_REVIEWER: ['provider.verification.review', 'provider.verification.decide', 'catalog.content.approve', 'ai.clinical.review', 'ai.safety.review', 'knowledge.manage'],
   SUPPORT: ['users.read', 'provider.verification.review'],
   TRUST_AND_SAFETY: ['audit.read', 'safety.reports.read', 'users.read', 'users.status.manage', 'users.appeals.decide', 'ai.safety.review'],
   COMMERCE_MANAGER: ['catalog.tetrasol.manage'],

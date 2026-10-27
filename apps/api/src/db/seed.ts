@@ -24,6 +24,8 @@ export const DEMO_ACCOUNTS = {
   pendingNurse: { email: 'nurse.pending@demo.ghayarly.test', name: 'Hoda Samir' },
   /** INTERNAL_TEST patient: the only kind of account that may use the assistant while `ai.assistant` is off. */
   aiTester: { email: 'ai.tester@demo.ghayarly.test', name: 'AI Internal Tester' },
+  /** A second staff member, so separation of duties (editor ≠ approver) can be exercised. */
+  reviewer: { email: 'reviewer.demo@demo.ghayarly.test', name: 'Clinical Reviewer (demo)' },
 } as const;
 
 const CENTROIDS: Record<string, [number, number]> = {
@@ -145,6 +147,11 @@ export async function seed(log: (line: string) => void = console.log) {
       await client.query("update app.user_profiles set account_kind = 'INTERNAL_TEST' where user_id = $1", [ids.aiTester]);
       await grantSeedConsents(client, ids.aiTester, true);
     }
+    if (!(await client.query('select 1 from app.user_profiles where user_id = $1', [ids.reviewer])).rowCount) {
+      await role(ids.reviewer, 'CLINICAL_REVIEWER');
+      await profile(ids.reviewer, 'Clinical Reviewer (demo)', 'CLINICAL_REVIEWER', 'en');
+      await grantSeedConsents(client, ids.reviewer, false);
+    }
 
     const already = await client.query('select 1 from app.user_profiles where user_id = $1', [ids.patient]);
     if (already.rowCount) {
@@ -169,7 +176,7 @@ export async function seed(log: (line: string) => void = console.log) {
     await profile(ids.pendingNurse, 'هدى سمير', 'NURSE');
 
     // ---------------------------------------------------------------- consents (synthetic accounts accepted the draft documents)
-    for (const userId of Object.values(ids)) if (userId !== ids.aiTester) await grantSeedConsents(client, userId, userId === ids.patient);
+    for (const userId of Object.values(ids)) if (userId !== ids.aiTester && userId !== ids.reviewer) await grantSeedConsents(client, userId, userId === ids.patient);
 
     // ---------------------------------------------------------------- patient & family
     const createPatient = async (p: { name: string; dob: string; sex: string; rel: string; level: string; basis: string; blood?: string; gov?: string; city?: string; self?: boolean }) => {

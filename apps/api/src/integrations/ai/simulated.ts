@@ -10,7 +10,9 @@ export function createSimulatedProvider(): AiProvider {
     status: 'CONFIGURED',
     async complete(req) {
       const last = req.messages[req.messages.length - 1]?.content ?? '';
-      const text = `[SIMULATED — development only, not a real AI answer] I received ${[...last].length} characters. A real deployment answers here with general information only.`;
+      // Cites the first reference item when one was offered, so the citation flow can be exercised.
+      const cites = req.systemExtra?.includes('[K1]') ? ' Approved reference material was provided [K1].' : '';
+      const text = `[SIMULATED — development only, not a real AI answer] I received ${[...last].length} characters. A real deployment answers here with general information only.${cites}`;
       const tokens = (s: string) => Math.ceil([...s].length / 4);
       return {
         outcome: 'ANSWERED',

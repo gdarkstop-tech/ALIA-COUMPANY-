@@ -68,6 +68,8 @@ import type {
   AiPreferences,
   AiReportDetail,
   AiReportListItem,
+  KnowledgeArticleAdmin,
+  KnowledgeVersion,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -237,6 +239,16 @@ export function createApiClient(options: ApiClientOptions) {
       preferences: () => get<AiPreferences>('/v1/ai/preferences'),
       setPreferences: (body: Partial<Pick<AiPreferences, 'replyLanguage' | 'detailLevel'>>) => put<AiPreferences>('/v1/ai/preferences', body),
       report: (messageId: string, body: { reason: string; note?: string; includeQuestion: boolean }) => post<{ id: string }>(`/v1/ai/messages/${messageId}/report`, body),
+    },
+    /** Clinically approved knowledge versions (as cited by the assistant). */
+    knowledge: {
+      version: (id: string) => get<KnowledgeVersion>(`/v1/knowledge/versions/${id}`),
+      articles: (status = 'ALL') => get<KnowledgeArticleAdmin[]>('/v1/admin/knowledge/articles', { status }),
+      createArticle: (body: Record<string, unknown>) => post<KnowledgeArticleAdmin>('/v1/admin/knowledge/articles', body),
+      updateArticle: (id: string, body: Record<string, unknown>) => patch<KnowledgeArticleAdmin>(`/v1/admin/knowledge/articles/${id}`, body),
+      submit: (id: string) => post<KnowledgeArticleAdmin>(`/v1/admin/knowledge/articles/${id}/submit`, {}),
+      approve: (id: string, note: string) => post<KnowledgeArticleAdmin>(`/v1/admin/knowledge/articles/${id}/approve`, { note }),
+      retire: (id: string, note: string) => post<KnowledgeArticleAdmin>(`/v1/admin/knowledge/articles/${id}/retire`, { note }),
     },
     /** AI control centre: configuration only — provider keys never leave the backend. */
     aiAdmin: {

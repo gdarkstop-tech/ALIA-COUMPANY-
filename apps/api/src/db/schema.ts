@@ -823,3 +823,46 @@ export const aiReportEvents = appSchema.table('ai_report_events', {
   note: text('note'),
   createdAt: ts('created_at').notNull(),
 });
+
+// ------------------------------------------------------------------ curated medical knowledge (migration 0016)
+export const knowledgeArticles = appSchema.table('knowledge_articles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull(),
+  locale: text('locale').notNull(),
+  title: text('title').notNull(),
+  summary: text('summary').notNull().default(''),
+  body: text('body').notNull(),
+  topics: text('topics').array().notNull().default(sql`'{}'`),
+  sourcePublisher: text('source_publisher').notNull(),
+  sourceTitle: text('source_title').notNull(),
+  sourceUrl: text('source_url'),
+  sourceDate: date('source_date', { mode: 'string' }),
+  status: text('status').notNull().default('DRAFT'),
+  editedByUserId: text('edited_by_user_id'),
+  updatedAt: ts('updated_at').notNull().default(sql`now()`),
+});
+
+/** Immutable approved versions (database-enforced). */
+export const knowledgeVersions = appSchema.table('knowledge_versions', {
+  id: uuid('id').primaryKey(),
+  articleId: uuid('article_id').notNull(),
+  version: integer('version').notNull(),
+  locale: text('locale').notNull(),
+  title: text('title').notNull(),
+  summary: text('summary').notNull(),
+  body: text('body').notNull(),
+  sourcePublisher: text('source_publisher').notNull(),
+  sourceTitle: text('source_title').notNull(),
+  sourceUrl: text('source_url'),
+  sourceDate: date('source_date', { mode: 'string' }),
+  approvedByUserId: text('approved_by_user_id'),
+  approvedAt: ts('approved_at').notNull(),
+  approvalNote: text('approval_note').notNull(),
+  supersededAt: ts('superseded_at'),
+});
+
+export const aiMessageCitations = appSchema.table(
+  'ai_message_citations',
+  { messageId: uuid('message_id').notNull(), versionId: uuid('version_id').notNull(), label: text('label').notNull() },
+  (t) => [primaryKey({ columns: [t.messageId, t.versionId] })],
+);

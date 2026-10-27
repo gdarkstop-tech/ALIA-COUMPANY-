@@ -12,6 +12,7 @@ import { Badge, Button, Checkbox, Chip, ErrorState, Header, Icon, LoadingScreen,
 
 function Bubble({ m, onReport }: { m: AiChatMessage; onReport?: () => void }) {
   const { t } = useI18n();
+  const router = useRouter();
   const { colors } = useTheme();
   const mine = m.role === 'user';
   const emergency = m.kind === 'EMERGENCY_GUIDANCE';
@@ -32,6 +33,16 @@ function Bubble({ m, onReport }: { m: AiChatMessage; onReport?: () => void }) {
       </View>
       {emergency ? (
         <Button testID="assistant-call-emergency" variant="danger" size="md" fullWidth={false} icon="phone" label={t('safety.callEmergency', { number: EMERGENCY_NUMBER })} onPress={() => void Linking.openURL(`tel:${EMERGENCY_NUMBER}`).catch(() => undefined)} />
+      ) : null}
+      {!mine && m.citations.length ? (
+        <View style={{ gap: 2 }} testID={`assistant-citations-${m.id}`}>
+          <Text variant="caption" weight="semibold" color="textSecondary">{t('assistant.sources')}</Text>
+          {m.citations.map((c) => (
+            <PressableScale key={c.versionId} accessibilityRole="link" accessibilityLabel={`${c.label} ${c.title}`} onPress={() => router.push({ pathname: '/patient/knowledge/[id]', params: { id: c.versionId } })} style={{ minHeight: 32, justifyContent: 'center' }} testID={`assistant-citation-${c.label}`}>
+              <Text variant="caption" color="primary">[{c.label}] {c.title} — {c.sourcePublisher}</Text>
+            </PressableScale>
+          ))}
+        </View>
       ) : null}
       {!mine && onReport ? (
         m.reported ? (
@@ -163,7 +174,7 @@ export default function AssistantChat() {
         ))}
         {pending ? (
           <>
-            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', content: pending, createdAt: new Date().toISOString(), reported: false }} />
+            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', content: pending, createdAt: new Date().toISOString(), reported: false, citations: [] }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} testID="assistant-thinking">
               <ActivityIndicator color={colors.primary} />
               <Text variant="footnote" color="textSecondary">{t('assistant.sending')}</Text>

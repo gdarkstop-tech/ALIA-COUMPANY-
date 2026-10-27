@@ -45,7 +45,9 @@ export type AiAssistantStatus = {
 };
 
 export type AiMessageKind = 'MESSAGE' | 'EMERGENCY_GUIDANCE' | 'REFUSAL' | 'SIMULATED';
-export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; content: string; createdAt: string; reported: boolean };
+/** An approved knowledge version the answer cited (label matches the [K1] marker in the text). */
+export type AiCitation = { label: string; versionId: string; title: string; locale: 'ar' | 'en'; version: number; sourcePublisher: string; sourceTitle: string; sourceUrl: string | null; sourceDate: string | null };
+export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; content: string; createdAt: string; reported: boolean; citations: AiCitation[] };
 export type AiConversation = { id: string; title: string; patientId: string | null; createdAt: string; updatedAt: string };
 export type AiConversationDetail = AiConversation & { messages: AiChatMessage[] };
 export type AiReply = { message: AiChatMessage; allowance: AiAllowance | null };
@@ -342,4 +344,52 @@ export type AiReportDetail = AiReportListItem & {
   question: string | null;
   note: string | null;
   events: { event: string; note: string | null; createdAt: string; byMe: boolean }[];
+};
+
+// ---------------------------------------------------------------- curated medical knowledge
+export const knowledgeArticleBody = z.object({
+  slug: z.string().trim().regex(/^[a-z0-9][a-z0-9-]{2,79}$/),
+  locale: z.enum(['ar', 'en']),
+  title: z.string().trim().min(3).max(200),
+  summary: z.string().trim().max(500).default(''),
+  body: z.string().trim().min(50).max(20_000),
+  topics: z.array(z.string().trim().min(2).max(60)).max(20).default([]),
+  sourcePublisher: z.string().trim().min(2).max(200),
+  sourceTitle: z.string().trim().min(2).max(300),
+  sourceUrl: z.string().trim().regex(/^https:\/\/\S{4,500}$/).nullable().optional(),
+  sourceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+export type KnowledgeStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'RETIRED';
+export type KnowledgeArticleAdmin = {
+  id: string;
+  slug: string;
+  locale: 'ar' | 'en';
+  title: string;
+  summary: string;
+  body: string;
+  topics: string[];
+  sourcePublisher: string;
+  sourceTitle: string;
+  sourceUrl: string | null;
+  sourceDate: string | null;
+  status: KnowledgeStatus;
+  editedByMe: boolean;
+  updatedAt: string;
+  live: { versionId: string; version: number; approvedAt: string; approvedByMe: boolean } | null;
+  versions: { version: number; approvedAt: string; supersededAt: string | null; note: string }[];
+};
+/** A live, clinically approved version as shown to patients. */
+export type KnowledgeVersion = {
+  id: string;
+  slug: string;
+  locale: 'ar' | 'en';
+  version: number;
+  title: string;
+  summary: string;
+  body: string;
+  sourcePublisher: string;
+  sourceTitle: string;
+  sourceUrl: string | null;
+  sourceDate: string | null;
+  approvedAt: string;
 };

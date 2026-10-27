@@ -46,6 +46,10 @@ test('Flow E4 — AI control centre reports unconfigured providers honestly', as
   await expect(page.getByTestId('ai-case-AR-EMERG-CHEST')).toBeVisible();
   await shot(page, 'E23-ai-evaluation');
 
+  // Curated knowledge workspace.
+  await page.getByTestId('ai-tab-knowledge').click();
+  await expect(page.getByTestId('knowledge-new')).toBeVisible();
+
   // Reported answers queue (clinical reviewers and Trust & Safety).
   await page.getByTestId('ai-tab-safety').click();
   await expect(page.getByTestId('ai-reports')).toBeVisible();

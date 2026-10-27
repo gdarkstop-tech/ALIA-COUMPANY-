@@ -14,6 +14,7 @@ import {
   sendMessageBody,
   type AiPreferences,
   type AiAllowance,
+  type AiCitation,
   type AiAssistantStatus,
   type AiChatMessage,
   type AiConversation,
@@ -25,13 +26,14 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Tx } from '../../db/client';
-import { aiConversations, aiMessages, aiPreferences, aiResponseReports, userProfiles } from '../../db/schema';
+import { aiConversations, aiMessageCitations, aiMessages, aiPreferences, aiResponseReports, knowledgeVersions, userProfiles } from '../../db/schema';
 import { AiProviderError, configuredProviders, type AiProviderCode, type AiResult, type AiTurn } from '../../integrations/ai';
 import { AppError, notFound } from '../../lib/errors';
 import { inContext, requirePrincipal, type Principal } from '../../lib/principal';
 import { sessionKey } from '../../lib/rateLimitKey';
 import { parse } from '../../lib/validate';
-import { ASSISTANT_POLICY, emergencyGuidance, looksLikeEmergency, patientSummary, preferenceContext, refusalNotice, replyLocale } from './safety';
+import { retrieveKnowledge, type KnowledgePassage } from '../knowledge/routes';
+import { ASSISTANT_POLICY, citedLabels, emergencyGuidance, looksLikeEmergency, patientSummary, preferenceContext, referenceContext, refusalNotice, replyLocale } from './safety';
 
 const ROUTE = 'patient.chat';
 const HISTORY_MESSAGES = 20;
@@ -45,8 +47,26 @@ type Reservation = { reservation_id: string; candidates: Candidate[]; max_output
 /** The providers this server can call, as a PostgreSQL array literal for the router. */
 const providerArray = (codes: AiProviderCode[]) => sql`${`{${codes.join(',')}}`}::app.ai_provider[]`;
 
-function messageDto(m: typeof aiMessages.$inferSelect, reported = false): AiChatMessage {
-  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], content: m.content, createdAt: iso(m.createdAt), reported };
+function messageDto(m: typeof aiMessages.$inferSelect, reported = false, citations: AiCitation[] = []): AiChatMessage {
+  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], content: m.content, createdAt: iso(m.createdAt), reported, citations };
+}
+
+async function citationsFor(tx: Tx, messageIds: string[]): Promise<Map<string, AiCitation[]>> {
+  const out = new Map<string, AiCitation[]>();
+  if (!messageIds.length) return out;
+  // Cited versions stay readable to the person even after a newer version replaced them.
+  const rows = await tx
+    .select({ c: aiMessageCitations, v: knowledgeVersions })
+    .from(aiMessageCitations)
+    .innerJoin(knowledgeVersions, eq(knowledgeVersions.id, aiMessageCitations.versionId))
+    .where(inArray(aiMessageCitations.messageId, messageIds))
+    .orderBy(asc(aiMessageCitations.label));
+  for (const { c, v } of rows) {
+    const list = out.get(c.messageId) ?? [];
+    list.push({ label: c.label, versionId: v.id, title: v.title, locale: v.locale as 'ar' | 'en', version: v.version, sourcePublisher: v.sourcePublisher, sourceTitle: v.sourceTitle, sourceUrl: v.sourceUrl, sourceDate: v.sourceDate });
+    out.set(c.messageId, list);
+  }
+  return out;
 }
 
 async function preferences(tx: Tx, userId: string): Promise<AiPreferences> {
@@ -123,7 +143,8 @@ export async function aiRoutes(app: FastifyInstance) {
           ? (await tx.select({ m: aiResponseReports.messageId }).from(aiResponseReports).where(and(eq(aiResponseReports.reporterUserId, principal.userId), inArray(aiResponseReports.messageId, msgs.map((m) => m.id))))).map((r) => r.m)
           : [],
       );
-      return { id: c.id, title: c.title, patientId: c.patientId, createdAt: iso(c.createdAt), updatedAt: iso(c.updatedAt), messages: msgs.map((m) => messageDto(m, reported.has(m.id))) };
+      const cites = await citationsFor(tx, msgs.filter((m) => m.role === 'assistant').map((m) => m.id));
+      return { id: c.id, title: c.title, patientId: c.patientId, createdAt: iso(c.createdAt), updatedAt: iso(c.updatedAt), messages: msgs.map((m) => messageDto(m, reported.has(m.id), cites.get(m.id))) };
     });
   });
 
@@ -165,11 +186,13 @@ export async function aiRoutes(app: FastifyInstance) {
       if (!c.title) await tx.update(aiConversations).set({ title: content.slice(0, 60) }).where(eq(aiConversations.id, id));
       // History: the person's own messages and the assistant's real answers, newest last.
       const history = (await tx.select().from(aiMessages).where(and(eq(aiMessages.conversationId, id), inArray(aiMessages.kind, ['MESSAGE', 'SIMULATED']))).orderBy(desc(aiMessages.createdAt)).limit(HISTORY_MESSAGES)).reverse();
-      return { reservation, history, summary, locale, prefs } as const;
+      // Approved, clinically reviewed passages only (never drafts); cited back to the person.
+      const knowledge: KnowledgePassage[] = await retrieveKnowledge(tx, content, locale);
+      return { reservation, history, summary, locale, prefs, knowledge } as const;
     });
     if ('emergency' in prep) return { message: prep.emergency!, allowance: prep.allowance ?? null };
 
-    const { reservation, history, summary, locale, prefs } = prep;
+    const { reservation, history, summary, locale, prefs, knowledge } = prep;
     const turns: AiTurn[] = [];
     let budget = HISTORY_CHARS;
     for (const m of [...history].reverse()) {
@@ -182,7 +205,8 @@ export async function aiRoutes(app: FastifyInstance) {
 
     // 3. Provider call(s), outside the database transaction: the first eligible candidate, then —
     //    only for a retryable failure — one fallback, preferring a different provider.
-    const base = { system: ASSISTANT_POLICY, systemExtra: preferenceContext(prefs, prefs.assistantName), messages: turns, maxOutputTokens: reservation.max_output_tokens, requestId: request.id, endUserRef: endUserRef(principal.userId) };
+    const extra = [preferenceContext(prefs, prefs.assistantName), referenceContext(knowledge)].filter(Boolean).join('\n\n');
+    const base = { system: ASSISTANT_POLICY, systemExtra: extra, messages: turns, maxOutputTokens: reservation.max_output_tokens, requestId: request.id, endUserRef: endUserRef(principal.userId) };
     const [primary, ...rest] = reservation.candidates;
     let result: AiResult | null = null;
     let servedBy: AiProviderCode = primary!.provider;
@@ -214,8 +238,14 @@ export async function aiRoutes(app: FastifyInstance) {
       const r = await tx.execute<{ id: string }>(
         sql`select app.ai_settle(${reservation.reservation_id}::uuid, ${id}::uuid, ${servedBy}::app.ai_provider, ${final.servedModel}, ${final.usage.inputTokens}, ${final.usage.outputTokens}, ${final.usage.cacheReadTokens}, ${final.outcome}, ${kind}, ${text}) as id`,
       );
-      const [m] = await tx.select().from(aiMessages).where(eq(aiMessages.id, r.rows[0]!.id));
-      return { message: messageDto(m!), allowance: await allowance(tx) };
+      const messageId = r.rows[0]!.id;
+      const labels = final.outcome === 'REFUSED' ? [] : citedLabels(text, knowledge.length);
+      if (labels.length) {
+        const versions = labels.map((l) => knowledge[Number(l.slice(1)) - 1]!.versionId);
+        await tx.execute(sql`select app.ai_attach_citations(${messageId}::uuid, ${`{${versions.join(',')}}`}::uuid[], ${`{${labels.join(',')}}`}::text[])`);
+      }
+      const [m] = await tx.select().from(aiMessages).where(eq(aiMessages.id, messageId));
+      return { message: messageDto(m!, false, (await citationsFor(tx, [messageId])).get(messageId)), allowance: await allowance(tx) };
     });
   });
 

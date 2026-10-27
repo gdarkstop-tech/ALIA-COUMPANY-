@@ -26,10 +26,12 @@
 | Report AI response (mobile) → reviewer queue (Trust & Safety, clinical reviewers): snapshot of the answer (question only if the person chooses), audited content access, append-only history, redaction on account deletion | migration 0015; `apps/mobile/src/app/patient/assistant/[id].tsx`; Admin → AI → Safety reports | `test/ai-reports.test.ts`, E2E F3 + E4 |
 | Assistant preferences (reply language, detail) and assistant name, sent as validated settings after the fixed policy (they cannot change the rules) | `app.ai_preferences`; mobile Assistant settings | `ai-reports.test.ts` |
 | Deterministic emergency detection (EN + Egyptian/MSA Arabic, typographic apostrophes, diacritics) before any model call | `apps/api/src/modules/ai/safety.ts` | `ai-reports.test.ts` (23 emergency and 6 routine phrases) — **not a clinical validation** of coverage |
+| Curated medical knowledge: editors write sourced articles (EN/AR); a clinical reviewer who did not write the revision approves it into an immutable version; drafts and retired articles are never retrieved; Arabic-aware full-text retrieval; the assistant receives approved passages as labelled data and cites them as [K1]…; citations are stored and shown with their source | migration 0016; `apps/api/src/modules/knowledge/`; Admin → AI → Medical knowledge; mobile source screen | `test/knowledge.test.ts` (6), E2E F3 (citation → source) — retrieval quality is **not** clinically evaluated |
 | Operator smoke test with a real key: one short non-patient question, prints outcome, usage and latency | `pnpm --filter @ghayarly/api ai:smoke -- --provider <CODE> --model <id>` | Run on 2026-10-27: `NOT_CONFIGURED` for every provider (no keys) |
 
 Not built yet (later slices): realtime voice, lab/document scanning, health analytics, clinician
-copilots, curated medical knowledge, product knowledge, wound and imaging research. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
+copilots, product knowledge, wound and imaging research. No medical articles are seeded: the
+clinical team must write (or import) and approve them, each with its real source. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
 have no adapter yet.
 
 ## 2. Configure a provider (exact steps)

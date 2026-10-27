@@ -77,7 +77,7 @@ Midjourney are out of scope for this phase.
 | 0 — Gateway foundation (ADR 0008) | DONE | Reserve → call → settle, quotas, cap, consent, patient text chat, control centre |
 | 1 — Multi-model gateway (ADR 0009) | DONE (no live provider) | Qwen, Grok, Kimi, MedGemma adapters; registry; eligibility routing; budgets; concurrency; evaluation suite with clinical approval. All providers NOT_CONFIGURED |
 | 2 — Real patient AI | DONE (no live provider) | Report AI response + reviewer queue, preferences and assistant name, stronger emergency detection, operator smoke test (`ai:smoke`). A real answer still needs a business key |
-| 3 — Curated medical knowledge | TODO | Approved articles, retrieval with citations |
+| 3 — Curated medical knowledge | DONE (no content yet) | Sourced EN/AR articles, editor ≠ clinical approver, immutable versions, Arabic-aware retrieval of live versions only, citations in answers and a source screen. Content must come from the clinical team |
 | 4 — Realtime voice | TODO | |
 | 5 — Lab and document AI | TODO | |
 | 6 — Health analytics | TODO | |

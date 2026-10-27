@@ -16,7 +16,7 @@ const NAV: { href: string; key: NavKey; icon: string; permissions?: Permission[]
   { href: '/catalog', key: 'catalog.nav', icon: '▦', permissions: ['catalog.tetrasol.manage', 'catalog.content.approve'] },
   { href: '/users', key: 'admin.users', icon: '◍', permissions: ['users.read'] },
   { href: '/audit', key: 'admin.audit', icon: '≡', permissions: ['audit.read'] },
-  { href: '/ai', key: 'aiAdmin.nav', icon: '✦', permissions: ['ai.config.manage', 'ai.usage.read', 'ai.eval.manage', 'ai.clinical.review', 'ai.safety.review'] },
+  { href: '/ai', key: 'aiAdmin.nav', icon: '✦', permissions: ['ai.config.manage', 'ai.usage.read', 'ai.eval.manage', 'ai.clinical.review', 'ai.safety.review', 'knowledge.manage'] },
   // ADMIN-only (the API and the database both enforce the ADMIN role).
   { href: '/features', key: 'admin.features', icon: '⚑', permissions: ['users.roles.grant'] },
   { href: '/security', key: 'admin.security', icon: '⚿' },

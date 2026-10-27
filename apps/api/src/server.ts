@@ -19,6 +19,7 @@ import { adminRoutes } from './modules/admin/routes';
 import { adminCatalogRoutes } from './modules/catalog/admin';
 import { accountRoutes } from './modules/accounts/routes';
 import { aiRoutes } from './modules/ai/routes';
+import { knowledgeRoutes } from './modules/knowledge/routes';
 import { adminAiRoutes } from './modules/ai/admin';
 import { complianceRoutes } from './modules/compliance/routes';
 import { billingRoutes } from './modules/billing/routes';
@@ -180,6 +181,7 @@ export async function buildServer(env: Env, overrides: { stores?: Stores; ai?: P
   await app.register(meRoutes, { prefix: '/v1' });
   await app.register(accountRoutes, { prefix: '/v1' });
   await app.register(aiRoutes, { prefix: '/v1' });
+  await app.register(knowledgeRoutes, { prefix: '/v1' });
   await app.register(adminAiRoutes, { prefix: '/v1/admin/ai' });
   await app.register(complianceRoutes, { prefix: '/v1' });
   await app.register(billingRoutes);
