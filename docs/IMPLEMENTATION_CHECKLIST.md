@@ -42,7 +42,7 @@ Legend: **DONE** (implemented, tested) · **PARTIAL** (works, scope incomplete) 
 | Payments (Paymob) | NOT_CONFIGURED | Gateway abstraction in place; refuses to create intents; checkout is preview only |
 | SMS / email delivery | NOT_CONFIGURED | Dev outbox adapter only (development); production sends fail loudly |
 | Private object storage (documents, wound photos) | NOT_CONFIGURED | MinIO in compose; adapter + signed URLs not yet wired; credential documents not uploadable |
-| Medical AI | NOT_CONFIGURED (disabled) | Assistant cards say so; no model calls exist |
+| Medical AI | NOT_CONFIGURED (gateway built, no provider key) | `ai.assistant` OFF; internal test accounts only; development simulator only. Setup: `docs/release/AI_GATEWAY.md` |
 | Push notifications, maps | NOT_CONFIGURED | |
 | MFA enforcement | PARTIAL | Enforced on staff endpoints when `MFA_ENFORCEMENT=required` (mandatory in prod); clinician enforcement on patient-data endpoints arrives with M3 |
 | Email verification | PARTIAL | Emails sent to dev outbox; required in production config |
@@ -62,13 +62,19 @@ ranking, recurring visits, backup nurse matching, document upload with signed UR
 Care teams & relationships, care plans, doctor–nurse collaboration, secure chat, vitals and
 observations, medical timeline, calendar, adult profile claiming & consent receipts, notifications.
 
-## Milestone 4 — Commerce & monetization — NOT STARTED (store browsing/cart done in M1)
-Product management UI, orders & tracking, Buy Again, QR onboarding, bundles, promo codes,
-subscriptions (Silver/Gold/Platinum, admin-editable), health credits, care programs, analytics.
+## Milestone 4 — Commerce & monetization — PARTIAL
+Done: admin product management (products, images, variants, stock ledger, prices, discounts/promo
+codes, bundles, categories, approval gates, analytics), store subscriptions with server-verified
+entitlements (flag OFF). Not started: orders & tracking, Buy Again, QR onboarding, health credits,
+care programs, paid checkout (Paymob not configured).
 
-## Milestone 5 — Medical AI — NOT STARTED
-Provider-agnostic AI gateway, patient assistant (user-named), doctor/nurse copilots, curated RAG,
-lab extraction, wound documentation comparison; diagnostic AI behind disabled flags.
+## Milestone 5 — Medical AI — PARTIAL (first vertical slice)
+Done: provider-agnostic gateway (Anthropic / OpenAI / Gemini adapters, fallback, health checks),
+weekly plan quotas with atomic reservation, cost metering against verified prices, monthly cap,
+AI control centre, AI consent, patient text assistant with deterministic emergency handling (ADR 0008).
+Not started: voice, document/lab analysis, doctor/nurse copilots and clinician-approved drafts,
+curated RAG on approved product information, wound documentation comparison, AI content reporting;
+diagnostic AI stays behind disabled flags.
 
 ## Milestone 6 — Production hardening — NOT STARTED
 Security testing, performance, accessibility audit, device testing, CI/CD, observability,

@@ -59,7 +59,6 @@ const schema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
-  AI_PROVIDER: z.string().optional(),
 
   // Platform store billing (digital subscriptions). Unset → NOT_CONFIGURED, nothing purchasable.
   APPLE_IAP_BUNDLE_ID: z.string().optional(),
@@ -74,7 +73,11 @@ const schema = z.object({
   /** Audience configured on the Pub/Sub push subscription for Real-time developer notifications. */
   GOOGLE_RTDN_AUDIENCE: z.string().optional(),
   GOOGLE_RTDN_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
-  AI_API_KEY: z.string().optional(),
+  // AI providers: business-owned keys from the secret manager. Unset → NOT_CONFIGURED for that provider.
+  AI_ANTHROPIC_API_KEY: z.string().min(10).optional(),
+  AI_OPENAI_API_KEY: z.string().min(10).optional(),
+  AI_GEMINI_API_KEY: z.string().min(10).optional(),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(600_000).default(120_000),
 });
 
 export type Env = z.infer<typeof schema>;

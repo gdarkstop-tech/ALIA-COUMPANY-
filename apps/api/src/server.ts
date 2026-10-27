@@ -18,9 +18,12 @@ import { getPrincipal, inContext, registerPrincipal } from './lib/principal';
 import { adminRoutes } from './modules/admin/routes';
 import { adminCatalogRoutes } from './modules/catalog/admin';
 import { accountRoutes } from './modules/accounts/routes';
+import { aiRoutes } from './modules/ai/routes';
+import { adminAiRoutes } from './modules/ai/admin';
 import { complianceRoutes } from './modules/compliance/routes';
 import { billingRoutes } from './modules/billing/routes';
 import { createStores, type Stores } from './integrations/billing';
+import { createAiProviders, type AiProviders } from './integrations/ai';
 import { dashboardRoutes } from './modules/dashboard/routes';
 import { devRoutes } from './modules/dev/routes';
 import { meRoutes } from './modules/me/routes';
@@ -38,6 +41,7 @@ export type Services = {
   messaging: Messaging;
   payments: PaymentGateway;
   stores: Stores;
+  ai: AiProviders;
 };
 
 declare module 'fastify' {
@@ -47,7 +51,7 @@ declare module 'fastify' {
 }
 
 /** `overrides` exists for tests only (e.g. a store adapter fed with fixture payloads). */
-export async function buildServer(env: Env, overrides: { stores?: Stores } = {}): Promise<FastifyInstance> {
+export async function buildServer(env: Env, overrides: { stores?: Stores; ai?: Partial<AiProviders> } = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
       env.LOG_LEVEL === 'silent'
@@ -71,7 +75,8 @@ export async function buildServer(env: Env, overrides: { stores?: Stores } = {})
   const payments = createPaymentGateway(env);
   const auth = createAuth(env, pools.authPool, messaging);
   const stores = overrides.stores ?? createStores(env);
-  app.decorate('services', { env, db, pools, auth, messaging, payments, stores });
+  const ai: AiProviders = { ...createAiProviders(env), ...overrides.ai };
+  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai });
 
   const redis = env.REDIS_URL && env.NODE_ENV !== 'test' ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false, lazyConnect: false }) : null;
   redis?.on('error', (err) => app.log.warn({ err: err.message }, 'redis unavailable — rate limiting falls back per request'));
@@ -174,6 +179,8 @@ export async function buildServer(env: Env, overrides: { stores?: Stores } = {})
   await app.register(systemRoutes);
   await app.register(meRoutes, { prefix: '/v1' });
   await app.register(accountRoutes, { prefix: '/v1' });
+  await app.register(aiRoutes, { prefix: '/v1' });
+  await app.register(adminAiRoutes, { prefix: '/v1/admin/ai' });
   await app.register(complianceRoutes, { prefix: '/v1' });
   await app.register(billingRoutes);
   await app.register(patientRoutes, { prefix: '/v1' });

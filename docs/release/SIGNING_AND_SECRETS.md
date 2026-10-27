@@ -179,7 +179,7 @@ Rule: production and staging values live **only** in a secret manager, with sepa
 | `PAYMOB_API_KEY`, `PAYMOB_HMAC_SECRET`, `PAYMOB_INTEGRATION_ID` | Physical-goods gateway | **yes** | empty → `NOT_CONFIGURED` |
 | `SMS_PROVIDER_API_KEY`, `EMAIL_PROVIDER_API_KEY` | OTP and email delivery | **yes** | optional |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (+ `S3_ENDPOINT`, `S3_BUCKET`) | Object storage | **yes** (keys) | optional |
-| `AI_API_KEY` (+ `AI_PROVIDER`) | AI provider; AI flags are OFF | **yes** (key) | optional |
+| `AI_ANTHROPIC_API_KEY`, `AI_OPENAI_API_KEY`, `AI_GEMINI_API_KEY` (+ `AI_REQUEST_TIMEOUT_MS`) | Business-owned AI provider keys, backend only (see `AI_GATEWAY.md`); `ai.assistant` is OFF | **yes** (keys) | unset → that provider is `NOT_CONFIGURED`; never in `EXPO_PUBLIC_*`, the apps or the database; `release:check` scans for Anthropic/OpenAI/Google key patterns |
 | `APPLE_IAP_BUNDLE_ID`, `APPLE_IAP_APP_APPLE_ID`, `APPLE_ROOT_CERTS_DIR`, `APPLE_IAP_ONLINE_CHECKS` | Apple JWS verification | no (Apple root `.cer` files are public) | Without `APPLE_IAP_APP_APPLE_ID`, production reports `NOT_CONFIGURED`; an empty certs directory → boot error. **No App Store Server API private key is used today.** |
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64` | Play Developer API for billing | **yes** | unset → `NOT_CONFIGURED` |
 | `GOOGLE_PLAY_PACKAGE_NAME`, `GOOGLE_RTDN_AUDIENCE`, `GOOGLE_RTDN_SERVICE_ACCOUNT_EMAIL` | Billing and RTDN identity checks | no | all four Google vars needed, else `NOT_CONFIGURED` |

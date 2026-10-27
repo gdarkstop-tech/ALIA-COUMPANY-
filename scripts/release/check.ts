@@ -129,8 +129,9 @@ const forbiddenFiles = tracked.filter((f) => /\.(jks|keystore|p8|p12|mobileprovi
 check('no signing keys or certificates committed', forbiddenFiles.length === 0, forbiddenFiles.join(', '));
 const secretHits = tracked
   .filter((f) => /\.(ts|tsx|js|json|env|example|md|yml|yaml)$/.test(f) && !f.includes('node_modules'))
-  .filter((f) => /-----BEGIN (RSA |EC )?PRIVATE KEY-----|"private_key":\s*"-----BEGIN|AIza[0-9A-Za-z_-]{35}/.test(readFileSync(join(root, f), 'utf8')));
-check('no private keys / service-account keys / Google API keys in tracked files', secretHits.length === 0, secretHits.join(', '));
+  // Also Anthropic (sk-ant-…) and OpenAI (sk-…/sk-proj-…) API keys, which have long random bodies.
+  .filter((f) => /-----BEGIN (RSA |EC )?PRIVATE KEY-----|"private_key":\s*"-----BEGIN|AIza[0-9A-Za-z_-]{35}|\bsk-ant-[A-Za-z0-9]{3,}-[A-Za-z0-9_-]{60,}|\bsk-(proj-|svcacct-)?[A-Za-z0-9_-]{40,}/.test(readFileSync(join(root, f), 'utf8')));
+check('no private keys / service-account keys / Google, Anthropic or OpenAI API keys in tracked files', secretHits.length === 0, secretHits.join(', '));
 // Real people's addresses (developer-account logins, staff) never belong in the repository: every
 // tracked text file is scanned (binary files — a NUL byte in the first 8 KB — are skipped).
 const personal = tracked

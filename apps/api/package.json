@@ -15,17 +15,20 @@
     "review:seed": "tsx --env-file-if-exists=.env src/db/seed-review.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.133.0",
     "@apple/app-store-server-library": "3.1.0",
     "@better-auth/expo": "1.7.7",
     "@fastify/cors": "11.3.1",
     "@fastify/helmet": "13.2.0",
     "@fastify/rate-limit": "11.2.1",
     "@ghayarly/shared": "workspace:*",
+    "@google/genai": "2.28.0",
     "better-auth": "1.7.7",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.7",
     "google-auth-library": "11.3.0",
     "ioredis": "6.0.0",
+    "openai": "7.32.0",
     "pg": "8.23.1",
     "zod": "4.6.7"
   },

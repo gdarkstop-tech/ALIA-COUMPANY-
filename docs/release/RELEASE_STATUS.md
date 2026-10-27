@@ -1,6 +1,6 @@
 # Release status — Dress My Wound | غير لي
 
-**Verified on:** 2026-10-15 · **Branch:** `claude/confident-babbage-ab865a`
+**Verified on:** 2026-10-27 (first published 2026-10-15) · **Branch:** `claude/confident-babbage-ab865a`
 **Scope:** native iOS + Android apps (Expo SDK 57 / React Native 0.86), API, admin console and the public support site.
 
 > **Bottom line:** neither app is `READY_FOR_SUBMISSION`. The code, native configuration and release tooling are in place and the Android build is verified, but submission is blocked by developer accounts, official brand assets, approved legal texts, regulatory evidence, a business decision on subscription benefits, and on-device testing. Nothing has been `DEVICE_TESTED`, `SUBMITTED` or `APPROVED`.
@@ -23,13 +23,15 @@
 
 | Check | Result | How |
 |---|---|---|
-| Unit + API tests | **158 passed** (api 102 · tokens 43 contrast · shared 9 · i18n 4) | `pnpm test` against PostgreSQL 16 with RLS |
+| Unit + API tests | **215 passed** (api 159 · tokens 43 contrast · shared 9 · i18n 4) | `pnpm test` against PostgreSQL 16 with RLS |
+| Admin catalogue + user management tests | included above | `apps/api/test/catalog.test.ts`, `accounts.test.ts` (separation of duties, publish gates, stock ledger, suspensions/blocks, appeals, care continuity) |
+| AI gateway tests | 13 + 8 adapter tests, included above | `apps/api/test/ai.test.ts` (flags, consent, quotas under concurrency, budget, emergencies, refusals, fallback, privacy, audit), `ai-adapters.test.ts` (real Anthropic/OpenAI adapters against a stubbed HTTP layer — **not** the live APIs) |
 | Compliance tests | 11 passed | `apps/api/test/compliance.test.ts` (health-data consent enforced in DB, flags, review-account isolation, account deletion) |
 | Billing tests | 10 passed | `apps/api/test/billing.test.ts` (payment rails, store state mapping, fail-closed when unconfigured, account binding, refunds, no client writes) |
 | Typecheck / lint | 8/8 workspaces, 0 lint warnings | `pnpm typecheck`, `pnpm lint` |
-| Release checks | **46/46** | `pnpm release:check` (brand spelling, metadata limits, icons, production native config, no keys committed) |
+| Release checks | **66 passed, 0 failed**, 8 submission blockers | `pnpm release:check` (brand spelling, metadata limits, icons, production native config, no keys committed incl. AI keys). Blockers = placeholders in listings and legal texts (`--submission` fails), now including the AI notice's provider names. |
 | Expo project health | 21/21 | `npx expo-doctor` (after the 57.0.29 patch updates) |
-| End-to-end (web harness) | **13 passed**, 4 skipped (on-demand screenshot capture) | `pnpm e2e` after `pnpm db:reset`: flows A–F, Arabic RTL |
+| End-to-end (web harness) | **22 passed** (projects `mobile-web` + `admin`; store-screenshot capture not run) | `npx playwright test --project=mobile-web --project=admin` after `pnpm db:reset` (2026-10-27): flows A–F incl. F3 AI assistant (simulator) and restricted account, admin E–E4 (verification, catalogue, users, AI control centre), Arabic RTL, accessibility 9 |
 | Accessibility (web harness) | 6/6 | `e2e/tests/a11y.spec.ts`: axe-core WCAG 2.2 A/AA (no serious/critical), no overflow at 320/390 px, targets ≥ 44 px, EN + AR |
 | Android production build | **BUILT** | `expo prebuild` + `gradlew assembleRelease bundleRelease` → APK + AAB, inspected with aapt2 / zipalign / readelf (below) |
 | Android development client | **BUILT** | `gradlew assembleDebug` (arm64-v8a, x86_64) |
@@ -75,6 +77,9 @@ Needs **macOS or EAS cloud** plus an **Apple Developer Program organisation acco
 | In-app account deletion + web deletion page | CODE_READY | compliance tests + E2E F | public URL needs a real domain (`NEEDS_ACCOUNT_ACTION`) |
 | Emergency notice (123) + medical disclaimer | CODE_READY | E2E | `NEEDS_REGULATORY_EVIDENCE` (confirm numbers with MoHP) |
 | High-risk features (AI assistant, wound assessment, diagnostic suggestions, home visits, video consults) | OFF by server flag; the database refuses to enable regulated flags without an evidence reference | compliance tests | `NEEDS_REGULATORY_EVIDENCE` |
+| AI gateway + patient text assistant (quotas, cost metering, cap, control centre) | CODE_READY, **flag OFF**, internal test accounts only; **no provider configured** (`NOT_CONFIGURED`) | AI tests + E2E F3/E4 (simulator only) | `NEEDS_ACCOUNT_ACTION` (business-owned provider keys, verified prices, monthly cap — `AI_GATEWAY.md`); `NEEDS_LEGAL_APPROVAL` (AI notice); `NEEDS_REGULATORY_EVIDENCE` (R2, R3, R13) |
+| Admin catalogue management (products, images, variants, stock, prices, discounts, bundles, categories, analytics) | CODE_READY | API tests + E2E E2 | Real TetraSol product data and clinical approval of claims; brand ownership reference (`TO CONFIRM`) |
+| Admin user management (search, suspend, block, reactivate, booking restriction, history, appeals) | CODE_READY | API tests + E2E E3 and F (restricted account) | Legal review of the reasons/appeals texts; staff MFA enrolment in production |
 | Digital subscriptions (StoreKit 2 / Play Billing, server-verified entitlements) | CODE_READY, **flag OFF** | billing tests | `NEEDS_ACCOUNT_ACTION` (products, keys, webhooks) + business decision (below) |
 | Physical checkout (Paymob) | not configured (simulated) | E2E D | `NEEDS_ACCOUNT_ACTION` (gateway contract) |
 | Review accounts (isolated, synthetic data) | CODE_READY | compliance tests | Create in each environment with `review:seed` |
@@ -117,4 +122,4 @@ cd android && ./gradlew assembleRelease bundleRelease && bash ../../../scripts/r
 
 ## Related documents
 
-[Apple App Store checklist](APPLE_APP_STORE_CHECKLIST.md) · [Google Play checklist](GOOGLE_PLAY_CHECKLIST.md) · [Privacy and data disclosures](PRIVACY_AND_DATA_DISCLOSURES.md) · [Payment compliance](PAYMENT_COMPLIANCE.md) · [Healthcare review](HEALTHCARE_REVIEW.md) · [Brand identity](BRAND_IDENTITY.md) · [Signing and secrets](SIGNING_AND_SECRETS.md) · [Requirements evidence](evidence/STORE_REQUIREMENTS_EVIDENCE.md)
+[Apple App Store checklist](APPLE_APP_STORE_CHECKLIST.md) · [Google Play checklist](GOOGLE_PLAY_CHECKLIST.md) · [Privacy and data disclosures](PRIVACY_AND_DATA_DISCLOSURES.md) · [Payment compliance](PAYMENT_COMPLIANCE.md) · [Healthcare review](HEALTHCARE_REVIEW.md) · [Brand identity](BRAND_IDENTITY.md) · [Signing and secrets](SIGNING_AND_SECRETS.md) · [AI gateway](AI_GATEWAY.md) · [Requirements evidence](evidence/STORE_REQUIREMENTS_EVIDENCE.md)

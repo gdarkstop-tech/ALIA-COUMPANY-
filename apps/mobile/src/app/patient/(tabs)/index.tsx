@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useAssistantStatus } from '@/features/assistant/hooks';
 import { useActivePatient } from '@/features/patient/hooks';
 import { ProfileSwitcher, relationshipLabel } from '@/features/patient/ProfileSwitcher';
 import { MiniProviderCard } from '@/features/provider/ProviderCard';
@@ -24,6 +25,10 @@ export default function PatientHome() {
   const me = useMe();
   const { data: patients, active, setActive } = useActivePatient();
   const dash = useQuery({ queryKey: ['dashboard', 'patient', active?.id], queryFn: () => api.dashboard.patient(active?.id), enabled: Boolean(active) });
+  const assistant = useAssistantStatus();
+  // undefined while loading; null = available. Opening is allowed whenever the server could serve it after consent.
+  const assistantReason = assistant.data ? assistant.data.unavailableReason : undefined;
+  const assistantOpenable = assistantReason === null || assistantReason === 'CONSENT_REQUIRED';
 
   const firstName = (me.data?.profile.displayName ?? '').split(' ')[0] ?? '';
   const d = dash.data;
@@ -167,16 +172,16 @@ export default function PatientHome() {
                   <Badge label={t('app.comingNext')} tone="neutral" />
                 </View>
               </Card>
-              <Card style={{ flex: 1 }} tone="accent">
+              <Card style={{ flex: 1 }} tone="accent" onPress={assistantOpenable ? () => router.push('/patient/assistant') : undefined} testID="home-assistant">
                 <View style={{ gap: spacing.sm }}>
                   <Icon name="mci:creation-outline" color="accentText" />
                   <Text variant="callout" weight="semibold">
                     {d.aiAssistant.assistantName ?? t('home.aiTitle')}
                   </Text>
                   <Text variant="caption" color="textSecondary" numberOfLines={4}>
-                    {t('home.aiNotConfigured')}
+                    {assistantReason === null ? t('home.aiAvailable') : assistantReason === 'CONSENT_REQUIRED' ? t('home.aiConsentNeeded') : t('home.aiNotConfigured')}
                   </Text>
-                  <Badge label={t('app.notConfigured')} tone="accent" />
+                  {assistantOpenable ? <Badge label={t('home.aiOpen')} tone="accent" icon="chevron-right" /> : <Badge label={t('app.notConfigured')} tone="accent" />}
                 </View>
               </Card>
             </View>

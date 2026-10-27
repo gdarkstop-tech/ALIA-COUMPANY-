@@ -95,6 +95,7 @@ describe('TetraSol Care (Flow D)', () => {
 describe('system status', () => {
   it('reports unconfigured integrations honestly', async () => {
     const res = await app.inject({ method: 'GET', url: '/v1/system/status' });
-    expect(JSON.parse(res.body).integrations).toMatchObject({ payments: 'NOT_CONFIGURED', ai: 'DISABLED', storage: 'NOT_CONFIGURED' });
+    // No provider keys in the test environment: only the development simulator is available.
+    expect(JSON.parse(res.body).integrations).toMatchObject({ payments: 'NOT_CONFIGURED', ai: 'DEV_ADAPTER', storage: 'NOT_CONFIGURED' });
   });
 });

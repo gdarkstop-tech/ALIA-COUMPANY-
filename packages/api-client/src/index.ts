@@ -55,6 +55,12 @@ import type {
   AdminUserListItem,
   Appeal,
   MyAccountStatus,
+  AiAssistantStatus,
+  AiControlCentre,
+  AiConversation,
+  AiConversationDetail,
+  AiModelAdmin,
+  AiReply,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -212,6 +218,25 @@ export function createApiClient(options: ApiClientOptions) {
       checkoutPreview: (body: { discountCode?: string } = {}) => post<CheckoutPreview>('/v1/store/checkout/preview', body),
       bundles: () => get<StoreBundle[]>('/v1/store/bundles'),
       categories: () => get<StoreCategory[]>('/v1/store/categories'),
+    },
+    /** Patient AI assistant. The server decides availability, quota and safety; the app only renders. */
+    ai: {
+      assistant: () => get<AiAssistantStatus>('/v1/ai/assistant'),
+      conversations: () => get<AiConversation[]>('/v1/ai/conversations'),
+      createConversation: (body: { patientId?: string | null } = {}) => post<AiConversation>('/v1/ai/conversations', body),
+      conversation: (id: string) => get<AiConversationDetail>(`/v1/ai/conversations/${id}`),
+      deleteConversation: (id: string) => del<{ ok: true }>(`/v1/ai/conversations/${id}`),
+      send: (id: string, content: string) => post<AiReply>(`/v1/ai/conversations/${id}/messages`, { content }),
+    },
+    /** AI control centre: configuration only — provider keys never leave the backend. */
+    aiAdmin: {
+      controlCentre: (days = 30) => get<AiControlCentre>('/v1/admin/ai/control-centre', { days }),
+      createModel: (body: Record<string, unknown>) => post<AiModelAdmin>('/v1/admin/ai/models', body),
+      updateModel: (id: string, body: Record<string, unknown>) => patch<AiModelAdmin>(`/v1/admin/ai/models/${id}`, body),
+      updateRoute: (key: string, body: Record<string, unknown>) => patch<AiControlCentre>(`/v1/admin/ai/routes/${encodeURIComponent(key)}`, body),
+      updateQuota: (body: { plan?: string; role?: string; metric: string; weeklyLimit: number }) => patch<AiControlCentre>('/v1/admin/ai/quotas', body),
+      setBudget: (monthlyLimitMicros: number | null) => put<AiControlCentre>('/v1/admin/ai/budget', { monthlyLimitMicros }),
+      healthCheck: (code: string, modelId: string) => post<{ provider: string; configured: boolean; ok: boolean; detail: string; checkedAt: string; environment: string }>(`/v1/admin/ai/providers/${code}/health-check`, { modelId }),
     },
     dashboard: {
       patient: (patientId?: string) => get<PatientDashboard>('/v1/dashboard/patient', { patientId }),

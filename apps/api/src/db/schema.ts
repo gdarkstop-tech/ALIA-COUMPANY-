@@ -4,7 +4,7 @@
  * these definitions must mirror them. Never use drizzle-kit push against a real database.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, customType, date, integer, jsonb, pgSchema, primaryKey, smallint, text, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, customType, date, integer, jsonb, pgSchema, primaryKey, smallint, text, uuid } from 'drizzle-orm/pg-core';
 
 export const authSchema = pgSchema('auth');
 export const appSchema = pgSchema('app');
@@ -61,11 +61,14 @@ export const statusReasonEnum = appSchema.enum('status_reason', [
 ]);
 export const statusActionEnum = appSchema.enum('status_action', ['SUSPEND', 'BLOCK', 'REACTIVATE', 'RESTRICT_BOOKINGS', 'LIFT_BOOKING_RESTRICTION', 'APPEAL_GRANTED']);
 export const appealStatusEnum = appSchema.enum('appeal_status', ['OPEN', 'GRANTED', 'DENIED', 'WITHDRAWN']);
+export const aiProviderEnum = appSchema.enum('ai_provider', ['ANTHROPIC', 'OPENAI', 'GEMINI', 'SIMULATED']);
+export const aiMetricEnum = appSchema.enum('ai_metric', ['CHAT_MESSAGES', 'ANALYSES', 'VOICE_SECONDS']);
+export const aiModelTierEnum = appSchema.enum('ai_model_tier', ['BASIC', 'ADVANCED', 'PREMIUM']);
 export const commerceEventTypeEnum = appSchema.enum('commerce_event_type', ['PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_PREVIEW', 'ORDER_PAID', 'ORDER_REFUNDED']);
 export const ledgerEntryTypeEnum = appSchema.enum('ledger_entry_type', ['VISIT_EARNING', 'PLATFORM_FEE', 'ADJUSTMENT', 'PAYOUT']);
 export const ledgerStatusEnum = appSchema.enum('ledger_status', ['PENDING', 'AVAILABLE', 'PAID_OUT']);
 export const accountKindEnum = appSchema.enum('account_kind', ['STANDARD', 'REVIEW', 'INTERNAL_TEST']);
-export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS']);
+export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING']);
 export const featureRiskEnum = appSchema.enum('feature_risk', ['LOW', 'MEDIUM', 'HIGH']);
 export const planCodeEnum = appSchema.enum('plan_code', ['SILVER', 'GOLD', 'PLATINUM']);
 export const paymentClassEnum = appSchema.enum('payment_class', ['PHYSICAL_PRODUCT', 'PHYSICAL_SERVICE', 'ELIGIBLE_PERSON_TO_PERSON_SERVICE', 'DIGITAL_SUBSCRIPTION', 'DIGITAL_FEATURE']);
@@ -218,6 +221,7 @@ export const billingPlans = appSchema.table('billing_plans', {
   sortOrder: integer('sort_order').notNull(),
   active: boolean('active').notNull(),
   updatedAt: ts('updated_at').notNull(),
+  aiModelTier: aiModelTierEnum('ai_model_tier').notNull().default('BASIC'),
 });
 
 export const billingPlanOffers = appSchema.table(
@@ -577,4 +581,96 @@ export const providerLedgerEntries = appSchema.table('provider_ledger_entries', 
   bookingId: uuid('booking_id'),
   occurredAt: ts('occurred_at').notNull().default(sql`now()`),
   isDemo: boolean('is_demo').notNull().default(false),
+});
+
+// ------------------------------------------------------------------ AI gateway (migration 0011)
+/** Prices: USD per 1M tokens in micro-dollars. Credentials never live in the database. */
+export const aiModels = appSchema.table('ai_models', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  provider: aiProviderEnum('provider').notNull(),
+  modelId: text('model_id').notNull(),
+  displayName: text('display_name').notNull(),
+  inputPriceMicros: bigint('input_price_micros', { mode: 'number' }),
+  outputPriceMicros: bigint('output_price_micros', { mode: 'number' }),
+  cacheReadPriceMicros: bigint('cache_read_price_micros', { mode: 'number' }),
+  priceSource: text('price_source'),
+  priceVerifiedAt: ts('price_verified_at'),
+  active: boolean('active').notNull().default(false),
+});
+
+export const aiRoutes = appSchema.table('ai_routes', {
+  key: text('key').primaryKey(),
+  description: text('description').notNull(),
+  featureFlag: text('feature_flag').notNull(),
+  metric: aiMetricEnum('metric').notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  maxOutputTokens: integer('max_output_tokens').notNull(),
+});
+
+export const aiRouteModels = appSchema.table(
+  'ai_route_models',
+  {
+    routeKey: text('route_key').notNull(),
+    tier: aiModelTierEnum('tier').notNull(),
+    model: uuid('model').notNull(),
+    fallbackModel: uuid('fallback_model'),
+    effort: text('effort').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.routeKey, t.tier] })],
+);
+
+export const aiPlanQuotas = appSchema.table(
+  'ai_plan_quotas',
+  { planCode: planCodeEnum('plan_code').notNull(), metric: aiMetricEnum('metric').notNull(), weeklyLimit: integer('weekly_limit').notNull() },
+  (t) => [primaryKey({ columns: [t.planCode, t.metric] })],
+);
+
+export const aiRoleQuotas = appSchema.table(
+  'ai_role_quotas',
+  { role: roleEnum('role').notNull(), metric: aiMetricEnum('metric').notNull(), weeklyLimit: integer('weekly_limit').notNull() },
+  (t) => [primaryKey({ columns: [t.role, t.metric] })],
+);
+
+export const aiBudget = appSchema.table('ai_budget', {
+  id: boolean('id').primaryKey(),
+  monthlyLimitMicros: bigint('monthly_limit_micros', { mode: 'number' }),
+});
+
+/** Written only by app.ai_reserve / ai_settle / ai_release. No content is stored here. */
+export const aiUsage = appSchema.table('ai_usage', {
+  id: uuid('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  routeKey: text('route_key').notNull(),
+  metric: aiMetricEnum('metric').notNull(),
+  units: integer('units').notNull(),
+  status: text('status').notNull(),
+  provider: aiProviderEnum('provider'),
+  modelId: text('model_id'),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  costMicros: bigint('cost_micros', { mode: 'number' }),
+  costEstimated: boolean('cost_estimated').notNull(),
+  outcome: text('outcome'),
+  reservedAt: ts('reserved_at').notNull(),
+});
+
+/** Private to their author (RLS); assistant messages are written only by app.ai_settle(). */
+export const aiConversations = appSchema.table('ai_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  routeKey: text('route_key').notNull(),
+  patientId: uuid('patient_id'),
+  title: text('title').notNull().default(''),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+  updatedAt: ts('updated_at').notNull().default(sql`now()`),
+});
+
+export const aiMessages = appSchema.table('ai_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull(),
+  userId: text('user_id').notNull(),
+  role: text('role').notNull(),
+  kind: text('kind').notNull().default('MESSAGE'),
+  content: text('content').notNull(),
+  createdAt: ts('created_at').notNull().default(sql`clock_timestamp()`),
 });

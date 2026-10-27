@@ -23,6 +23,8 @@ export function useRecordConsents() {
     },
     onSuccess: (next) => {
       qc.setQueryData(['consents'], next);
+      // AI availability depends on the AI-processing consent.
+      void qc.invalidateQueries({ queryKey: ['ai'] });
     },
     // A document was updated while this screen was open: reload the current versions so the next
     // tap answers the new documents instead of re-sending the stale ones.

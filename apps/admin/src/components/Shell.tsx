@@ -8,7 +8,7 @@ import { api, ApiError } from '@/lib/api';
 import { authClient } from '@/lib/auth-client';
 import { useI18n } from './Providers';
 
-type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav';
+type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav' | 'aiAdmin.nav';
 // `permissions`: shown when the account holds ANY of them (the API and the database enforce each action).
 const NAV: { href: string; key: NavKey; icon: string; permissions?: Permission[] }[] = [
   { href: '/', key: 'admin.overview', icon: '◎', permissions: ['provider.verification.review'] },
@@ -16,6 +16,7 @@ const NAV: { href: string; key: NavKey; icon: string; permissions?: Permission[]
   { href: '/catalog', key: 'catalog.nav', icon: '▦', permissions: ['catalog.tetrasol.manage', 'catalog.content.approve'] },
   { href: '/users', key: 'admin.users', icon: '◍', permissions: ['users.read'] },
   { href: '/audit', key: 'admin.audit', icon: '≡', permissions: ['audit.read'] },
+  { href: '/ai', key: 'aiAdmin.nav', icon: '✦', permissions: ['ai.config.manage', 'ai.usage.read'] },
   // ADMIN-only (the API and the database both enforce the ADMIN role).
   { href: '/features', key: 'admin.features', icon: '⚑', permissions: ['users.roles.grant'] },
   { href: '/security', key: 'admin.security', icon: '⚿' },

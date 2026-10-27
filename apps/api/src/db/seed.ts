@@ -22,6 +22,8 @@ export const DEMO_ACCOUNTS = {
   admin: { email: 'admin.demo@demo.ghayarly.test', name: 'Platform Admin' },
   pendingDoctor: { email: 'doctor.pending@demo.ghayarly.test', name: 'Dr. Karim Nabil' },
   pendingNurse: { email: 'nurse.pending@demo.ghayarly.test', name: 'Hoda Samir' },
+  /** INTERNAL_TEST patient: the only kind of account that may use the assistant while `ai.assistant` is off. */
+  aiTester: { email: 'ai.tester@demo.ghayarly.test', name: 'AI Internal Tester' },
 } as const;
 
 const CENTROIDS: Record<string, [number, number]> = {
@@ -126,13 +128,6 @@ export async function seed(log: (line: string) => void = console.log) {
     }
 
     await client.query('BEGIN');
-    const already = await client.query('select 1 from app.user_profiles where user_id = $1', [ids.patient]);
-    if (already.rowCount) {
-      await client.query('ROLLBACK');
-      log('✓ demo data already present (run `pnpm db:reset` to rebuild)');
-      return;
-    }
-
     const role = (userId: string, r: string) =>
       client.query('insert into app.user_roles (user_id, role, granted_by_user_id) values ($1, $2, $1) on conflict do nothing', [userId, r]);
     const profile = (userId: string, name: string, activeRole: string, locale = 'ar') =>
@@ -141,6 +136,22 @@ export async function seed(log: (line: string) => void = console.log) {
          values ($1, $2, $3, $4, now(), true) on conflict (user_id) do nothing`,
         [userId, name, locale, activeRole],
       );
+
+    // Idempotent (also added to databases seeded before it existed). No AI consent: the tester
+    // grants it in the app, like everyone else. Routing to a model is configured by an admin.
+    if (!(await client.query('select 1 from app.user_profiles where user_id = $1', [ids.aiTester])).rowCount) {
+      await role(ids.aiTester, 'PATIENT');
+      await profile(ids.aiTester, 'AI Internal Tester', 'PATIENT', 'en');
+      await client.query("update app.user_profiles set account_kind = 'INTERNAL_TEST' where user_id = $1", [ids.aiTester]);
+      await grantSeedConsents(client, ids.aiTester, true);
+    }
+
+    const already = await client.query('select 1 from app.user_profiles where user_id = $1', [ids.patient]);
+    if (already.rowCount) {
+      await client.query('COMMIT');
+      log('✓ demo data already present (run `pnpm db:reset` to rebuild)');
+      return;
+    }
 
     // ---------------------------------------------------------------- accounts & roles
     await role(ids.patient, 'PATIENT');
@@ -158,7 +169,7 @@ export async function seed(log: (line: string) => void = console.log) {
     await profile(ids.pendingNurse, 'هدى سمير', 'NURSE');
 
     // ---------------------------------------------------------------- consents (synthetic accounts accepted the draft documents)
-    for (const userId of Object.values(ids)) await grantSeedConsents(client, userId, userId === ids.patient);
+    for (const userId of Object.values(ids)) if (userId !== ids.aiTester) await grantSeedConsents(client, userId, userId === ids.patient);
 
     // ---------------------------------------------------------------- patient & family
     const createPatient = async (p: { name: string; dob: string; sex: string; rel: string; level: string; basis: string; blood?: string; gov?: string; city?: string; self?: boolean }) => {

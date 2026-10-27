@@ -21,6 +21,7 @@ export default function PrivacyCenter() {
   if (consents.error) return <ErrorState message={t(errorKey(consents.error))} onRetry={() => void consents.refetch()} />;
   const state = consents.data;
   const marketing = state.consents.find((c) => c.type === 'MARKETING_COMMUNICATIONS')?.granted ?? false;
+  const aiConsent = state.consents.find((c) => c.type === 'AI_ASSISTANT_PROCESSING');
   const setHealth = (granted: boolean) => record.mutate({ state, answers: { HEALTH_DATA_PROCESSING: granted } });
 
   return (
@@ -57,6 +58,26 @@ export default function PrivacyCenter() {
             trackColor={{ true: colors.accent, false: colors.border }}
           />
         </View>
+        {aiConsent ? (
+          <>
+            <Divider />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="callout" weight="semibold">{t('privacy.aiAssistant')}</Text>
+                <Text variant="footnote" color="textSecondary">{t('privacy.aiAssistantBody')}</Text>
+              </View>
+              <Switch
+                testID="ai-consent-switch"
+                accessibilityLabel={t('privacy.aiAssistant')}
+                value={aiConsent.granted}
+                disabled={record.isPending}
+                onValueChange={(v) => record.mutate({ state, answers: { AI_ASSISTANT_PROCESSING: v } })}
+                trackColor={{ true: colors.accent, false: colors.border }}
+              />
+            </View>
+            <Button label={`${t('legal.read')} · ${t('legal.aiConsent')}`} variant="ghost" size="sm" fullWidth={false} onPress={() => router.push('/legal/ai-assistant-consent' as Href)} testID="open-ai-consent" />
+          </>
+        ) : null}
       </Card>
       {record.error ? <Notice tone="danger" body={t(consentErrorKey(record.error))} /> : null}
 
