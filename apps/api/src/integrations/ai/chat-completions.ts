@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { AiProviderError, notConfigured, type AiProvider, type AiProviderCode, type AiResult } from './types';
+import { AiProviderError, fullSystem, notConfigured, type AiProvider, type AiProviderCode, type AiResult } from './types';
 
 type ChatCompletionsOptions = {
   code: Extract<AiProviderCode, 'QWEN' | 'KIMI' | 'MEDGEMMA'>;
@@ -44,7 +44,7 @@ export function createChatCompletionsProvider(o: ChatCompletionsOptions): AiProv
       try {
         res = await client.chat.completions.create({
           model: req.model,
-          messages: [{ role: 'system', content: req.system }, ...req.messages.map((m) => ({ role: m.role, content: m.content }))],
+          messages: [{ role: 'system', content: fullSystem(req) }, ...req.messages.map((m) => ({ role: m.role, content: m.content }))],
           max_tokens: req.maxOutputTokens,
         });
       } catch (e) {

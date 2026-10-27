@@ -787,3 +787,39 @@ export const aiMessages = appSchema.table('ai_messages', {
   content: text('content').notNull(),
   createdAt: ts('created_at').notNull().default(sql`clock_timestamp()`),
 });
+
+// ------------------------------------------------------------------ AI preferences and reports (migration 0015)
+export const aiPreferences = appSchema.table('ai_preferences', {
+  userId: text('user_id').primaryKey(),
+  replyLanguage: text('reply_language').notNull().default('auto'),
+  detailLevel: text('detail_level').notNull().default('brief'),
+  updatedAt: ts('updated_at').notNull().default(sql`now()`),
+});
+
+/** Snapshot columns are deliberately absent: content is read only through app.ai_report_detail(). */
+export const aiResponseReports = appSchema.table('ai_response_reports', {
+  id: uuid('id').primaryKey(),
+  reporterUserId: text('reporter_user_id').notNull(),
+  messageId: uuid('message_id'),
+  reason: text('reason').notNull(),
+  messageKind: text('message_kind').notNull(),
+  provider: aiProviderEnum('provider'),
+  modelId: text('model_id'),
+  routeKey: text('route_key'),
+  locale: text('locale'),
+  status: text('status').notNull(),
+  resolution: text('resolution'),
+  assignedToUserId: text('assigned_to_user_id'),
+  redactedAt: ts('redacted_at'),
+  createdAt: ts('created_at').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+export const aiReportEvents = appSchema.table('ai_report_events', {
+  id: uuid('id').primaryKey(),
+  reportId: uuid('report_id').notNull(),
+  actorUserId: text('actor_user_id'),
+  event: text('event').notNull(),
+  note: text('note'),
+  createdAt: ts('created_at').notNull(),
+});

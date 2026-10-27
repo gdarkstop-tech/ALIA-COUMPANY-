@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint src test --max-warnings=0",
     "test": "vitest run",
-    "review:seed": "tsx --env-file-if-exists=.env src/db/seed-review.ts"
+    "review:seed": "tsx --env-file-if-exists=.env src/db/seed-review.ts",
+    "ai:smoke": "tsx --env-file-if-exists=.env src/ops/ai-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",

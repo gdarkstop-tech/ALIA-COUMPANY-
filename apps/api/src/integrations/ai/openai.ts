@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { AiProviderError, notConfigured, type AiProvider, type AiProviderCode, type AiResult } from './types';
+import { AiProviderError, fullSystem, notConfigured, type AiProvider, type AiProviderCode, type AiResult } from './types';
 
 type ResponsesOptions = {
   code: Extract<AiProviderCode, 'OPENAI' | 'GROK'>;
@@ -44,7 +44,7 @@ export function createResponsesProvider(o: ResponsesOptions): AiProvider {
         const turns = req.messages.map((m) => ({ role: m.role, content: m.content }));
         res = await client.responses.create({
           model: req.model,
-          ...(o.systemAs === 'instructions' ? { instructions: req.system, input: turns } : { input: [{ role: 'system' as const, content: req.system }, ...turns] }),
+          ...(o.systemAs === 'instructions' ? { instructions: fullSystem(req), input: turns } : { input: [{ role: 'system' as const, content: fullSystem(req) }, ...turns] }),
           max_output_tokens: req.maxOutputTokens,
           ...(o.sendSafetyIdentifier ? { safety_identifier: req.endUserRef } : {}),
           store: false,

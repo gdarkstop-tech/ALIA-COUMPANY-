@@ -1,4 +1,4 @@
-import { AI_MESSAGE_MAX_CHARS, EMERGENCY_NUMBERS, type AiAllowance, type AiAssistantStatus } from '@ghayarly/shared';
+import { AI_MESSAGE_MAX_CHARS, EMERGENCY_NUMBERS, type AiAllowance, type AiAssistantStatus, type AiPreferences, type AiReportReason } from '@ghayarly/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api, errorKey } from '@/lib/api';
 import { formatDate } from '@/lib/format';
@@ -72,4 +72,25 @@ export function useAssistantErrorText() {
     }
     return t(errorKey(e));
   };
+}
+
+export function useAssistantPreferences() {
+  return useQuery({ queryKey: ['ai', 'preferences'], queryFn: () => api.ai.preferences() });
+}
+
+export function useSetAssistantPreferences() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<Pick<AiPreferences, 'replyLanguage' | 'detailLevel'>>) => api.ai.setPreferences(body),
+    onSuccess: (next) => qc.setQueryData(['ai', 'preferences'], next),
+  });
+}
+
+/** Reports one answer; the thread is re-read so the message shows as reported. */
+export function useReportAnswer(conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { messageId: string; reason: AiReportReason; note?: string; includeQuestion: boolean }) => api.ai.report(v.messageId, { reason: v.reason, note: v.note, includeQuestion: v.includeQuestion }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['ai', 'conversation', conversationId] }),
+  });
 }

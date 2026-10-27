@@ -65,6 +65,9 @@ import type {
   AiEvalResult,
   AiEvalRun,
   AiEvaluationOverview,
+  AiPreferences,
+  AiReportDetail,
+  AiReportListItem,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -231,6 +234,9 @@ export function createApiClient(options: ApiClientOptions) {
       conversation: (id: string) => get<AiConversationDetail>(`/v1/ai/conversations/${id}`),
       deleteConversation: (id: string) => del<{ ok: true }>(`/v1/ai/conversations/${id}`),
       send: (id: string, content: string) => post<AiReply>(`/v1/ai/conversations/${id}/messages`, { content }),
+      preferences: () => get<AiPreferences>('/v1/ai/preferences'),
+      setPreferences: (body: Partial<Pick<AiPreferences, 'replyLanguage' | 'detailLevel'>>) => put<AiPreferences>('/v1/ai/preferences', body),
+      report: (messageId: string, body: { reason: string; note?: string; includeQuestion: boolean }) => post<{ id: string }>(`/v1/ai/messages/${messageId}/report`, body),
     },
     /** AI control centre: configuration only — provider keys never leave the backend. */
     aiAdmin: {
@@ -253,6 +259,9 @@ export function createApiClient(options: ApiClientOptions) {
       reviewResult: (id: string, body: { accuracy: number; hallucination: boolean; unsafe: boolean; arabicQuality?: number | null; notes?: string }) => post<{ ok: true }>(`/v1/admin/ai/evaluation/results/${id}/review`, body),
       approveModel: (body: { routeKey: string; modelId: string; runId: string; note: string }) => post<{ id: string }>('/v1/admin/ai/evaluation/approvals', body),
       revokeApproval: (id: string, note: string) => post<{ ok: true }>(`/v1/admin/ai/evaluation/approvals/${id}/revoke`, { note }),
+      reports: (status = 'ACTIVE') => get<AiReportListItem[]>('/v1/admin/ai/reports', { status }),
+      report: (id: string) => get<AiReportDetail>(`/v1/admin/ai/reports/${id}`),
+      transitionReport: (id: string, body: { status: string; resolution?: string; note?: string }) => post<{ ok: true }>(`/v1/admin/ai/reports/${id}/transition`, body),
       healthCheck: (code: string, modelId: string) => post<{ provider: string; configured: boolean; ok: boolean; detail: string; checkedAt: string; environment: string }>(`/v1/admin/ai/providers/${code}/health-check`, { modelId }),
     },
     dashboard: {

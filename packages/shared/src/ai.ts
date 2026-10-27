@@ -45,7 +45,7 @@ export type AiAssistantStatus = {
 };
 
 export type AiMessageKind = 'MESSAGE' | 'EMERGENCY_GUIDANCE' | 'REFUSAL' | 'SIMULATED';
-export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; content: string; createdAt: string };
+export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; content: string; createdAt: string; reported: boolean };
 export type AiConversation = { id: string; title: string; patientId: string | null; createdAt: string; updatedAt: string };
 export type AiConversationDetail = AiConversation & { messages: AiChatMessage[] };
 export type AiReply = { message: AiChatMessage; allowance: AiAllowance | null };
@@ -297,4 +297,49 @@ export type AiEvaluationOverview = {
   approvals: AiModelApproval[];
   thresholds: { minCases: number; minAutomatedPassRate: number; minMeanAccuracy: number; maxHallucinationRate: number };
   currentPolicyVersion: string;
+};
+
+// ---------------------------------------------------------------- personal preferences
+export const AI_REPLY_LANGUAGES = ['auto', 'ar', 'en'] as const;
+export const AI_DETAIL_LEVELS = ['brief', 'detailed'] as const;
+export type AiPreferences = { replyLanguage: (typeof AI_REPLY_LANGUAGES)[number]; detailLevel: (typeof AI_DETAIL_LEVELS)[number]; assistantName: string | null };
+export const aiPreferencesBody = z.object({ replyLanguage: z.enum(AI_REPLY_LANGUAGES), detailLevel: z.enum(AI_DETAIL_LEVELS) }).partial();
+
+// ---------------------------------------------------------------- "Report AI response"
+export const AI_REPORT_REASONS = ['INACCURATE', 'UNSAFE', 'MISSED_EMERGENCY', 'INAPPROPRIATE', 'PRIVACY', 'PRODUCT_PROMOTION', 'OTHER'] as const;
+export type AiReportReason = (typeof AI_REPORT_REASONS)[number];
+export const AI_REPORT_RESOLUTIONS = ['MODEL_ERROR', 'POLICY_GAP', 'SAFETY_ESCALATION', 'PRIVACY_ISSUE', 'NO_ISSUE', 'OTHER'] as const;
+export type AiReportResolution = (typeof AI_REPORT_RESOLUTIONS)[number];
+export const aiReportBody = z.object({
+  reason: z.enum(AI_REPORT_REASONS),
+  note: z.string().trim().max(1000).optional(),
+  /** Share the question that led to the answer with the reviewers too (explicit choice). */
+  includeQuestion: z.boolean().default(false),
+});
+export const aiReportTransitionBody = z.object({
+  status: z.enum(['IN_REVIEW', 'RESOLVED', 'DISMISSED', 'NOTE']),
+  resolution: z.enum(AI_REPORT_RESOLUTIONS).optional(),
+  note: z.string().trim().max(2000).optional(),
+});
+export type AiReportStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'DISMISSED';
+export type AiReportListItem = {
+  id: string;
+  reason: AiReportReason;
+  status: AiReportStatus;
+  resolution: AiReportResolution | null;
+  messageKind: string;
+  provider: AiProviderCode | null;
+  modelId: string | null;
+  routeKey: string | null;
+  locale: string | null;
+  assignedToMe: boolean;
+  redacted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+export type AiReportDetail = AiReportListItem & {
+  answer: string;
+  question: string | null;
+  note: string | null;
+  events: { event: string; note: string | null; createdAt: string; byMe: boolean }[];
 };

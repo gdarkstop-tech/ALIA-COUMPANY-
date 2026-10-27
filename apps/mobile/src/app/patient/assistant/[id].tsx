@@ -1,16 +1,16 @@
-import type { AiChatMessage } from '@ghayarly/shared';
+import { AI_REPORT_REASONS, type AiChatMessage, type AiReportReason } from '@ghayarly/shared';
 import { radii, spacing, typography } from '@ghayarly/tokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, TextInput, View } from 'react-native';
-import { EMERGENCY_NUMBER, MAX_CHARS, useAssistantErrorText, useAssistantStatus, useConversation, useDeleteConversation, useSendMessage } from '@/features/assistant/hooks';
+import { EMERGENCY_NUMBER, MAX_CHARS, useAssistantErrorText, useAssistantStatus, useConversation, useDeleteConversation, useReportAnswer, useSendMessage } from '@/features/assistant/hooks';
 import { usePatients } from '@/features/patient/hooks';
 import { errorKey } from '@/lib/api';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Badge, Button, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Sheet, Text } from '@/ui';
+import { Badge, Button, Checkbox, Chip, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Sheet, Text, TextField } from '@/ui';
 
-function Bubble({ m }: { m: AiChatMessage }) {
+function Bubble({ m, onReport }: { m: AiChatMessage; onReport?: () => void }) {
   const { t } = useI18n();
   const { colors } = useTheme();
   const mine = m.role === 'user';
@@ -33,6 +33,15 @@ function Bubble({ m }: { m: AiChatMessage }) {
       {emergency ? (
         <Button testID="assistant-call-emergency" variant="danger" size="md" fullWidth={false} icon="phone" label={t('safety.callEmergency', { number: EMERGENCY_NUMBER })} onPress={() => void Linking.openURL(`tel:${EMERGENCY_NUMBER}`).catch(() => undefined)} />
       ) : null}
+      {!mine && onReport ? (
+        m.reported ? (
+          <Text variant="caption" color="textTertiary" testID={`assistant-reported-${m.id}`}>{t('assistant.reported')}</Text>
+        ) : (
+          <PressableScale accessibilityRole="button" accessibilityLabel={t('assistant.reportAnswer')} onPress={onReport} testID="assistant-report" style={{ minHeight: 32, justifyContent: 'center', alignSelf: 'flex-start' }}>
+            <Text variant="caption" color="textSecondary" style={{ textDecorationLine: 'underline' }}>{t('assistant.reportAnswer')}</Text>
+          </PressableScale>
+        )
+      ) : null}
     </View>
   );
 }
@@ -52,6 +61,18 @@ export default function AssistantChat() {
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const report = useReportAnswer(id ?? '');
+  const [reporting, setReporting] = useState<string | null>(null);
+  const [reason, setReason] = useState<AiReportReason | null>(null);
+  const [includeQuestion, setIncludeQuestion] = useState(false);
+  const [reportNote, setReportNote] = useState('');
+  const openReport = (messageId: string) => {
+    report.reset();
+    setReason(null);
+    setIncludeQuestion(false);
+    setReportNote('');
+    setReporting(messageId);
+  };
   const scroll = useRef<ScrollView>(null);
   const messages = conversation.data?.messages ?? [];
 
@@ -138,11 +159,11 @@ export default function AssistantChat() {
     >
       <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: spacing.md, paddingVertical: spacing.md }}>
         {messages.map((m) => (
-          <Bubble key={m.id} m={m} />
+          <Bubble key={m.id} m={m} onReport={m.role === 'assistant' ? () => openReport(m.id) : undefined} />
         ))}
         {pending ? (
           <>
-            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', content: pending, createdAt: new Date().toISOString() }} />
+            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', content: pending, createdAt: new Date().toISOString(), reported: false }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} testID="assistant-thinking">
               <ActivityIndicator color={colors.primary} />
               <Text variant="footnote" color="textSecondary">{t('assistant.sending')}</Text>
@@ -150,6 +171,35 @@ export default function AssistantChat() {
           </>
         ) : null}
       </ScrollView>
+
+      <Sheet visible={reporting !== null} onClose={() => setReporting(null)} title={t('assistant.reportTitle')} testID="assistant-report-sheet">
+        {report.isSuccess ? (
+          <>
+            <Notice tone="success" body={t('assistant.reportDone')} testID="assistant-report-done" />
+            <Button label={t('common.done')} onPress={() => setReporting(null)} />
+          </>
+        ) : (
+          <>
+            <Text variant="callout" color="textSecondary">{t('assistant.reportBody')}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+              {AI_REPORT_REASONS.map((r) => (
+                <Chip key={r} label={t(`assistant.reason_${r}`)} selected={reason === r} onPress={() => setReason(r)} testID={`assistant-report-reason-${r}`} />
+              ))}
+            </View>
+            <Checkbox checked={includeQuestion} onChange={setIncludeQuestion} label={t('assistant.reportIncludeQuestion')} testID="assistant-report-include-question" />
+            <TextField label={t('assistant.reportNote')} optional value={reportNote} onChangeText={setReportNote} maxLength={1000} multiline testID="assistant-report-note" />
+            <Text variant="caption" color="textTertiary">{t('assistant.reportKept')}</Text>
+            {report.error ? <Notice tone="danger" body={errorText(report.error)} /> : null}
+            <Button
+              testID="assistant-report-send"
+              label={t('assistant.reportSend')}
+              disabled={!reason}
+              loading={report.isPending}
+              onPress={() => reason && reporting && report.mutate({ messageId: reporting, reason, note: reportNote.trim() || undefined, includeQuestion })}
+            />
+          </>
+        )}
+      </Sheet>
 
       <Sheet visible={confirmDelete} onClose={() => setConfirmDelete(false)} title={t('assistant.deleteTitle')} testID="assistant-delete-sheet">
         <Text variant="callout" color="textSecondary">{t('assistant.deleteBody')}</Text>

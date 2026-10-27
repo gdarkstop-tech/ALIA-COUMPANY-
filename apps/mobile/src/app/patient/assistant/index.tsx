@@ -2,14 +2,14 @@ import { spacing } from '@ghayarly/tokens';
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Switch, View } from 'react-native';
-import { EMERGENCY_NUMBER, useAssistantErrorText, useAssistantStatus, useConversations, useCreateConversation } from '@/features/assistant/hooks';
+import { EMERGENCY_NUMBER, useAssistantErrorText, useAssistantPreferences, useAssistantStatus, useConversations, useCreateConversation } from '@/features/assistant/hooks';
 import { EmergencyNotice } from '@/features/compliance/Safety';
 import { useActivePatient } from '@/features/patient/hooks';
 import { errorKey } from '@/lib/api';
 import { formatDate, formatNumber } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Button, Card, Divider, EmptyState, ErrorState, Header, ListRow, LoadingScreen, Notice, Screen, Section, Text } from '@/ui';
+import { Button, Card, Divider, EmptyState, ErrorState, Header, Icon, ListRow, LoadingScreen, Notice, PressableScale, Screen, Section, Text } from '@/ui';
 
 /** Patient health assistant: availability and weekly allowance come from the server, never the app. */
 export default function AssistantHome() {
@@ -20,6 +20,7 @@ export default function AssistantHome() {
   const available = status.data?.unavailableReason === null;
   const conversations = useConversations(Boolean(status.data && status.data.unavailableReason !== 'FEATURE_DISABLED'));
   const create = useCreateConversation();
+  const prefs = useAssistantPreferences();
   const errorText = useAssistantErrorText();
   const { active } = useActivePatient();
   const [share, setShare] = useState(false);
@@ -30,7 +31,20 @@ export default function AssistantHome() {
   const profileName = active ? (active.relationship === 'SELF' ? t('family.me') : active.displayName) : '';
 
   return (
-    <Screen testID="assistant-home" header={<Header back title={t('assistant.title')} subtitle={t('assistant.subtitle')} />} refreshing={status.isRefetching} onRefresh={() => void Promise.all([status.refetch(), conversations.refetch()])}>
+    <Screen
+      testID="assistant-home"
+      header={
+        <Header
+          back
+          title={prefs.data?.assistantName ?? t('assistant.title')}
+          subtitle={t('assistant.subtitle')}
+          right={
+            <PressableScale testID="assistant-open-settings" accessibilityRole="button" accessibilityLabel={t('assistant.settings')} onPress={() => router.push('/patient/assistant/settings' as Href)} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="sliders" />
+            </PressableScale>
+          }
+        />
+      } refreshing={status.isRefetching} onRefresh={() => void Promise.all([status.refetch(), conversations.refetch()])}>
       <EmergencyNotice compact />
 
       {unavailableReason ? (

@@ -36,7 +36,7 @@ export function createAnthropicProvider(apiKey: string | undefined, timeoutMs: n
           model: req.model,
           max_tokens: req.maxOutputTokens,
           // Stable policy text first and cached; thinking is left at the model's default (adaptive).
-          system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
+          system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }, ...(req.systemExtra ? [{ type: 'text' as const, text: req.systemExtra }] : [])],
           messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
           output_config: { effort: req.effort },
           metadata: { user_id: req.endUserRef },

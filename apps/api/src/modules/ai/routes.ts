@@ -8,8 +8,11 @@
  */
 import { createHmac } from 'node:crypto';
 import {
+  aiPreferencesBody,
+  aiReportBody,
   createConversationBody,
   sendMessageBody,
+  type AiPreferences,
   type AiAllowance,
   type AiAssistantStatus,
   type AiChatMessage,
@@ -22,13 +25,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Tx } from '../../db/client';
-import { aiConversations, aiMessages, userProfiles } from '../../db/schema';
+import { aiConversations, aiMessages, aiPreferences, aiResponseReports, userProfiles } from '../../db/schema';
 import { AiProviderError, configuredProviders, type AiProviderCode, type AiResult, type AiTurn } from '../../integrations/ai';
 import { AppError, notFound } from '../../lib/errors';
 import { inContext, requirePrincipal, type Principal } from '../../lib/principal';
 import { sessionKey } from '../../lib/rateLimitKey';
 import { parse } from '../../lib/validate';
-import { ASSISTANT_POLICY, emergencyGuidance, looksLikeEmergency, patientSummary, refusalNotice, replyLocale } from './safety';
+import { ASSISTANT_POLICY, emergencyGuidance, looksLikeEmergency, patientSummary, preferenceContext, refusalNotice, replyLocale } from './safety';
 
 const ROUTE = 'patient.chat';
 const HISTORY_MESSAGES = 20;
@@ -42,8 +45,14 @@ type Reservation = { reservation_id: string; candidates: Candidate[]; max_output
 /** The providers this server can call, as a PostgreSQL array literal for the router. */
 const providerArray = (codes: AiProviderCode[]) => sql`${`{${codes.join(',')}}`}::app.ai_provider[]`;
 
-function messageDto(m: typeof aiMessages.$inferSelect): AiChatMessage {
-  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], content: m.content, createdAt: iso(m.createdAt) };
+function messageDto(m: typeof aiMessages.$inferSelect, reported = false): AiChatMessage {
+  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], content: m.content, createdAt: iso(m.createdAt), reported };
+}
+
+async function preferences(tx: Tx, userId: string): Promise<AiPreferences> {
+  const [p] = await tx.select().from(aiPreferences).where(eq(aiPreferences.userId, userId));
+  const [u] = await tx.select({ name: userProfiles.assistantName }).from(userProfiles).where(eq(userProfiles.userId, userId));
+  return { replyLanguage: (p?.replyLanguage ?? 'auto') as AiPreferences['replyLanguage'], detailLevel: (p?.detailLevel ?? 'brief') as AiPreferences['detailLevel'], assistantName: u?.name ?? null };
 }
 
 async function allowance(tx: Tx): Promise<AiAllowance | null> {
@@ -109,7 +118,12 @@ export async function aiRoutes(app: FastifyInstance) {
       const [c] = await tx.select().from(aiConversations).where(eq(aiConversations.id, id));
       if (!c) throw notFound('Conversation');
       const msgs = await tx.select().from(aiMessages).where(eq(aiMessages.conversationId, id)).orderBy(asc(aiMessages.createdAt));
-      return { id: c.id, title: c.title, patientId: c.patientId, createdAt: iso(c.createdAt), updatedAt: iso(c.updatedAt), messages: msgs.map(messageDto) };
+      const reported = new Set(
+        msgs.length
+          ? (await tx.select({ m: aiResponseReports.messageId }).from(aiResponseReports).where(and(eq(aiResponseReports.reporterUserId, principal.userId), inArray(aiResponseReports.messageId, msgs.map((m) => m.id))))).map((r) => r.m)
+          : [],
+      );
+      return { id: c.id, title: c.title, patientId: c.patientId, createdAt: iso(c.createdAt), updatedAt: iso(c.updatedAt), messages: msgs.map((m) => messageDto(m, reported.has(m.id))) };
     });
   });
 
@@ -133,7 +147,8 @@ export async function aiRoutes(app: FastifyInstance) {
       const [c] = await tx.select().from(aiConversations).where(eq(aiConversations.id, id));
       if (!c) throw notFound('Conversation');
       const [profile] = await tx.select({ locale: userProfiles.locale }).from(userProfiles).where(eq(userProfiles.userId, principal.userId));
-      const locale = replyLocale(content, profile?.locale ?? 'ar');
+      const prefs = await preferences(tx, principal.userId);
+      const locale = prefs.replyLanguage === 'auto' ? replyLocale(content, profile?.locale ?? 'ar') : prefs.replyLanguage;
       if (looksLikeEmergency(content)) {
         await tx.insert(aiMessages).values({ conversationId: id, userId: principal.userId, role: 'user', content });
         const r = await tx.execute<{ id: string }>(sql`select app.ai_record_emergency(${id}::uuid, ${emergencyGuidance(locale)}) as id`);
@@ -150,11 +165,11 @@ export async function aiRoutes(app: FastifyInstance) {
       if (!c.title) await tx.update(aiConversations).set({ title: content.slice(0, 60) }).where(eq(aiConversations.id, id));
       // History: the person's own messages and the assistant's real answers, newest last.
       const history = (await tx.select().from(aiMessages).where(and(eq(aiMessages.conversationId, id), inArray(aiMessages.kind, ['MESSAGE', 'SIMULATED']))).orderBy(desc(aiMessages.createdAt)).limit(HISTORY_MESSAGES)).reverse();
-      return { reservation, history, summary, locale } as const;
+      return { reservation, history, summary, locale, prefs } as const;
     });
     if ('emergency' in prep) return { message: prep.emergency!, allowance: prep.allowance ?? null };
 
-    const { reservation, history, summary, locale } = prep;
+    const { reservation, history, summary, locale, prefs } = prep;
     const turns: AiTurn[] = [];
     let budget = HISTORY_CHARS;
     for (const m of [...history].reverse()) {
@@ -167,7 +182,7 @@ export async function aiRoutes(app: FastifyInstance) {
 
     // 3. Provider call(s), outside the database transaction: the first eligible candidate, then —
     //    only for a retryable failure — one fallback, preferring a different provider.
-    const base = { system: ASSISTANT_POLICY, messages: turns, maxOutputTokens: reservation.max_output_tokens, requestId: request.id, endUserRef: endUserRef(principal.userId) };
+    const base = { system: ASSISTANT_POLICY, systemExtra: preferenceContext(prefs, prefs.assistantName), messages: turns, maxOutputTokens: reservation.max_output_tokens, requestId: request.id, endUserRef: endUserRef(principal.userId) };
     const [primary, ...rest] = reservation.candidates;
     let result: AiResult | null = null;
     let servedBy: AiProviderCode = primary!.provider;
@@ -203,4 +218,34 @@ export async function aiRoutes(app: FastifyInstance) {
       return { message: messageDto(m!), allowance: await allowance(tx) };
     });
   });
+
+  // ---------------------------------------------------------------- preferences
+  app.get('/ai/preferences', async (request): Promise<AiPreferences> => {
+    const principal = await requirePrincipal(request);
+    return inContext(request, principal, (tx) => preferences(tx, principal.userId));
+  });
+
+  app.put('/ai/preferences', async (request): Promise<AiPreferences> => {
+    const principal = await requirePrincipal(request);
+    const b = parse(aiPreferencesBody, request.body);
+    return inContext(request, principal, async (tx) => {
+      await tx
+        .insert(aiPreferences)
+        .values({ userId: principal.userId, replyLanguage: b.replyLanguage ?? 'auto', detailLevel: b.detailLevel ?? 'brief' })
+        .onConflictDoUpdate({ target: aiPreferences.userId, set: { ...(b.replyLanguage ? { replyLanguage: b.replyLanguage } : {}), ...(b.detailLevel ? { detailLevel: b.detailLevel } : {}), updatedAt: sql`now()` } });
+      return preferences(tx, principal.userId);
+    });
+  });
+
+  // ---------------------------------------------------------------- "Report AI response"
+  app.post('/ai/messages/:id/report', { config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: sessionKey } } }, async (request, reply) => {
+    const principal = await requirePrincipal(request);
+    const { id } = parse(idParam, request.params);
+    const b = parse(aiReportBody, request.body);
+    const reportId = await inContext(request, principal, async (tx) =>
+      (await tx.execute<{ id: string }>(sql`select app.ai_report_response(${id}::uuid, ${b.reason}, ${b.note ?? null}, ${b.includeQuestion}) as id`)).rows[0]!.id,
+    );
+    return reply.status(201).send({ id: reportId });
+  });
+
 }

@@ -202,8 +202,8 @@ export default function AiOverviewPage() {
   // Clinical reviewers see the evaluation suite, not the configuration.
   const canRead = can('ai.config.manage') || can('ai.usage.read');
   useEffect(() => {
-    if (me.data && !canRead) router.replace('/ai/evaluation');
-  }, [me.data, canRead, router]);
+    if (me.data && !canRead) router.replace(can('ai.eval.manage') || can('ai.clinical.review') ? '/ai/evaluation' : '/ai/safety');
+  }, [me.data, canRead, router, can]);
   const cc = useQuery({ queryKey: AI_KEY, queryFn: () => api.aiAdmin.controlCentre(30), enabled: canRead });
   const canManage = can('ai.config.manage');
   return (

@@ -80,6 +80,15 @@ test.describe('Flow F3 — AI health assistant (internal test account, simulated
     // The development simulator is labelled as such — never presented as a real answer.
     await expect(byId(page, 'assistant-message-assistant-SIMULATED')).toContainText('SIMULATED');
 
+    // Report AI response: reason, optional question sharing, confirmation; the answer shows as reported.
+    await byId(page, 'assistant-report').click();
+    await byId(page, 'assistant-report-reason-INACCURATE').click();
+    await byId(page, 'assistant-report-send').click();
+    await expect(byId(page, 'assistant-report-done')).toBeVisible();
+    await shot(page, 'F12-assistant-report');
+    await page.getByRole('button', { name: 'Done' }).filter({ visible: true }).first().click();
+    await expect(page.getByText('Reported — thank you').filter({ visible: true }).first()).toBeVisible();
+
     await byId(page, 'assistant-input').fill('My father has chest pain and cannot breathe');
     await byId(page, 'assistant-send').click();
     await expect(byId(page, 'assistant-message-assistant-EMERGENCY_GUIDANCE')).toContainText('123');

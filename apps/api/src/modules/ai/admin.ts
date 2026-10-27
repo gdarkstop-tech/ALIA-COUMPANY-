@@ -15,6 +15,7 @@ import {
   aiModelPatchBody,
   aiPlanBudgetBody,
   aiQuotaPatchBody,
+  aiReportTransitionBody,
   aiRoutePatchBody,
   type AiCapability,
   type AiControlCentre,
@@ -27,9 +28,11 @@ import {
   type AiMetric,
   type AiModelAdmin,
   type AiProviderCode,
+  type AiReportDetail,
+  type AiReportListItem,
   type AiRouteCandidate,
 } from '@ghayarly/shared';
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Tx } from '../../db/client';
@@ -43,6 +46,8 @@ import {
   aiModels,
   aiPlanBudgets,
   aiPlanQuotas,
+  aiReportEvents,
+  aiResponseReports,
   aiRoleQuotas,
   aiRouteCandidates,
   aiRoutes,
@@ -499,4 +504,59 @@ export async function adminAiRoutes(app: FastifyInstance) {
     await inContext(request, principal, (tx) => tx.execute(sql`select app.ai_revoke_model_approval(${id}::uuid, ${note})`));
     return { ok: true };
   });
+
+  // ---------------------------------------------------------------- reported AI answers (ai.safety.review)
+  const reportItem = (r: typeof aiResponseReports.$inferSelect, me: string): AiReportListItem => ({
+    id: r.id,
+    reason: r.reason as AiReportListItem['reason'],
+    status: r.status as AiReportListItem['status'],
+    resolution: r.resolution as AiReportListItem['resolution'],
+    messageKind: r.messageKind,
+    provider: r.provider,
+    modelId: r.modelId,
+    routeKey: r.routeKey,
+    locale: r.locale,
+    assignedToMe: r.assignedToUserId === me,
+    redacted: Boolean(r.redactedAt),
+    createdAt: iso(r.createdAt)!,
+    updatedAt: iso(r.updatedAt)!,
+  });
+
+  app.get('/reports', async (request): Promise<AiReportListItem[]> => {
+    const principal = await requirePermission(request, 'ai.safety.review');
+    const { status } = parse(z.object({ status: z.enum(['ACTIVE', 'OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ALL']).default('ACTIVE') }), request.query);
+    return inContext(request, principal, async (tx) => {
+      const where = status === 'ALL' ? undefined : status === 'ACTIVE' ? inArray(aiResponseReports.status, ['OPEN', 'IN_REVIEW']) : eq(aiResponseReports.status, status);
+      const rows = await tx.select().from(aiResponseReports).where(where).orderBy(asc(aiResponseReports.createdAt)).limit(200);
+      return rows.map((r) => reportItem(r, principal.userId));
+    });
+  });
+
+  app.get('/reports/:id', async (request): Promise<AiReportDetail> => {
+    const principal = await requirePermission(request, 'ai.safety.review');
+    const { id } = parse(uuidParam, request.params);
+    return inContext(request, principal, async (tx) => {
+      const [r] = await tx.select().from(aiResponseReports).where(eq(aiResponseReports.id, id));
+      if (!r) throw notFound('Report');
+      // Content only through the audited function.
+      const [content] = (await tx.execute<{ answer_snapshot: string; question_snapshot: string | null; note: string | null }>(sql`select * from app.ai_report_detail(${id}::uuid)`)).rows;
+      const events = await tx.select().from(aiReportEvents).where(eq(aiReportEvents.reportId, id)).orderBy(asc(aiReportEvents.createdAt));
+      return {
+        ...reportItem(r, principal.userId),
+        answer: content!.answer_snapshot,
+        question: content!.question_snapshot,
+        note: content!.note,
+        events: events.map((e) => ({ event: e.event, note: e.note, createdAt: iso(e.createdAt)!, byMe: e.actorUserId === principal.userId })),
+      };
+    });
+  });
+
+  app.post('/reports/:id/transition', async (request) => {
+    const principal = await requirePermission(request, 'ai.safety.review');
+    const { id } = parse(uuidParam, request.params);
+    const b = parse(aiReportTransitionBody, request.body);
+    await inContext(request, principal, (tx) => tx.execute(sql`select app.ai_report_transition(${id}::uuid, ${b.status}, ${b.resolution ?? null}, ${b.note ?? null})`));
+    return { ok: true };
+  });
+
 }

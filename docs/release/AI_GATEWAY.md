@@ -22,11 +22,14 @@
 | Budgets: company monthly cap, per-plan and per-person monthly caps, alerts at 50 / 80 / 100 % | `app.ai_budget`, `app.ai_plan_budgets`, `app.ai_budget_alerts` | `ai-routing.test.ts` |
 | AI consent (off by default), privacy-centre switch, legal notice | migration 0010, `packages/shared/src/legal.ts` | `ai.test.ts`, E2E `flow-f-assistant` |
 | Patient chat (mobile): availability from the server, allowance, opt-in profile summary, emergency card with call button, delete conversation | `apps/mobile/src/app/patient/assistant/` | E2E `flow-f-assistant` (**web harness only**) |
-| AI control centre: Overview, Models, Routing, Evaluation | `apps/admin/src/app/ai/` | E2E `flow-e-ai` |
+| AI control centre: Overview, Models, Routing, Evaluation, Safety reports | `apps/admin/src/app/ai/` | E2E `flow-e-ai` |
+| Report AI response (mobile) → reviewer queue (Trust & Safety, clinical reviewers): snapshot of the answer (question only if the person chooses), audited content access, append-only history, redaction on account deletion | migration 0015; `apps/mobile/src/app/patient/assistant/[id].tsx`; Admin → AI → Safety reports | `test/ai-reports.test.ts`, E2E F3 + E4 |
+| Assistant preferences (reply language, detail) and assistant name, sent as validated settings after the fixed policy (they cannot change the rules) | `app.ai_preferences`; mobile Assistant settings | `ai-reports.test.ts` |
+| Deterministic emergency detection (EN + Egyptian/MSA Arabic, typographic apostrophes, diacritics) before any model call | `apps/api/src/modules/ai/safety.ts` | `ai-reports.test.ts` (23 emergency and 6 routine phrases) — **not a clinical validation** of coverage |
+| Operator smoke test with a real key: one short non-patient question, prints outcome, usage and latency | `pnpm --filter @ghayarly/api ai:smoke -- --provider <CODE> --model <id>` | Run on 2026-10-27: `NOT_CONFIGURED` for every provider (no keys) |
 
 Not built yet (later slices): realtime voice, lab/document scanning, health analytics, clinician
-copilots, curated medical knowledge, product knowledge, AI response reporting, wound and imaging
-research. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
+copilots, curated medical knowledge, product knowledge, wound and imaging research. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
 have no adapter yet.
 
 ## 2. Configure a provider (exact steps)
@@ -55,7 +58,9 @@ have no adapter yet.
    database. Production refuses non-https AI base URLs. `pnpm release:check` scans tracked files
    for Anthropic, OpenAI and Google key patterns.
 3. Restart the API. Admin → AI → Overview shows the provider `Configured`; **Check connection** makes
-   a model-metadata request (no generation, not billed).
+   a model-metadata request (no generation, not billed). Then prove a real answer from the server:
+   `pnpm --filter @ghayarly/api ai:smoke -- --provider ANTHROPIC --model claude-haiku-5-5`
+   (one short non-patient question; costs a few tokens; exit 2 = NOT_CONFIGURED).
 4. **Models** (Admin → AI → Models). Reference rows are seeded *inactive and unverified* from the
    providers' pages (fetched 2026-10-27): Anthropic Opus/Sonnet/Haiku 5.5; OpenAI `gpt-6.1-terra`,
    `gpt-6-luna`; Gemini `gemini-3.8-flash`, `gemini-3.1-flash-lite`; xAI `grok-4.3`, `grok-4.7`;

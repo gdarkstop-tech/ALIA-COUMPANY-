@@ -12,6 +12,11 @@ export type AiRequest = {
   model: string;
   /** Operator instructions (our safety policy). Never contains user-supplied text. */
   system: string;
+  /**
+   * Per-request operator context placed after the policy (e.g. the person's display preferences
+   * and approved reference material), framed as data. Kept separate so the policy stays cacheable.
+   */
+  systemExtra?: string;
   messages: AiTurn[];
   maxOutputTokens: number;
   effort: AiEffort;
@@ -68,3 +73,6 @@ export const notConfigured = (code: AiProviderCode): AiProvider => ({
   },
   healthCheck: async () => ({ ok: false, detail: 'NOT_CONFIGURED', checkedAt: new Date().toISOString() }),
 });
+
+/** The policy and the per-request context as one text, for providers without multiple system blocks. */
+export const fullSystem = (req: Pick<AiRequest, 'system' | 'systemExtra'>) => (req.systemExtra ? `${req.system}\n\n${req.systemExtra}` : req.system);

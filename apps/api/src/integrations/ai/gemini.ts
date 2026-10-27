@@ -1,5 +1,5 @@
 import { ApiError, FinishReason, GoogleGenAI } from '@google/genai';
-import { AiProviderError, notConfigured, type AiProvider, type AiResult } from './types';
+import { AiProviderError, fullSystem, notConfigured, type AiProvider, type AiResult } from './types';
 
 const BLOCKED: readonly string[] = [FinishReason.SAFETY, FinishReason.PROHIBITED_CONTENT, FinishReason.BLOCKLIST, FinishReason.SPII, FinishReason.RECITATION];
 
@@ -31,7 +31,7 @@ export function createGeminiProvider(apiKey: string | undefined, timeoutMs: numb
         res = await ai.models.generateContent({
           model: req.model,
           contents: req.messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-          config: { systemInstruction: req.system, maxOutputTokens: req.maxOutputTokens },
+          config: { systemInstruction: fullSystem(req), maxOutputTokens: req.maxOutputTokens },
         });
       } catch (e) {
         throw toError(e);
