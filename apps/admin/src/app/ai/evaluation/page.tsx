@@ -1,5 +1,5 @@
 'use client';
-import { AI_EVAL_CATEGORIES, type AiEvalCase } from '@ghayarly/shared';
+import { AI_EVAL_CATEGORIES, AI_EVAL_ROUTES, type AiEvalCase, type AiEvalRoute } from '@ghayarly/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -8,16 +8,26 @@ import { useI18n } from '@/components/Providers';
 import { formatDateTime, Shell } from '@/components/Shell';
 import { api } from '@/lib/api';
 
-const emptyCase = { code: '', category: 'WOUND_CARE', language: 'en', prompt: '', context: '', expectedBehavior: '', checks: '{\n  "mustIncludeAll": ["doctor|clinician"]\n}' };
+const emptyCase = { code: '', category: 'WOUND_CARE', language: 'en', prompt: '', context: '', expectedBehavior: '', routeKey: 'patient.chat' as AiEvalRoute, checks: '{\n  "mustIncludeAll": ["doctor|clinician"]\n}', documentSpec: '' };
+// A document case: a synthetic report (ASCII, rendered to a PDF at run time) and the rows it must yield.
+const DOCUMENT_TEMPLATE = {
+  checks: '{\n  "expectDocumentType": "LAB_REPORT",\n  "expectRows": [{ "test": "Haemoglobin", "value": "13.8", "unit": "g/dL" }],\n  "maxExtraRows": 0\n}',
+  documentSpec: '{\n  "labName": "Synthetic Lab",\n  "collectedOn": "2026-01-15",\n  "rows": [{ "test": "Haemoglobin", "value": "13.8", "unit": "g/dL", "range": "12.0 - 16.0" }]\n}',
+};
 
 function CaseEditor({ initial, onDone }: { initial?: AiEvalCase; onDone: () => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
-  const [f, setF] = useState(initial ? { code: initial.code, category: initial.category, language: initial.language, prompt: initial.prompt, context: initial.context ?? '', expectedBehavior: initial.expectedBehavior, checks: JSON.stringify(initial.checks, null, 2) } : emptyCase);
+  const [f, setF] = useState(
+    initial
+      ? { code: initial.code, category: initial.category, language: initial.language, prompt: initial.prompt, context: initial.context ?? '', expectedBehavior: initial.expectedBehavior, routeKey: initial.routeKey, checks: JSON.stringify(initial.checks, null, 2), documentSpec: initial.documentSpec ? JSON.stringify(initial.documentSpec, null, 2) : '' }
+      : emptyCase,
+  );
+  const isDocument = f.routeKey === 'patient.document';
   const [jsonError, setJsonError] = useState<string | null>(null);
   const save = useMutation({
     mutationFn: () => {
-      const body = { code: f.code, category: f.category, language: f.language, prompt: f.prompt, context: f.context.trim() || null, expectedBehavior: f.expectedBehavior, checks: JSON.parse(f.checks) };
+      const body = { code: f.code, category: f.category, language: f.language, prompt: f.prompt, context: f.context.trim() || null, expectedBehavior: f.expectedBehavior, routeKey: f.routeKey, checks: JSON.parse(f.checks), documentSpec: isDocument ? JSON.parse(f.documentSpec) : null };
       return initial ? api.aiAdmin.updateCase(initial.id, body) : api.aiAdmin.createCase(body);
     },
     onSuccess: () => {
@@ -28,6 +38,7 @@ function CaseEditor({ initial, onDone }: { initial?: AiEvalCase; onDone: () => v
   const submit = () => {
     try {
       JSON.parse(f.checks);
+      if (isDocument) JSON.parse(f.documentSpec);
       setJsonError(null);
       save.mutate();
     } catch {
@@ -39,11 +50,33 @@ function CaseEditor({ initial, onDone }: { initial?: AiEvalCase; onDone: () => v
       <div className="row">
         <div className="field"><label htmlFor="case-code">{t('aiAdmin.code')}</label><input id="case-code" className="input mono" value={f.code} onChange={(e) => setF((v) => ({ ...v, code: e.target.value.toUpperCase() }))} /></div>
         <div className="field"><label htmlFor="case-category">{t('aiAdmin.category')}</label><select id="case-category" className="input" value={f.category} onChange={(e) => setF((v) => ({ ...v, category: e.target.value as typeof v.category }))}>{AI_EVAL_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
+        <div className="field">
+          <label htmlFor="case-route">{t('aiAdmin.route')}</label>
+          <select
+            id="case-route"
+            className="input"
+            value={f.routeKey}
+            data-testid="ai-case-route"
+            onChange={(e) => {
+              const routeKey = e.target.value as AiEvalRoute;
+              setF((v) => ({ ...v, routeKey, ...(routeKey === 'patient.document' && !v.documentSpec ? DOCUMENT_TEMPLATE : {}), ...(routeKey === 'patient.chat' ? { checks: emptyCase.checks, documentSpec: '' } : {}) }));
+            }}
+          >
+            {AI_EVAL_ROUTES.map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </div>
         <div className="field"><label htmlFor="case-language">{t('aiAdmin.language')}</label><select id="case-language" className="input" value={f.language} onChange={(e) => setF((v) => ({ ...v, language: e.target.value as 'ar' | 'en' }))}><option value="en">en</option><option value="ar">ar</option></select></div>
       </div>
       <div className="field"><label htmlFor="case-prompt">{t('aiAdmin.prompt')}</label><textarea id="case-prompt" className="input" rows={2} dir="auto" value={f.prompt} onChange={(e) => setF((v) => ({ ...v, prompt: e.target.value }))} /></div>
       <div className="field"><label htmlFor="case-context">{t('aiAdmin.context')}</label><textarea id="case-context" className="input" rows={2} dir="auto" value={f.context} onChange={(e) => setF((v) => ({ ...v, context: e.target.value }))} /></div>
       <div className="field"><label htmlFor="case-expected">{t('aiAdmin.expected')}</label><textarea id="case-expected" className="input" rows={2} dir="auto" value={f.expectedBehavior} onChange={(e) => setF((v) => ({ ...v, expectedBehavior: e.target.value }))} /></div>
+      {isDocument ? (
+        <div className="field">
+          <label htmlFor="case-document">{t('aiAdmin.documentSpec')}</label>
+          <textarea id="case-document" className="input mono" rows={6} dir="ltr" value={f.documentSpec} onChange={(e) => setF((v) => ({ ...v, documentSpec: e.target.value }))} data-testid="ai-case-document" />
+          <span className="subtle">{t('aiAdmin.documentSpecHint')}</span>
+        </div>
+      ) : null}
       <div className="field"><label htmlFor="case-checks">{t('aiAdmin.checks')}</label><textarea id="case-checks" className="input mono" rows={4} dir="ltr" value={f.checks} onChange={(e) => setF((v) => ({ ...v, checks: e.target.value }))} /></div>
       {jsonError ? <div className="notice danger">{t('errors.validation')}</div> : null}
       <div className="row">
@@ -65,7 +98,7 @@ export default function AiEvaluationPage() {
   const cc = useQuery({ queryKey: AI_KEY, queryFn: () => api.aiAdmin.controlCentre(30), enabled: can('ai.eval.manage') });
   const [editing, setEditing] = useState<AiEvalCase | 'new' | null>(null);
   const [runModel, setRunModel] = useState('');
-  const [runRoute, setRunRoute] = useState<'patient.chat' | 'patient.voice'>('patient.chat');
+  const [runRoute, setRunRoute] = useState<'patient.chat' | 'patient.voice' | 'patient.document'>('patient.chat');
   const [revokeNote, setRevokeNote] = useState<Record<string, string>>({});
   const review = useMutation({ mutationFn: (v: { id: string; decision: 'REVIEWED' | 'RETIRED' }) => api.aiAdmin.reviewCase(v.id, v.decision), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
   const start = useMutation({ mutationFn: () => api.aiAdmin.startRun(runModel, runRoute), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
@@ -91,6 +124,7 @@ export default function AiEvaluationPage() {
                 <select className="input" aria-label={t('aiAdmin.route')} value={runRoute} onChange={(e) => { setRunRoute(e.target.value as typeof runRoute); setRunModel(''); }} data-testid="ai-run-route">
                   <option value="patient.chat">patient.chat</option>
                   <option value="patient.voice">patient.voice</option>
+                  <option value="patient.document">patient.document</option>
                 </select>
                 <select className="input" aria-label={t('aiAdmin.runModel')} value={runModel} onChange={(e) => setRunModel(e.target.value)} data-testid="ai-run-model">
                   <option value="">{t('aiAdmin.runModel')}</option>
@@ -98,7 +132,8 @@ export default function AiEvaluationPage() {
                     .filter((m) => {
                       const p = cc.data.providers.find((x) => x.code === m.provider);
                       // Voice models are evaluated through their realtime adapter (text mode).
-                      return runRoute === 'patient.voice' ? m.capabilities.includes('REALTIME_VOICE') && p?.realtimeConfigured : m.capabilities.includes('CHAT') && p?.configured;
+                      if (runRoute === 'patient.voice') return m.capabilities.includes('REALTIME_VOICE') && p?.realtimeConfigured;
+                      return m.capabilities.includes(runRoute === 'patient.document' ? 'DOCUMENT_EXTRACTION' : 'CHAT') && p?.configured;
                     })
                     .map((m) => <option key={m.id} value={m.id}>{m.provider} · {m.modelId}</option>)}
                 </select>
@@ -162,7 +197,7 @@ export default function AiEvaluationPage() {
               <tbody>
                 {d.cases.map((c) => (
                   <tr key={c.id} data-testid={`ai-case-${c.code}`}>
-                    <td><div className="mono">{c.code}</div><div className="subtle">{c.category} · {c.language} · v{c.version}</div></td>
+                    <td><div className="mono">{c.code}</div><div className="subtle">{c.category} · {c.language} · v{c.version}</div><div className="subtle mono">{c.routeKey}</div></td>
                     <td dir="auto" style={{ maxWidth: 460 }}><div>{c.prompt}</div><div className="subtle">{t('aiAdmin.expected')}: {c.expectedBehavior}</div></td>
                     <td><span className={`badge tone-${c.status === 'REVIEWED' ? 'success' : c.status === 'RETIRED' ? 'neutral' : 'warning'}`}>{t(`aiAdmin.caseStatus_${c.status}`)}</span>{c.authoredByMe ? <div className="subtle">{t('aiAdmin.authoredByYou')}</div> : null}</td>
                     <td>

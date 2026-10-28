@@ -41,11 +41,27 @@ export function createResponsesProvider(o: ResponsesOptions): AiProvider {
     async complete(req): Promise<AiResult> {
       let res: OpenAI.Responses.Response;
       try {
-        const turns = req.messages.map((m) => ({ role: m.role, content: m.content }));
+        const last = req.messages.length - 1;
+        const turns = req.messages.map((m, i) =>
+          i === last && m.role === 'user' && req.attachments?.length
+            ? {
+                role: 'user' as const,
+                content: [
+                  ...req.attachments.map((a) =>
+                    a.contentType === 'application/pdf'
+                      ? { type: 'input_file' as const, filename: a.filename, file_data: `data:application/pdf;base64,${a.data.toString('base64')}` }
+                      : { type: 'input_image' as const, image_url: `data:${a.contentType};base64,${a.data.toString('base64')}`, detail: 'high' as const },
+                  ),
+                  { type: 'input_text' as const, text: m.content },
+                ],
+              }
+            : { role: m.role, content: m.content },
+        );
         res = await client.responses.create({
           model: req.model,
           ...(o.systemAs === 'instructions' ? { instructions: fullSystem(req), input: turns } : { input: [{ role: 'system' as const, content: fullSystem(req) }, ...turns] }),
           max_output_tokens: req.maxOutputTokens,
+          ...(req.jsonSchema ? { text: { format: { type: 'json_schema' as const, name: req.jsonSchema.name, schema: req.jsonSchema.schema, strict: true } } } : {}),
           ...(o.sendSafetyIdentifier ? { safety_identifier: req.endUserRef } : {}),
           store: false,
         });

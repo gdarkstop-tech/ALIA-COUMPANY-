@@ -68,7 +68,7 @@ export const commerceEventTypeEnum = appSchema.enum('commerce_event_type', ['PRO
 export const ledgerEntryTypeEnum = appSchema.enum('ledger_entry_type', ['VISIT_EARNING', 'PLATFORM_FEE', 'ADJUSTMENT', 'PAYOUT']);
 export const ledgerStatusEnum = appSchema.enum('ledger_status', ['PENDING', 'AVAILABLE', 'PAID_OUT']);
 export const accountKindEnum = appSchema.enum('account_kind', ['STANDARD', 'REVIEW', 'INTERNAL_TEST']);
-export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING', 'AI_VOICE_PROCESSING']);
+export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING', 'AI_VOICE_PROCESSING', 'AI_DOCUMENT_PROCESSING']);
 export const featureRiskEnum = appSchema.enum('feature_risk', ['LOW', 'MEDIUM', 'HIGH']);
 export const planCodeEnum = appSchema.enum('plan_code', ['SILVER', 'GOLD', 'PLATINUM']);
 export const paymentClassEnum = appSchema.enum('payment_class', ['PHYSICAL_PRODUCT', 'PHYSICAL_SERVICE', 'ELIGIBLE_PERSON_TO_PERSON_SERVICE', 'DIGITAL_SUBSCRIPTION', 'DIGITAL_FEATURE']);
@@ -666,6 +666,9 @@ export const aiEvalCases = appSchema.table('ai_eval_cases', {
   context: text('context'),
   expectedBehavior: text('expected_behavior').notNull(),
   checks: jsonb('checks').$type<Record<string, unknown>>().notNull(),
+  // Migration 0021: document-reading cases carry a synthetic report definition.
+  routeKey: text('route_key').notNull().default('patient.chat'),
+  documentSpec: jsonb('document_spec').$type<Record<string, unknown> | null>(),
   status: text('status').notNull().default('DRAFT'),
   version: integer('version').notNull().default(1),
   authoredByUserId: text('authored_by_user_id'),
@@ -889,3 +892,64 @@ export const aiMessageCitations = appSchema.table(
   { messageId: uuid('message_id').notNull(), versionId: uuid('version_id').notNull(), label: text('label').notNull() },
   (t) => [primaryKey({ columns: [t.messageId, t.versionId] })],
 );
+
+// ------------------------------------------------------------------ medical documents and lab results (migration 0021)
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+export const medicalDocuments = appSchema.table('medical_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull(),
+  uploadedByUserId: text('uploaded_by_user_id').notNull(),
+  kind: text('kind').notNull().default('LAB_REPORT'),
+  title: text('title').notNull(),
+  contentType: text('content_type').notNull(),
+  bytes: bytea('bytes').notNull(),
+  byteSize: integer('byte_size').notNull(),
+  sha256: text('sha256').notNull(),
+  documentDate: date('document_date', { mode: 'string' }),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+});
+
+/** Written only by app.document_extraction_* functions. */
+export const documentExtractions = appSchema.table('document_extractions', {
+  id: uuid('id').primaryKey(),
+  documentId: uuid('document_id').notNull(),
+  patientId: uuid('patient_id').notNull(),
+  requestedByUserId: text('requested_by_user_id').notNull(),
+  status: text('status').notNull(),
+  provider: aiProviderEnum('provider'),
+  modelId: text('model_id'),
+  labName: text('lab_name'),
+  collectedOn: date('collected_on', { mode: 'string' }),
+  rowCount: integer('row_count').notNull(),
+  failure: text('failure'),
+  createdAt: ts('created_at').notNull(),
+  completedAt: ts('completed_at'),
+});
+
+const numericNumber = customType<{ data: number | null; driverData: string | null }>({
+  dataType: () => 'numeric',
+  fromDriver: (v) => (v === null ? null : Number(v)),
+  toDriver: (v) => (v === null ? null : String(v)),
+});
+export const labResults = appSchema.table('lab_results', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull(),
+  documentId: uuid('document_id'),
+  extractionId: uuid('extraction_id'),
+  testName: text('test_name').notNull(),
+  valueText: text('value_text').notNull(),
+  valueNumeric: numericNumber('value_numeric'),
+  unit: text('unit'),
+  referenceText: text('reference_text'),
+  referenceLow: numericNumber('reference_low'),
+  referenceHigh: numericNumber('reference_high'),
+  printedFlag: text('printed_flag'),
+  rangeStatus: text('range_status').notNull().default('UNKNOWN'),
+  observedOn: date('observed_on', { mode: 'string' }),
+  source: text('source').notNull(),
+  reviewStatus: text('review_status').notNull(),
+  provenance: text('provenance'),
+  corrected: boolean('corrected').notNull().default(false),
+  recordedByUserId: text('recorded_by_user_id'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+});

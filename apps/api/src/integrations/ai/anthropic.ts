@@ -37,8 +37,23 @@ export function createAnthropicProvider(apiKey: string | undefined, timeoutMs: n
           max_tokens: req.maxOutputTokens,
           // Stable policy text first and cached; thinking is left at the model's default (adaptive).
           system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }, ...(req.systemExtra ? [{ type: 'text' as const, text: req.systemExtra }] : [])],
-          messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
-          output_config: { effort: req.effort },
+          messages: req.messages.map((m, i) =>
+            i === req.messages.length - 1 && m.role === 'user' && req.attachments?.length
+              ? {
+                  role: 'user' as const,
+                  // Documents and images first, then the instruction text.
+                  content: [
+                    ...req.attachments.map((a) =>
+                      a.contentType === 'application/pdf'
+                        ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: a.data.toString('base64') } }
+                        : { type: 'image' as const, source: { type: 'base64' as const, media_type: a.contentType, data: a.data.toString('base64') } },
+                    ),
+                    { type: 'text' as const, text: m.content },
+                  ],
+                }
+              : { role: m.role, content: m.content },
+          ),
+          output_config: { effort: req.effort, ...(req.jsonSchema ? { format: { type: 'json_schema' as const, schema: req.jsonSchema.schema } } : {}) },
           metadata: { user_id: req.endUserRef },
           ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
         });

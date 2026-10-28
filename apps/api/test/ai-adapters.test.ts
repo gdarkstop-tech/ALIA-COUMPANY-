@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAnthropicProvider } from '../src/integrations/ai/anthropic';
 import { createChatCompletionsProvider } from '../src/integrations/ai/chat-completions';
+import { createGeminiProvider } from '../src/integrations/ai/gemini';
 import { createAiProviders } from '../src/integrations/ai';
 import { createGrokProvider, createOpenAiProvider } from '../src/integrations/ai/openai';
 import { loadEnv } from '../src/config/env';
@@ -214,5 +215,72 @@ describe('configuration', () => {
   it('production refuses plaintext endpoints for patient data', () => {
     const prod = { ...base, NODE_ENV: 'production', DEMO_MODE: 'false', DEV_TOOLS_ENABLED: 'false', MFA_ENFORCEMENT: 'required', AUTH_REQUIRE_EMAIL_VERIFICATION: 'true', DATABASE_URL_OWNER: '', BETTER_AUTH_SECRET: 'prod-like-secret-0123456789abcdefghijklmnopqrstuvwxyz' };
     expect(() => loadEnv({ ...prod, AI_MEDGEMMA_BASE_URL: 'http://10.0.0.5:8000/v1', AI_MEDGEMMA_API_KEY: 'medgemma-key-000000' })).toThrow(/AI_MEDGEMMA_BASE_URL must use https/);
+  });
+});
+
+describe('documents and structured output (lab report reading)', () => {
+  const pdf = Buffer.from('%PDF-1.4 synthetic test document %%EOF');
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+  const schema = { type: 'object', additionalProperties: false, required: ['documentType'], properties: { documentType: { type: 'string', enum: ['LAB_REPORT', 'OTHER'] } } };
+  const doc: AiRequest = {
+    ...request,
+    model: 'claude-sonnet-5-5',
+    messages: [{ role: 'user', content: 'Read the results table.' }],
+    attachments: [{ contentType: 'application/pdf', data: pdf, filename: 'report.pdf' }, { contentType: 'image/jpeg', data: jpeg, filename: 'report' }],
+    jsonSchema: { name: 'lab_report', schema },
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('Anthropic: document and image blocks before the instruction; JSON schema output format', async () => {
+    const { impl, calls } = stub([{ status: 200, body: message({ model: 'claude-sonnet-5-5', content: [{ type: 'text', text: '{"documentType":"OTHER"}' }] }) }]);
+    const r = await createAnthropicProvider('sk-ant-test-key', 5000, impl).complete(doc);
+    expect(r.text).toBe('{"documentType":"OTHER"}');
+    const body = calls[0]!.body as { messages: { content: unknown }[]; output_config: unknown };
+    expect(body.messages[0]!.content).toEqual([
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.toString('base64') } },
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: jpeg.toString('base64') } },
+      { type: 'text', text: 'Read the results table.' },
+    ]);
+    expect(body.output_config).toEqual({ effort: 'low', format: { type: 'json_schema', schema } });
+  });
+
+  it('OpenAI: input_file (PDF) and high-detail input_image; strict JSON schema text format', async () => {
+    const res = { id: 'resp_1', object: 'response', created_at: 1, model: 'gpt-6.1-terra', status: 'completed', output: [{ type: 'message', id: 'm1', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: '{"documentType":"OTHER"}', annotations: [] }] }], usage: { input_tokens: 10, input_tokens_details: { cached_tokens: 0 }, output_tokens: 5, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 15 } };
+    const { impl, calls } = stub([{ status: 200, body: res }]);
+    await createOpenAiProvider('sk-openai-test', 5000, impl).complete({ ...doc, model: 'gpt-6.1-terra' });
+    const body = calls[0]!.body as { input: { role: string; content: unknown }[]; text: unknown };
+    expect(body.input.at(-1)!.content).toEqual([
+      { type: 'input_file', filename: 'report.pdf', file_data: `data:application/pdf;base64,${pdf.toString('base64')}` },
+      { type: 'input_image', image_url: `data:image/jpeg;base64,${jpeg.toString('base64')}`, detail: 'high' },
+      { type: 'input_text', text: 'Read the results table.' },
+    ]);
+    expect(body.text).toEqual({ format: { type: 'json_schema', name: 'lab_report', schema, strict: true } });
+  });
+
+  it('Chat Completions: images as image_url parts with a JSON schema response format; a PDF is refused before any call', async () => {
+    const completion = { id: 'c1', object: 'chat.completion', created: 1, model: 'qwen-vl', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '{"documentType":"OTHER"}', refusal: null } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
+    const { impl, calls } = stub([{ status: 200, body: completion }]);
+    const p = createChatCompletionsProvider({ code: 'QWEN', label: 'Qwen', apiKey: 'test-key-0000000000000', baseURL: 'https://ws.example.invalid/compatible-mode/v1', timeoutMs: 5000, fetchImpl: impl });
+    await p.complete({ ...doc, model: 'qwen-vl', attachments: [doc.attachments![1]!] });
+    const body = calls[0]!.body as { messages: { content: unknown }[]; response_format: unknown };
+    expect(body.messages.at(-1)!.content).toEqual([{ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${jpeg.toString('base64')}` } }, { type: 'text', text: 'Read the results table.' }]);
+    expect(body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'lab_report', schema, strict: true } });
+    await expect(p.complete({ ...doc, model: 'qwen-vl' })).rejects.toMatchObject({ kind: 'BAD_REQUEST', retryable: false });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('Gemini: inline data parts before the instruction; JSON response with the schema', async () => {
+    const { impl, calls } = stub([{ status: 200, body: { candidates: [{ content: { role: 'model', parts: [{ text: '{"documentType":"OTHER"}' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 }, modelVersion: 'gemini-3.8-flash' } }]);
+    vi.stubGlobal('fetch', impl);
+    const r = await createGeminiProvider('gemini-test-key-0123456789', 5000).complete({ ...doc, model: 'gemini-3.8-flash' });
+    expect(r).toMatchObject({ outcome: 'ANSWERED', text: '{"documentType":"OTHER"}', usage: { inputTokens: 10, outputTokens: 5 } });
+    expect(calls[0]!.url).toContain('gemini-3.8-flash:generateContent');
+    const body = calls[0]!.body as { contents: { parts: unknown[] }[]; generationConfig: Record<string, unknown> };
+    expect(body.contents[0]!.parts).toEqual([
+      { inlineData: { mimeType: 'application/pdf', data: pdf.toString('base64') } },
+      { inlineData: { mimeType: 'image/jpeg', data: jpeg.toString('base64') } },
+      { text: 'Read the results table.' },
+    ]);
+    expect(body.generationConfig).toMatchObject({ responseMimeType: 'application/json', responseJsonSchema: schema, maxOutputTokens: 1024 });
   });
 });

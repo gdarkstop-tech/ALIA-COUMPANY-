@@ -1,20 +1,22 @@
-import { HEALTH_ENTRY_KINDS, type HealthEntry, type HealthEntryKind, type Provenance } from '@ghayarly/shared';
+import { HEALTH_ENTRY_KINDS, type HealthEntry, type HealthEntryKind } from '@ghayarly/shared';
 import { radii, spacing } from '@ghayarly/tokens';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { AddEntrySheet } from '@/features/patient/AddEntrySheet';
 import { EmergencyContactSheet } from '@/features/patient/EmergencyContactSheet';
 import { useActivePatient } from '@/features/patient/hooks';
 import { useConsents } from '@/features/compliance/hooks';
 import { EmergencyNotice, MedicalDisclaimer } from '@/features/compliance/Safety';
 import { ProfileSwitcher, relationshipLabel } from '@/features/patient/ProfileSwitcher';
+import { provenanceTone } from '@/features/patient/provenance';
 import { api, errorKey } from '@/lib/api';
+import { confirmDestructive } from '@/lib/confirm';
 import { ltr } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Avatar, Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Text, type IconName, type Tone } from '@/ui';
+import { Avatar, Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Text, type IconName } from '@/ui';
 
 const SECTION: Record<HealthEntryKind, { title: 'health.allergies' | 'health.conditions' | 'health.medications' | 'health.surgeries'; empty: 'health.emptyAllergies' | 'health.emptyConditions' | 'health.emptyMedications' | 'health.emptySurgeries'; icon: IconName }> = {
   ALLERGY: { title: 'health.allergies', empty: 'health.emptyAllergies', icon: 'mci:allergy' },
@@ -22,18 +24,6 @@ const SECTION: Record<HealthEntryKind, { title: 'health.allergies' | 'health.con
   MEDICATION: { title: 'health.medications', empty: 'health.emptyMedications', icon: 'mci:pill' },
   SURGERY: { title: 'health.surgeries', empty: 'health.emptySurgeries', icon: 'mci:bandage' },
 };
-
-export function provenanceTone(p: Provenance | null): Tone {
-  return p === 'PROFESSIONALLY_VERIFIED' ? 'success' : p === 'IMPORTED_DOCUMENT' ? 'info' : 'neutral';
-}
-
-function confirm(message: string, labels: { cancel: string; confirm: string }, onYes: () => void) {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && window.confirm(message)) onYes();
-    return;
-  }
-  Alert.alert(message, undefined, [{ text: labels.cancel, style: 'cancel' }, { text: labels.confirm, style: 'destructive', onPress: onYes }]);
-}
 
 export default function MyHealth() {
   const { t } = useI18n();
@@ -135,7 +125,7 @@ export default function MyHealth() {
                         <Badge label={t(`health.provenance_${e.provenance}`)} tone={provenanceTone(e.provenance)} icon={e.provenance === 'PROFESSIONALLY_VERIFIED' ? 'check' : undefined} />
                       </View>
                       {e.provenance !== 'PROFESSIONALLY_VERIFIED' ? (
-                        <PressableScale accessibilityRole="button" accessibilityLabel={t('common.remove')} onPress={() => confirm(t('health.removeConfirm'), { cancel: t('common.cancel'), confirm: t('common.remove') }, () => remove.mutate(e))} style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
+                        <PressableScale accessibilityRole="button" accessibilityLabel={t('common.remove')} onPress={() => confirmDestructive(t('health.removeConfirm'), { cancel: t('common.cancel'), confirm: t('common.remove') }, () => remove.mutate(e))} style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
                           <Icon name="trash-2" size={16} color="textTertiary" />
                         </PressableScale>
                       ) : null}
@@ -148,12 +138,27 @@ export default function MyHealth() {
         })
       )}
 
+      <PressableScale testID="open-documents" accessibilityRole="button" accessibilityLabel={t('documents.healthCardTitle')} onPress={() => router.push('/patient/documents')}>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <View style={{ width: 44, height: 44, borderRadius: radii.md, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="mci:file-document-outline" color="primary" />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="callout" weight="semibold">{t('documents.healthCardTitle')}</Text>
+              <Text variant="footnote" color="textSecondary">{t('documents.healthCardBody')}</Text>
+            </View>
+            <Icon name="chevron-right" color="textTertiary" />
+          </View>
+        </Card>
+      </PressableScale>
+
       <Section title={t('health.timelineTitle')}>
         <Card>
           <View style={{ gap: spacing.md }}>
-            {(['health.vitalsTitle', 'health.reportsTitle', 'health.timelineTitle'] as const).map((k, i) => (
+            {(['health.vitalsTitle', 'health.timelineTitle'] as const).map((k, i) => (
               <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <Icon name={(['mci:chart-line-variant', 'mci:file-document-outline', 'mci:timeline-clock-outline'] as const)[i]!} color="textTertiary" />
+                <Icon name={(['mci:chart-line-variant', 'mci:timeline-clock-outline'] as const)[i]!} color="textTertiary" />
                 <Text variant="footnote" color="textSecondary" style={{ flex: 1 }}>{t(k)}</Text>
                 <Badge label={t('app.comingNext')} />
               </View>

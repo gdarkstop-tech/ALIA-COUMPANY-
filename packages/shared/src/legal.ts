@@ -9,7 +9,7 @@
  */
 export const LEGAL_DOCUMENT_VERSION = '2026-10-draft';
 export const LEGAL_DOCUMENT_STATUS = 'DRAFT_PENDING_LEGAL_REVIEW' as const;
-export const LEGAL_DOC_IDS = ['privacy', 'terms', 'health-consent', 'medical-disclaimer', 'ai-assistant-consent', 'ai-voice-consent'] as const;
+export const LEGAL_DOC_IDS = ['privacy', 'terms', 'health-consent', 'medical-disclaimer', 'ai-assistant-consent', 'ai-voice-consent', 'ai-document-consent'] as const;
 export type LegalDocId = (typeof LEGAL_DOC_IDS)[number];
 
 type Section = { heading: string; paragraphs: string[] };
@@ -303,6 +303,55 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
             'أسمح لتطبيق غير لي بإرسال صوتي إلى مزوّد ذكاء اصطناعي يعالجه نيابةً عن غير لي، فقط أثناء فتح محادثة صوتية. [أسماء المزوّدين ومواقع المعالجة — يحددها الفريق القانوني قبل الإطلاق.]',
             'يُحتسب وقت المحادثة الصوتية من دقائق الصوت الأسبوعية في باقتي، ويظهر الوقت المتبقي أثناء المحادثة.',
             'هذه الموافقة اختيارية ومنفصلة عن الكتابة للمساعد وعن حفظ سجلاتي الصحية، ويمكنني سحبها في أي وقت من "الخصوصية والموافقات"، فتتوقف المحادثة الصوتية فوراً.',
+          ],
+        },
+      ],
+    },
+  },
+  'ai-document-consent': {
+    id: 'ai-document-consent',
+    version: LEGAL_DOCUMENT_VERSION,
+    status: LEGAL_DOCUMENT_STATUS,
+    en: {
+      title: 'Reading lab reports with AI',
+      summary: 'What happens when you ask the app to read the results of a report you uploaded.',
+      sections: [
+        {
+          heading: 'What it does — and does not do',
+          paragraphs: [
+            'When you choose “Read the results”, the report you uploaded is sent to an AI provider that copies the results table (test, value, unit, normal range) into the app. It does not interpret your results, diagnose or suggest treatment.',
+            'Whether a value is outside the range is worked out by the app from the normal range printed on your own report — not by the AI.',
+            'AI can misread a report. Nothing is added to your health record until you check each result against the report and confirm or correct it. Always discuss results with your doctor.',
+          ],
+        },
+        {
+          heading: 'What you agree to',
+          paragraphs: [
+            'I allow Dress My Wound to send a document I choose to an AI provider that processes it on Dress My Wound’s behalf, only to read its results. [Provider names, processing locations and the providers’ retention terms — to be confirmed by legal before launch.]',
+            'The document stays in my records (visible to me and the people I authorise) until I delete it. Each reading counts against my plan’s weekly analyses.',
+            'This consent is optional and separate from storing my health records and from the assistant. I can withdraw it at any time in Privacy & consent.',
+          ],
+        },
+      ],
+    },
+    ar: {
+      title: 'قراءة التحاليل بالذكاء الاصطناعي',
+      summary: 'ماذا يحدث عندما تطلب من التطبيق قراءة نتائج تقرير رفعته.',
+      sections: [
+        {
+          heading: 'ما الذي يفعله وما لا يفعله',
+          paragraphs: [
+            'عند اختيار «قراءة النتائج»، يُرسَل التقرير الذي رفعته إلى مزوّد ذكاء اصطناعي ينسخ جدول النتائج (اسم التحليل والقيمة والوحدة والمعدل الطبيعي) إلى التطبيق. لا يفسّر نتائجك ولا يشخّص ولا يقترح علاجاً.',
+            'يحدد التطبيق ما إذا كانت القيمة خارج المعدل بناءً على المعدل الطبيعي المطبوع في تقريرك نفسه — وليس الذكاء الاصطناعي.',
+            'قد يخطئ الذكاء الاصطناعي في قراءة التقرير. لا يُضاف أي شيء إلى سجلك الصحي حتى تراجع كل نتيجة مع التقرير وتؤكدها أو تصححها. ناقش نتائجك دائماً مع طبيبك.',
+          ],
+        },
+        {
+          heading: 'ما الذي توافق عليه',
+          paragraphs: [
+            'أسمح لتطبيق غير لي بإرسال مستند أختاره إلى مزوّد ذكاء اصطناعي يعالجه نيابةً عن غير لي، فقط لقراءة نتائجه. [أسماء المزوّدين ومواقع المعالجة وشروط احتفاظهم بالبيانات — يحددها الفريق القانوني قبل الإطلاق.]',
+            'يبقى المستند في سجلاتي (مرئياً لي ولمن أفوّضهم) حتى أحذفه. تُحتسب كل قراءة من التحليلات الأسبوعية في باقتي.',
+            'هذه الموافقة اختيارية ومنفصلة عن حفظ سجلاتي الصحية وعن المساعد، ويمكنني سحبها في أي وقت من "الخصوصية والموافقات".',
           ],
         },
       ],

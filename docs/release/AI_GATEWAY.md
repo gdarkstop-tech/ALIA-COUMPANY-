@@ -1,12 +1,12 @@
 # DMW Medical AI — gateway status, setup and cost control
 
-**Verified on:** 2026-10-28 · Design: [ADR 0008](../adr/0008-ai-gateway.md), [ADR 0009](../adr/0009-model-registry-routing-evaluation.md), [ADR 0010](../adr/0010-realtime-voice-relay.md)
+**Verified on:** 2026-10-28 · Design: [ADR 0008](../adr/0008-ai-gateway.md), [ADR 0009](../adr/0009-model-registry-routing-evaluation.md), [ADR 0010](../adr/0010-realtime-voice-relay.md), [ADR 0011](../adr/0011-lab-report-reading.md)
 
 > **Status:** the multi-provider gateway, model registry, eligibility-based routing, evaluation
-> suite, quotas, budgets, cost metering, admin control centre, the patient text chat and realtime
-> voice (server relay) are `CODE_READY`. **No AI provider is configured on any environment** — Anthropic, OpenAI, Gemini,
+> suite, quotas, budgets, cost metering, admin control centre, the patient text chat, realtime
+> voice (server relay) and lab-report reading (transcription + person-confirmed rows) are `CODE_READY`. **No AI provider is configured on any environment** — Anthropic, OpenAI, Gemini,
 > Qwen, Grok, Kimi and MedGemma are all `NOT_CONFIGURED` — no model price is verified, no monthly
-> cap is set, no model has patient-data or clinical approval, and `ai.assistant` and `ai.voice` are OFF. **No real
+> cap is set, no model has patient-data or clinical approval, and `ai.assistant`, `ai.voice` and `ai.document_analysis` are OFF. **No real
 > AI answer has been produced by this system.** Every run so far used scripted providers in automated
 > tests or the labelled development simulator.
 
@@ -14,7 +14,7 @@
 
 | Part | Where | Verified by |
 |---|---|---|
-| Adapters: Anthropic (Messages API), OpenAI and xAI Grok (Responses API, `store: false`), Gemini (`@google/genai`), Qwen / Kimi / MedGemma endpoint (OpenAI-compatible Chat Completions), simulator | `apps/api/src/integrations/ai/` | `test/ai-adapters.test.ts` (15): real adapters against a **stubbed HTTP layer** (request shape, usage incl. cache, refusals, moderation errors, truncation, retries, health checks, env rules). Gemini: type checking only. **None verified against a live API** (no keys). |
+| Adapters: Anthropic (Messages API), OpenAI and xAI Grok (Responses API, `store: false`), Gemini (`@google/genai`), Qwen / Kimi / MedGemma endpoint (OpenAI-compatible Chat Completions), simulator. Document attachments (PDF / images, per-adapter support table) and strict JSON-schema output | `apps/api/src/integrations/ai/` | `test/ai-adapters.test.ts` (19): real adapters against a **stubbed HTTP layer** (request shape, usage incl. cache, refusals, moderation errors, truncation, retries, health checks, env rules; document / image blocks and JSON-schema formats for Anthropic, OpenAI, Gemini and Chat Completions; PDF refused before any call on Chat Completions). **None verified against a live API** (no keys). |
 | Model registry: capabilities, hosting, region, known limitations, verified prices, patient-data approval | `app.ai_models` (migrations 0011, 0013); Admin → AI → Models | `test/ai-routing.test.ts` |
 | Router: ordered candidates per route and tier; eligibility (configured, active, capability, data approval, clinical approval, budgets); complexity and language preference; one fallback on a retryable failure, preferring another provider | `app.ai_route_candidates`, `app.ai_reserve()` | `ai-routing.test.ts` (complexity, language, unconfigured provider skipped, budgets, concurrency), `ai.test.ts` (fallback) |
 | Evaluation suite: 25 synthetic EN/AR starter cases (DRAFT), deterministic screens, runs metered into company spend, clinical scoring, approval thresholds, revocation | `app.ai_eval_*`, `app.ai_model_route_approvals`; Admin → AI → Evaluation | `ai-routing.test.ts` (review by non-author, version bump on edit, unsafe answer blocks approval, approval enables STANDARD patients, revocation stops routing) |
@@ -29,9 +29,11 @@
 | Curated medical knowledge: editors write sourced articles (EN/AR); a clinical reviewer who did not write the revision approves it into an immutable version; drafts and retired articles are never retrieved; Arabic-aware full-text retrieval; the assistant receives approved passages as labelled data and cites them as [K1]…; citations are stored and shown with their source | migration 0016; `apps/api/src/modules/knowledge/`; Admin → AI → Medical knowledge; mobile source screen | `test/knowledge.test.ts` (6), E2E F3 (citation → source) — retrieval quality is **not** clinically evaluated |
 | Realtime voice (route `patient.voice`): server-side WebSocket relay with the business key; single-use 60 s ticket sent as a subprotocol (hash stored, header redacted from logs, origin checked); separate voice consent; every transcribed turn checked for emergencies **before** the model may answer (provider VAD never answers on its own); barge-in with truncation to what was heard; seconds reserved in 30 s blocks with a hard stop; ≤ 10 min per session; settlement with audio/text/cached tokens + input transcription priced from the registry; reaper for abandoned sessions; only text transcripts stored (`channel = VOICE`) | migrations 0017–0018; `apps/api/src/modules/ai/voice.ts`; `apps/api/src/integrations/ai/realtime/` | `test/ai-voice.test.ts` (13: gates, tickets, emergency EN/AR, interruption, refusal, quota hard stop, block extension and consent withdrawal, idle, disconnect, concurrency, isolation), `test/ai-realtime-adapter.test.ts` (7: OpenAI Realtime wire format against a **local stand-in server**, usage aggregation, handshake errors, text-mode evaluation, simulator) |
 | Voice client: microphone capture and playback (native: `react-native-audio-api`, development / preview builds only; web harness: Web Audio), live transcript, remaining time, stop answer, end, emergency card, voice consent inline; voice-marked transcripts in the conversation | `apps/mobile/src/features/assistant/voice/`, `apps/mobile/src/app/patient/assistant/voice.tsx` | E2E `flow-f-voice` (**web harness only**, Chromium fake microphone fed a synthetic signal + simulator). **Not run on any iOS or Android device.** |
+| Lab reports (route `patient.document`, flag `ai.document_analysis` OFF): documents stored per profile under RLS with the health-data consent (type from the bytes, ≤ 10 MB); single-use 60 s view links (hash stored, ticket redacted from logs); separate document consent asked inline; the model only **transcribes** the results table into strict JSON; numbers, printed ranges and in/out-of-range status computed by deterministic code (a bound like `< 5` is never a number; the model cannot set a status); rows stay `PENDING_REVIEW` until the person confirms / corrects / rejects each one; one reading per document, ≤ 5 paid failed readings a day; manual entry | migrations 0020–0021; `apps/api/src/modules/documents/`; `packages/shared/src/documents.ts`; mobile `app/patient/documents/` | `test/documents.test.ts` (15: sniffing, RLS, view tickets, gates, request shape, deterministic status, review and provenance, invalid output cost, not-a-lab-report, refusal, fallback, concurrency, re-read, deletion, manual entry, evaluation run, log redaction), shared parser tests, E2E `flow-f-documents` (**web harness only**, simulator). Extraction accuracy **not evaluated** with any real model or real report |
+| Document evaluation: cases on route `patient.document` carry a synthetic report rendered to a PDF at run time and sent exactly like a patient upload; automated row-by-row checks (test, value, unit, flag, document type, extra rows); 10 English DRAFT starter cases incl. a printed prompt injection and a non-lab document | migration 0021; `apps/api/src/modules/ai/evaluation.ts`; Admin → AI → Evaluation | `documents.test.ts` (perfect reader passes 10/10; a reader that drops flags and invents a row fails 9/10) |
 | Operator smoke test with a real key: one short non-patient question, prints outcome, usage and latency | `pnpm --filter @ghayarly/api ai:smoke -- --provider <CODE> --model <id>` | Run on 2026-10-27: `NOT_CONFIGURED` for every provider (no keys) |
 
-Not built yet (later slices): lab/document scanning, health analytics, clinician copilots, product
+Not built yet (later slices): health analytics, clinician copilots, product
 knowledge, wound and imaging research. Voice gaps: no Gemini Live / xAI voice adapter (they are
 `NOT_CONFIGURED` for voice), no approved-knowledge retrieval in voice answers, no device testing. No medical articles are seeded: the
 clinical team must write (or import) and approve them, each with its real source. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
@@ -110,6 +112,18 @@ have no adapter yet.
   (today only development / preview builds do), device testing (echo, Bluetooth, Android audio), and
   an Arabic (Egyptian) speech-recognition and emergency-detection evaluation on real speech.
 
+### Lab report reading specifics
+- Candidates seeded inactive for `patient.document` (all tiers): `claude-sonnet-5-5` (priority 10),
+  `gemini-3.8-flash` (20), `gpt-6.1-terra` (30). Each needs verified prices, patient-data approval, an
+  evaluation run on `patient.document` (extraction policy, its own policy version) and clinical
+  approval for that route. Grok, Qwen, Kimi and MedGemma adapters cannot send PDFs (images only) and
+  are not offered PDFs by the router; MedGemma is not registered for this route until evaluated.
+- Launch also needs: `ai.document_analysis` evidence, an evaluation on **real, de-identified Egyptian
+  lab reports** (Arabic and bilingual, phone photos, multi-page) — the seeded cases are ASCII PDFs —,
+  a clinical-safety review of the row-review flow, the document notice reviewed by legal (provider
+  retention of files), App Store / Play disclosures for health documents, and native testing of the
+  document picker and the original viewer on iOS and Android.
+
 ## 3. Cost metering
 
 - Cost per request = provider-reported tokens × verified price of the model that served it (input,
@@ -125,5 +139,13 @@ have no adapter yet.
   `gpt-realtime-2.1-mini` ≈ US$0.02–0.05 per conversation minute; `gpt-realtime-2.1` ≈ US$0.10–0.20;
   transcription ≈ US$0.003 per minute. Weekly allowance ceilings per person with mini: Silver 3 min ≈
   ≤ US$0.15, Gold 20 min ≈ ≤ US$1.00, Platinum 45 min ≈ ≤ US$2.25 (about 3–4× with the full model).
+- Lab reports: cost = input tokens (policy + the file; a PDF page is sent as text and image) and
+  output tokens (the JSON) × the serving model's verified price. Failed validations are paid and
+  recorded but not counted against the allowance; at most 5 per person per day. **Estimate, not
+  measured** (assumes ~1,500–3,000 input tokens per page and ~600–1,500 output tokens per report,
+  at the registry's unverified prices): `claude-sonnet-5-5` ≈ US$0.01–0.02 per page;
+  `gpt-6.1-terra` ≈ US$0.005–0.01; `gemini-3.8-flash` ≈ US$0.004–0.008. Weekly allowance ceilings
+  per person with Sonnet and 3-page reports: Silver 5 readings ≈ ≤ US$0.30, Gold 15 ≈ ≤ US$0.90,
+  Platinum 35 ≈ ≤ US$2.10 (plus up to 5 failed readings a day).
 - **Missing billing data:** no verified prices, no caps, no provider invoices to reconcile against;
   Kimi, Qwen and MedGemma prices are unknown. Prices are not assumed free and are not final until verified.

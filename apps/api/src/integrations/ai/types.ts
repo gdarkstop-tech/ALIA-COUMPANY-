@@ -8,6 +8,22 @@ export type AiProviderCode = (typeof AI_PROVIDER_CODES)[number];
 export type AiEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type AiTurn = { role: 'user' | 'assistant'; content: string };
 
+/** A file given to the model with the last user message (medical documents). Bytes stay in memory. */
+export type AiAttachment = { contentType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp'; data: Buffer; filename: string };
+export type AiAttachmentType = AiAttachment['contentType'];
+
+/** Which attachment types each adapter can pass to its API (others are skipped by the caller). */
+export const ATTACHMENT_SUPPORT: Record<AiProviderCode, readonly AiAttachmentType[]> = {
+  ANTHROPIC: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+  OPENAI: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+  GROK: ['image/jpeg', 'image/png'],
+  GEMINI: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+  QWEN: ['image/jpeg', 'image/png', 'image/webp'],
+  KIMI: ['image/jpeg', 'image/png', 'image/webp'],
+  MEDGEMMA: ['image/jpeg', 'image/png'],
+  SIMULATED: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+};
+
 export type AiRequest = {
   model: string;
   /** Operator instructions (our safety policy). Never contains user-supplied text. */
@@ -23,6 +39,10 @@ export type AiRequest = {
   requestId: string;
   /** Opaque, non-reversible reference to the person (abuse monitoring at the provider). */
   endUserRef: string;
+  /** Files for the model to read, attached to the last user message (data, never instructions). */
+  attachments?: AiAttachment[];
+  /** Ask for JSON matching this schema (structured output where supported). The caller still validates. */
+  jsonSchema?: { name: string; schema: Record<string, unknown> };
 };
 
 export type AiUsage = { inputTokens: number; outputTokens: number; cacheReadTokens: number };

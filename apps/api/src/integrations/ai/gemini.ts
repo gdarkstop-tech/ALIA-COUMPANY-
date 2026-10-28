@@ -30,8 +30,18 @@ export function createGeminiProvider(apiKey: string | undefined, timeoutMs: numb
       try {
         res = await ai.models.generateContent({
           model: req.model,
-          contents: req.messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-          config: { systemInstruction: fullSystem(req), maxOutputTokens: req.maxOutputTokens },
+          contents: req.messages.map((m, i) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [
+              ...(i === req.messages.length - 1 && m.role === 'user' ? (req.attachments ?? []).map((a) => ({ inlineData: { mimeType: a.contentType, data: a.data.toString('base64') } })) : []),
+              { text: m.content },
+            ],
+          })),
+          config: {
+            systemInstruction: fullSystem(req),
+            maxOutputTokens: req.maxOutputTokens,
+            ...(req.jsonSchema ? { responseMimeType: 'application/json', responseJsonSchema: req.jsonSchema.schema } : {}),
+          },
         });
       } catch (e) {
         throw toError(e);

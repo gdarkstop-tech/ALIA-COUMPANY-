@@ -23,6 +23,7 @@ export default function PrivacyCenter() {
   const marketing = state.consents.find((c) => c.type === 'MARKETING_COMMUNICATIONS')?.granted ?? false;
   const aiConsent = state.consents.find((c) => c.type === 'AI_ASSISTANT_PROCESSING');
   const voiceConsent = state.consents.find((c) => c.type === 'AI_VOICE_PROCESSING');
+  const documentConsent = state.consents.find((c) => c.type === 'AI_DOCUMENT_PROCESSING');
   const setHealth = (granted: boolean) => record.mutate({ state, answers: { HEALTH_DATA_PROCESSING: granted } });
 
   return (
@@ -97,6 +98,26 @@ export default function PrivacyCenter() {
               />
             </View>
             <Button label={`${t('legal.read')} · ${t('legal.aiVoiceConsent')}`} variant="ghost" size="sm" fullWidth={false} onPress={() => router.push('/legal/ai-voice-consent' as Href)} testID="open-ai-voice-consent" />
+          </>
+        ) : null}
+        {documentConsent ? (
+          <>
+            <Divider />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="callout" weight="semibold">{t('privacy.aiDocuments')}</Text>
+                <Text variant="footnote" color="textSecondary">{t('privacy.aiDocumentsBody')}</Text>
+              </View>
+              <Switch
+                testID="ai-document-consent-switch"
+                accessibilityLabel={t('privacy.aiDocuments')}
+                value={documentConsent.granted}
+                disabled={record.isPending}
+                onValueChange={(v) => record.mutate({ state, answers: { AI_DOCUMENT_PROCESSING: v } })}
+                trackColor={{ true: colors.accent, false: colors.border }}
+              />
+            </View>
+            <Button label={`${t('legal.read')} · ${t('legal.aiDocumentConsent')}`} variant="ghost" size="sm" fullWidth={false} onPress={() => router.push('/legal/ai-document-consent' as Href)} testID="open-ai-document-consent" />
           </>
         ) : null}
       </Card>

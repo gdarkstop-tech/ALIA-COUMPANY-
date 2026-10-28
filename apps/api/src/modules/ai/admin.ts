@@ -10,6 +10,8 @@ import {
   aiCandidateCreateBody,
   aiCandidatePatchBody,
   aiEvalCaseBody,
+  aiEvalCasePatchBody,
+  evalCaseProblem,
   aiEvalResultReviewBody,
   aiModelCreateBody,
   aiModelPatchBody,
@@ -54,7 +56,7 @@ import {
   billingPlans,
   featureFlags,
 } from '../../db/schema';
-import { PROVIDER_ENV_VARS } from '../../integrations/ai';
+import { ATTACHMENT_SUPPORT, PROVIDER_ENV_VARS } from '../../integrations/ai';
 import { audit } from '../../lib/audit';
 import { notFound, unprocessable } from '../../lib/errors';
 import { contextFor, inContext, requireAnyPermission, requirePermission } from '../../lib/principal';
@@ -103,7 +105,9 @@ function caseDto(c: typeof aiEvalCases.$inferSelect, me: string): AiEvalCase {
     prompt: c.prompt,
     context: c.context,
     expectedBehavior: c.expectedBehavior,
+    routeKey: c.routeKey as AiEvalCase['routeKey'],
     checks: c.checks as AiEvalChecks,
+    documentSpec: (c.documentSpec as AiEvalCase['documentSpec']) ?? null,
     status: c.status as AiEvalCase['status'],
     version: c.version,
     authoredByMe: c.authoredByUserId === me,
@@ -401,7 +405,7 @@ export async function adminAiRoutes(app: FastifyInstance) {
         approvals: approvals.map(({ a, provider, modelId }) => ({ id: a.id, routeKey: a.routeKey, modelRef: a.model, modelId, provider, runId: a.runId, policyVersion: a.policyVersion, note: a.note, approvedAt: iso(a.approvedAt)!, revokedAt: iso(a.revokedAt), revokeNote: a.revokeNote })),
         thresholds: t!.value,
         currentPolicyVersion: policyVersionFor('patient.chat'),
-        currentPolicyVersions: { 'patient.chat': policyVersionFor('patient.chat'), 'patient.voice': policyVersionFor('patient.voice') },
+        currentPolicyVersions: Object.fromEntries(['patient.chat', 'patient.voice', 'patient.document'].map((k) => [k, policyVersionFor(k)])),
       };
     });
   });
@@ -409,8 +413,13 @@ export async function adminAiRoutes(app: FastifyInstance) {
   app.post('/evaluation/cases', async (request, reply) => {
     const principal = await requirePermission(request, 'ai.eval.manage');
     const b = parse(aiEvalCaseBody, request.body);
+    const problem = evalCaseProblem({ routeKey: b.routeKey, checks: b.checks, documentSpec: b.documentSpec ?? null });
+    if (problem) throw unprocessable('AI_EVAL_CASE_INVALID', problem);
     const row = await inContext(request, principal, async (tx) => {
-      const [c] = await tx.insert(aiEvalCases).values({ code: b.code, category: b.category, language: b.language, prompt: b.prompt, context: b.context ?? null, expectedBehavior: b.expectedBehavior, checks: b.checks }).returning();
+      const [c] = await tx
+        .insert(aiEvalCases)
+        .values({ code: b.code, category: b.category, language: b.language, prompt: b.prompt, context: b.context ?? null, expectedBehavior: b.expectedBehavior, checks: b.checks, routeKey: b.routeKey, documentSpec: b.documentSpec ?? null })
+        .returning();
       return caseDto(c!, principal.userId);
     });
     return reply.status(201).send(row);
@@ -419,10 +428,18 @@ export async function adminAiRoutes(app: FastifyInstance) {
   app.patch('/evaluation/cases/:id', async (request) => {
     const principal = await requirePermission(request, 'ai.eval.manage');
     const { id } = parse(uuidParam, request.params);
-    const b = parse(aiEvalCaseBody.partial(), request.body);
+    const b = parse(aiEvalCasePatchBody, request.body);
     return inContext(request, principal, async (tx) => {
+      const [old] = await tx.select().from(aiEvalCases).where(eq(aiEvalCases.id, id));
+      if (!old) throw notFound('Case');
+      const problem = evalCaseProblem({ routeKey: b.routeKey ?? old.routeKey, checks: b.checks ?? old.checks, documentSpec: b.documentSpec === undefined ? old.documentSpec : b.documentSpec });
+      if (problem) throw unprocessable('AI_EVAL_CASE_INVALID', problem);
       // Any content change makes a new version that needs clinical review again (database trigger).
-      const [c] = await tx.update(aiEvalCases).set({ ...b, context: b.context === undefined ? undefined : (b.context ?? null) }).where(eq(aiEvalCases.id, id)).returning();
+      const [c] = await tx
+        .update(aiEvalCases)
+        .set({ ...b, context: b.context === undefined ? undefined : (b.context ?? null), documentSpec: b.documentSpec === undefined ? undefined : (b.documentSpec ?? null) })
+        .where(eq(aiEvalCases.id, id))
+        .returning();
       if (!c) throw notFound('Case');
       return caseDto(c, principal.userId);
     });
@@ -447,6 +464,9 @@ export async function adminAiRoutes(app: FastifyInstance) {
       if (!m) throw notFound('Model');
       const [route] = await tx.select().from(aiRoutes).where(eq(aiRoutes.key, routeKey));
       if (!route) throw notFound('Route');
+      if (route.requiredCapability && !m.capabilities.includes(route.requiredCapability)) throw unprocessable('AI_MODEL_LACKS_CAPABILITY', `${m.modelId} is not registered for ${route.requiredCapability}`);
+      // Document cases are synthetic PDFs: the adapter must be able to send one.
+      if (routeKey === 'patient.document' && !ATTACHMENT_SUPPORT[m.provider].includes('application/pdf')) throw unprocessable('AI_PROVIDER_CANNOT_READ_PDF', `${m.provider} cannot be sent a PDF by this server`);
       // Voice models are evaluated in text mode over the same realtime interface they serve with.
       const voice = route.requiredCapability === 'REALTIME_VOICE';
       const impl = voice ? { complete: realtime[m.provider].completeText.bind(realtime[m.provider]), status: realtime[m.provider].status } : ai[m.provider];

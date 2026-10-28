@@ -72,6 +72,11 @@ import type {
   AiReportListItem,
   KnowledgeArticleAdmin,
   KnowledgeVersion,
+  DocumentAiStatus,
+  DocumentContentType,
+  LabResult,
+  MedicalDocument,
+  MedicalDocumentDetail,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -250,6 +255,25 @@ export function createApiClient(options: ApiClientOptions) {
         u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
         return u.toString();
       },
+    },
+    /** Medical documents and AI reading of lab reports (every row is confirmed by the person). */
+    documents: {
+      aiStatus: () => get<DocumentAiStatus>('/v1/ai/documents'),
+      list: (patientId: string) => get<MedicalDocument[]>(`/v1/patients/${patientId}/documents`),
+      upload: (body: { patientId: string; title: string; kind?: 'LAB_REPORT' | 'OTHER'; contentType: DocumentContentType; dataBase64: string; documentDate?: string | null }) =>
+        post<MedicalDocumentDetail>('/v1/documents', body),
+      get: (id: string) => get<MedicalDocumentDetail>(`/v1/documents/${id}`),
+      update: (id: string, body: { title?: string; kind?: 'LAB_REPORT' | 'OTHER'; documentDate?: string | null }) => patch<MedicalDocumentDetail>(`/v1/documents/${id}`, body),
+      remove: (id: string) => del<{ ok: true }>(`/v1/documents/${id}`),
+      /** A short-lived, single-use link that opens the file (the app never stores it). */
+      viewLink: (id: string) => post<{ url: string; expiresAt: string }>(`/v1/documents/${id}/view-link`),
+      extract: (id: string) => post<MedicalDocumentDetail>(`/v1/documents/${id}/extract`),
+    },
+    labResults: {
+      list: (patientId: string) => get<LabResult[]>(`/v1/patients/${patientId}/lab-results`),
+      review: (id: string, body: { decision: 'CONFIRM' | 'REJECT'; testName?: string; valueText?: string; unit?: string | null; referenceText?: string | null; observedOn?: string | null }) =>
+        post<LabResult>(`/v1/lab-results/${id}/review`, body),
+      add: (body: { patientId: string; testName: string; valueText: string; unit?: string | null; referenceText?: string | null; observedOn: string; documentId?: string | null }) => post<LabResult>('/v1/lab-results', body),
     },
     /** Clinically approved knowledge versions (as cited by the assistant). */
     knowledge: {

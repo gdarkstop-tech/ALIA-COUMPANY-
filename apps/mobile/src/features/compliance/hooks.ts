@@ -23,8 +23,9 @@ export function useRecordConsents() {
     },
     onSuccess: (next) => {
       qc.setQueryData(['consents'], next);
-      // AI availability depends on the AI-processing consent.
+      // AI availability (assistant, voice, document reading) depends on the AI consents.
       void qc.invalidateQueries({ queryKey: ['ai'] });
+      void qc.invalidateQueries({ queryKey: ['documents', 'ai'] });
     },
     // A document was updated while this screen was open: reload the current versions so the next
     // tap answers the new documents instead of re-sending the stale ones.

@@ -44,10 +44,29 @@ export function createChatCompletionsProvider(o: ChatCompletionsOptions): AiProv
       try {
         res = await client.chat.completions.create({
           model: req.model,
-          messages: [{ role: 'system', content: fullSystem(req) }, ...req.messages.map((m) => ({ role: m.role, content: m.content }))],
+          messages: [
+            { role: 'system', content: fullSystem(req) },
+            ...req.messages.map((m, i) =>
+              i === req.messages.length - 1 && m.role === 'user' && req.attachments?.length
+                ? {
+                    role: 'user' as const,
+                    content: [
+                      // Images only: these endpoints take no PDF input (ATTACHMENT_SUPPORT).
+                      ...req.attachments.map((a) => {
+                        if (a.contentType === 'application/pdf') throw new AiProviderError(o.code, 'BAD_REQUEST', `${o.label} cannot read PDF files`);
+                        return { type: 'image_url' as const, image_url: { url: `data:${a.contentType};base64,${a.data.toString('base64')}` } };
+                      }),
+                      { type: 'text' as const, text: m.content },
+                    ],
+                  }
+                : { role: m.role, content: m.content },
+            ),
+          ],
           max_tokens: req.maxOutputTokens,
+          ...(req.jsonSchema ? { response_format: { type: 'json_schema' as const, json_schema: { name: req.jsonSchema.name, schema: req.jsonSchema.schema, strict: true } } } : {}),
         });
       } catch (e) {
+        if (e instanceof AiProviderError) throw e;
         if (e instanceof OpenAI.BadRequestError && MODERATION.test(`${e.code ?? ''} ${e.message}`)) {
           return { outcome: 'REFUSED', text: '', servedModel: req.model, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }, refusalCategory: 'provider_moderation' };
         }

@@ -15,12 +15,14 @@ import { assertRlsEffective, createDb, createPools, type Db, type Pools } from '
 import { createMessaging, type Messaging } from './integrations/messaging';
 import { createPaymentGateway, type PaymentGateway } from './integrations/payments';
 import { AppError, fromPgError } from './lib/errors';
+import { serializeRequest } from './lib/logging';
 import { getPrincipal, inContext, registerPrincipal } from './lib/principal';
 import { adminRoutes } from './modules/admin/routes';
 import { adminCatalogRoutes } from './modules/catalog/admin';
 import { accountRoutes } from './modules/accounts/routes';
 import { aiRoutes } from './modules/ai/routes';
 import { knowledgeRoutes } from './modules/knowledge/routes';
+import { documentRoutes } from './modules/documents/routes';
 import { adminAiRoutes } from './modules/ai/admin';
 import { complianceRoutes } from './modules/compliance/routes';
 import { billingRoutes } from './modules/billing/routes';
@@ -73,6 +75,8 @@ export async function buildServer(
             // Never log credentials, cookies or authorization material.
             // The voice stream ticket travels as a WebSocket subprotocol: never logged either.
             redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["sec-websocket-protocol"]', 'res.headers["set-cookie"]'], remove: true },
+            // Single-use document links carry their ticket in the query string: never logged.
+            serializers: { req: serializeRequest },
             ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } } : {}),
           },
     // Trust exactly TRUST_PROXY_HOPS proxies (counted from the server), never the whole header.
@@ -200,6 +204,7 @@ export async function buildServer(
   await app.register(accountRoutes, { prefix: '/v1' });
   await app.register(aiRoutes, { prefix: '/v1' });
   await app.register(voiceRoutes, { prefix: '/v1' });
+  await app.register(documentRoutes, { prefix: '/v1' });
   await app.register(knowledgeRoutes, { prefix: '/v1' });
   await app.register(adminAiRoutes, { prefix: '/v1/admin/ai' });
   await app.register(complianceRoutes, { prefix: '/v1' });
