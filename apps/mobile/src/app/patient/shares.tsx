@@ -11,7 +11,8 @@ import { confirmDestructive } from '@/lib/confirm';
 import { formatDate } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Badge, Button, Card, ErrorState, Header, LoadingScreen, Notice, Screen, Section, Text, type Tone } from '@/ui';
+import { Badge, Button, Card, Checkbox, ErrorState, Header, LoadingScreen, Notice, Screen, Section, Text, type Tone } from '@/ui';
+import { woundErrorKey } from '@/features/wounds/hooks';
 
 const STATUS_TONE: Record<string, Tone> = { ACTIVE: 'success', REVOKED: 'neutral', EXPIRED: 'neutral' };
 
@@ -25,6 +26,7 @@ export default function Shares() {
   const shares = useQuery({ queryKey: ['shares', active?.id], queryFn: () => api.shares.list(active!.id), enabled: Boolean(active) });
   const notes = useQuery({ queryKey: ['shares', 'notes', active?.id], queryFn: () => api.shares.notes(active!.id), enabled: Boolean(active) });
   const revoke = useMutation({ mutationFn: (id: string) => api.shares.revoke(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['shares'] }) });
+  const wounds = useMutation({ mutationFn: (v: { id: string; allowed: boolean }) => api.shares.setWounds(v.id, v.allowed), onSuccess: () => qc.invalidateQueries({ queryKey: ['shares'] }) });
 
   if (isPending || !active) return <Screen><LoadingScreen /></Screen>;
   return (
@@ -43,6 +45,16 @@ export default function Shares() {
                 <Text variant="caption" color="textSecondary">{t('shares.shared', { date: formatDate(s.expiresAt, locale) })}</Text>
                 {s.aiAllowed ? <Badge label={t('shares.aiOn')} tone="accent" icon="mci:creation" /> : null}
                 {s.status === 'ACTIVE' ? (
+                  <Checkbox
+                    testID={`share-wounds-${s.providerName}`}
+                    checked={s.woundsAllowed}
+                    onChange={(allowed) => wounds.mutate({ id: s.id, allowed })}
+                    label={t('shares.woundsToggle')}
+                  >
+                    <Text variant="caption" color="textSecondary">{t('shares.woundsToggleBody')}</Text>
+                  </Checkbox>
+                ) : null}
+                {s.status === 'ACTIVE' ? (
                   <Button testID={`share-revoke-${s.providerName}`} label={t('shares.revoke')} variant="ghost" size="sm" fullWidth={false} icon="x-circle" onPress={() => confirmDestructive(t('shares.revokeConfirm'), { cancel: t('common.cancel'), confirm: t('shares.revoke') }, () => revoke.mutate(s.id))} />
                 ) : null}
               </View>
@@ -55,6 +67,7 @@ export default function Shares() {
         </Card>
       </Section>
 
+      {wounds.error ? <Notice tone="danger" body={t(woundErrorKey(wounds.error))} /> : null}
       <Section title={t('shares.notesTitle')} testID="clinical-notes">
         {notes.data?.length ? (
           notes.data.map((n) => (

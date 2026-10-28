@@ -2,7 +2,12 @@
 // (see app.config.ts). Production store builds contain no native audio-recording code and request
 // no microphone access until voice is approved for launch.
 const voice = (process.env.APP_VARIANT ?? 'development') !== 'production';
+// Wound photos (ADR 0015) likewise: no camera / photo-picker native code in production until launch.
+const woundPhotos = voice;
 
 module.exports = {
-  dependencies: voice ? {} : { 'react-native-audio-api': { platforms: { ios: null, android: null } } },
+  dependencies: {
+    ...(voice ? {} : { 'react-native-audio-api': { platforms: { ios: null, android: null } } }),
+    ...(woundPhotos ? {} : { 'expo-image-picker': { platforms: { ios: null, android: null } } }),
+  },
 };

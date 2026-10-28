@@ -177,6 +177,12 @@ for (const p of ['ACCESS_BACKGROUND_LOCATION', 'READ_EXTERNAL_STORAGE', 'READ_ME
 check('production: no microphone purpose string (voice not launched)', !cfg.ios?.infoPlist?.NSMicrophoneUsageDescription && !JSON.stringify(cfg.locales ?? {}).includes('NSMicrophoneUsageDescription'));
 check('production: Android blocks RECORD_AUDIO', blocked.some((b) => b.endsWith('RECORD_AUDIO')));
 check('production: voice disabled in the app build', cfg.extra?.voiceEnabled === false);
+// Wound photos ship only in development / preview builds until the registry is approved (ADR 0015).
+const purposeStrings = JSON.stringify(cfg.ios?.infoPlist ?? {}) + JSON.stringify(cfg.locales ?? {});
+check('production: no camera or photo-library purpose string (wound photos not launched)', !purposeStrings.includes('NSCameraUsageDescription') && !purposeStrings.includes('NSPhotoLibraryUsageDescription'));
+check('production: Android blocks CAMERA', blocked.some((b) => b.endsWith('.CAMERA')));
+check('Android blocks READ_MEDIA_VISUAL_USER_SELECTED (system Photo Picker only)', blocked.some((b) => b.endsWith('READ_MEDIA_VISUAL_USER_SELECTED')));
+check('production: wound photos disabled in the app build', cfg.extra?.woundPhotosEnabled === false);
 const linked = JSON.parse(
   execFileSync('npx', ['expo-modules-autolinking', 'react-native-config', '--json', '--platform', 'android'], {
     cwd: join(root, 'apps/mobile'),
@@ -186,6 +192,7 @@ const linked = JSON.parse(
   }),
 );
 check('production: native audio-recording module not linked', !Object.keys(linked.dependencies ?? {}).includes('react-native-audio-api'));
+check('production: native camera / photo-picker module not linked', !Object.keys(linked.dependencies ?? {}).includes('expo-image-picker'));
 check('identifier is reverse-DNS', /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(cfg.ios?.bundleIdentifier ?? '') && cfg.ios?.bundleIdentifier === cfg.android?.package);
 
 // ---------------------------------------------------------------- 5. no committed signing material / credentials

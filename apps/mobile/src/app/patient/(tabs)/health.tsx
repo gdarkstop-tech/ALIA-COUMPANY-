@@ -153,6 +153,21 @@ export default function MyHealth() {
         </Card>
       </PressableScale>
 
+      <PressableScale testID="open-wounds" accessibilityRole="button" accessibilityLabel={t('wounds.healthCardTitle')} onPress={() => router.push('/patient/wounds')}>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <View style={{ width: 44, height: 44, borderRadius: radii.md, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="mci:bandage" color="primary" />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="callout" weight="semibold">{t('wounds.healthCardTitle')}</Text>
+              <Text variant="footnote" color="textSecondary">{t('wounds.healthCardBody')}</Text>
+            </View>
+            <Icon name="chevron-right" color="textTertiary" />
+          </View>
+        </Card>
+      </PressableScale>
+
       <PressableScale testID="open-readings" accessibilityRole="button" accessibilityLabel={t('readings.healthCardTitle')} onPress={() => router.push('/patient/readings')}>
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>

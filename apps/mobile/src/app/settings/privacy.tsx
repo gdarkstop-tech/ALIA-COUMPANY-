@@ -126,6 +126,12 @@ export default function PrivacyCenter() {
       <Notice tone="info" icon="mci:shield-lock-outline" title={t('privacy.dataSummaryTitle')} body={t('privacy.dataSummaryBody')} />
       <Text variant="caption" color="textTertiary">{t('privacy.noTracking')}</Text>
 
+      <Card padded={false}>
+        <View style={{ paddingHorizontal: spacing.lg }}>
+          <ListRow icon="mci:shield-account-outline" title={t('wounds.permissionsTitle')} subtitle={t('wounds.permissionsCardBody')} onPress={() => router.push('/patient/wounds/permissions' as Href)} testID="open-wound-permissions-privacy" />
+        </View>
+      </Card>
+
       <Section title={t('legal.documents')}>
         <Card padded={false}>
           <View style={{ paddingHorizontal: spacing.lg }}>

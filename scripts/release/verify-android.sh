@@ -16,6 +16,11 @@ grep -q "native-code:.*'arm64-v8a'" <<<"$badging" || { echo "✗ arm64-v8a missi
 # Exact allow-list (anchored, dots escaped); also covers <uses-permission-sdk-23>, which Expo's
 # blockedPermissions does not strip.
 allowed='^(android\.permission\.(INTERNET|VIBRATE|ACCESS_NETWORK_STATE|ACCESS_WIFI_STATE)|com\.android\.vending\.BILLING|[a-z0-9_.]+\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION)$'
+# Preview (beta) builds carry the features not yet launched: realtime voice (ADR 0010) and wound
+# photos (ADR 0015). Pass VARIANT=preview for such an APK; production allows neither.
+if [ "${VARIANT:-production}" = "preview" ]; then
+  allowed='^(android\.permission\.(INTERNET|VIBRATE|ACCESS_NETWORK_STATE|ACCESS_WIFI_STATE|RECORD_AUDIO|MODIFY_AUDIO_SETTINGS|CAMERA)|com\.android\.vending\.BILLING|[a-z0-9_.]+\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION)$'
+fi
 while read -r perm; do
   [[ "$perm" =~ $allowed ]] && echo "  permission ok: $perm" || { echo "✗ unexpected permission: $perm"; fail=1; }
 done < <(sed -n "s/^uses-permission\(-sdk-23\)\{0,1\}: name='\([^']*\)'.*/\2/p" <<<"$badging")

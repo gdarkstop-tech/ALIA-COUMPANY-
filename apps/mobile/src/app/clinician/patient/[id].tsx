@@ -7,6 +7,7 @@ import { View } from 'react-native';
 import { CLINICIAN_KEY, copilotErrorKey, useCopilotStatus, useSharedPatient } from '@/features/clinician/hooks';
 import { useConsents, useRecordConsents, consentErrorKey } from '@/features/compliance/hooks';
 import { SeriesCard } from '@/features/readings/SeriesCard';
+import { useWounds } from '@/features/wounds/hooks';
 import { api, errorKey } from '@/lib/api';
 import { formatDate, formatNumber } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
@@ -14,6 +15,37 @@ import { useTheme } from '@/providers/theme';
 import { Avatar, Badge, BrandLoader, Button, Card, Chip, ErrorState, Header, LoadingScreen, Notice, PressableScale, Screen, Section, Sheet, Text, TextField, type Tone } from '@/ui';
 
 const STATUS_TONE: Record<string, Tone> = { DRAFT: 'accent', SIGNED: 'success', FAILED: 'neutral', GENERATING: 'info', DISCARDED: 'neutral' };
+
+/** Wound cases of the shared profile — only when the person included wound photos in this share. */
+function SharedWounds({ patientId, allowed }: { patientId: string; allowed: boolean }) {
+  const { t } = useI18n();
+  const { colors } = useTheme();
+  const router = useRouter();
+  const wounds = useWounds(allowed ? patientId : undefined);
+  return (
+    <Section title={t('wounds.title')} testID="clinician-wounds">
+      {!allowed ? (
+        <Notice tone="info" body={t('wounds.noClinicianAccess')} />
+      ) : (
+        <Card padded={false}>
+          {!wounds.data?.length ? (
+            <View style={{ padding: spacing.lg }}>
+              <Text variant="footnote" color="textTertiary">{t('wounds.emptyList')}</Text>
+            </View>
+          ) : (
+            wounds.data.map((w, i) => (
+              <PressableScale key={w.id} testID={`clinician-wound-${w.label}`} accessibilityRole="button" accessibilityLabel={w.label} onPress={() => router.push(`/clinician/wound/${w.id}` as Href)} style={{ padding: spacing.lg, gap: 4, borderTopWidth: i ? 1 : 0, borderTopColor: colors.divider }}>
+                <Text variant="callout" weight="semibold">{w.label}</Text>
+                <Text variant="caption" color="textSecondary">{`${t(`wounds.site_${w.bodySite}`)} · ${t('wounds.photos', { count: w.photoCount })}`}</Text>
+                {w.clinical ? <Badge label={t('wounds.reviewed', { category: t(`wounds.category_${w.clinical.category}`) })} tone="success" /> : <Badge label={t('wounds.notReviewed')} tone="neutral" />}
+              </PressableScale>
+            ))
+          )}
+        </Card>
+      )}
+    </Section>
+  );
+}
 
 /** The clinician's terms for the copilot (separate from any patient notice). */
 function TermsCard() {
@@ -139,6 +171,8 @@ export default function SharedPatient() {
           )}
         </Card>
       </Section>
+
+      <SharedWounds patientId={p.patientId} allowed={p.woundsAllowed} />
 
       <Section title={t('copilot.readings')}>
         {analytics.series.map((s) => (

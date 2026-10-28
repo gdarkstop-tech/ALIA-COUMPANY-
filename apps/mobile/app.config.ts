@@ -78,6 +78,20 @@ const VOICE = VARIANT !== 'production';
 const MIC_EN = 'Dress My Wound uses the microphone only while you have a voice conversation with the health assistant open. Your voice is not recorded or stored.';
 const MIC_AR = 'يستخدم غير لي الميكروفون فقط أثناء فتح محادثة صوتية مع المساعد الصحي. لا يُسجَّل صوتك ولا يُحفَظ.';
 
+/**
+ * Wound photos (ADR 0015) follow the same rule: the camera and the system photo picker ship only in
+ * development and preview builds until the wound registry is approved for launch (wound.registry
+ * regulatory evidence, camera / photo disclosures in both stores). Production builds do not link
+ * expo-image-picker (react-native.config.js), declare no camera or photo-library purpose string and
+ * keep CAMERA blocked. READ_MEDIA_* stays blocked everywhere: photos come from the system Photo
+ * Picker, which needs no storage permission. The picker never asks for the microphone.
+ */
+const WOUND_PHOTOS = VARIANT !== 'production';
+const CAMERA_EN = 'Dress My Wound uses the camera only when you choose to take a photo of a wound to track its healing. The photo is stored privately for your care.';
+const CAMERA_AR = 'يستخدم غير لي الكاميرا فقط عندما تختار تصوير جرح لمتابعة التئامه. تُحفَظ الصورة بشكل خاص لرعايتك.';
+const PHOTOS_EN = 'Dress My Wound opens your photos only to let you choose a wound photo you select. It does not read your other photos.';
+const PHOTOS_AR = 'يفتح غير لي صورك فقط لتختار صورة جرح بنفسك، ولا يطّلع على صورك الأخرى.';
+
 // withReleaseHardening wraps the whole config: its mod is registered before the `plugins` below,
 // so it executes after them (Expo runs mods in reverse registration order) and has the last word.
 export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
@@ -93,8 +107,14 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
   icon: './assets/icon.png',
   // Localised home-screen name: English "Dress My Wound", Arabic "غير لي".
   locales: {
-    ar: { ios: { CFBundleDisplayName: v.nameAr, CFBundleName: v.nameAr, ...(VOICE ? { NSMicrophoneUsageDescription: MIC_AR } : {}) }, android: { app_name: v.nameAr } },
-    en: { ios: { CFBundleDisplayName: v.nameEn, CFBundleName: v.nameEn, ...(VOICE ? { NSMicrophoneUsageDescription: MIC_EN } : {}) }, android: { app_name: v.nameEn } },
+    ar: {
+      ios: { CFBundleDisplayName: v.nameAr, CFBundleName: v.nameAr, ...(VOICE ? { NSMicrophoneUsageDescription: MIC_AR } : {}), ...(WOUND_PHOTOS ? { NSCameraUsageDescription: CAMERA_AR, NSPhotoLibraryUsageDescription: PHOTOS_AR } : {}) },
+      android: { app_name: v.nameAr },
+    },
+    en: {
+      ios: { CFBundleDisplayName: v.nameEn, CFBundleName: v.nameEn, ...(VOICE ? { NSMicrophoneUsageDescription: MIC_EN } : {}), ...(WOUND_PHOTOS ? { NSCameraUsageDescription: CAMERA_EN, NSPhotoLibraryUsageDescription: PHOTOS_EN } : {}) },
+      android: { app_name: v.nameEn },
+    },
   },
   ios: {
     bundleIdentifier: appId,
@@ -127,6 +147,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
         ['NSPrivacyCollectedDataTypeEmailAddress'],
         ['NSPrivacyCollectedDataTypePhoneNumber'],
         ['NSPrivacyCollectedDataTypeHealth'],
+        // Wound-photo builds: photos the person takes or selects are stored for their care (ADR 0015).
+        ...(WOUND_PHOTOS ? [['NSPrivacyCollectedDataTypePhotosorVideos']] : []),
         ['NSPrivacyCollectedDataTypeUserID'],
         ['NSPrivacyCollectedDataTypeOtherUserContent'],
         ['NSPrivacyCollectedDataTypeCrashData'],
@@ -160,7 +182,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
       'android.permission.ACCESS_BACKGROUND_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.ACCESS_COARSE_LOCATION',
-      'android.permission.CAMERA',
+      // Wound-photo builds need the camera; production keeps it blocked until the registry launches.
+      ...(WOUND_PHOTOS ? [] : ['android.permission.CAMERA']),
       // Voice builds need the microphone; production keeps it blocked until voice launches.
       ...(VOICE ? [] : ['android.permission.RECORD_AUDIO']),
       'android.permission.READ_EXTERNAL_STORAGE',
@@ -226,6 +249,16 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
           ] as [string, Record<string, unknown>],
         ]
       : []),
+    // Wound photos: camera + system photo picker, never the microphone (voice builds already declare it).
+    // Listed in every variant: Expo would otherwise apply this plugin by itself with generic camera,
+    // photo-library AND microphone purpose strings. Production sets all three to false (keys removed,
+    // CAMERA and RECORD_AUDIO blocked).
+    [
+      'expo-image-picker',
+      WOUND_PHOTOS
+        ? { cameraPermission: CAMERA_EN, photosPermission: PHOTOS_EN, microphonePermission: VOICE ? MIC_EN : false }
+        : { cameraPermission: false, photosPermission: false, microphonePermission: false },
+    ],
     'expo-font',
     'expo-localization',
     [
@@ -247,6 +280,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
     appVariant: VARIANT,
     /** The app shows voice only when this build links the audio module (and the server allows it). */
     voiceEnabled: VOICE,
+    /** The app offers wound photos only when this build links the picker (and the server allows the registry). */
+    woundPhotosEnabled: WOUND_PHOTOS,
     ...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),
   },
   experiments: { typedRoutes: false },
