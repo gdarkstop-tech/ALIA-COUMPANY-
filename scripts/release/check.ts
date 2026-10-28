@@ -17,6 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inflateSync } from 'node:zlib';
 import { BRAND_NAME_AR, BRAND_NAME_EN } from '../../packages/shared/src/brand.ts';
 import { LEGAL_DOCUMENTS } from '../../packages/shared/src/legal.ts';
 import { brandConfig } from '../../packages/tokens/src/brand.ts';
@@ -100,6 +101,56 @@ const fg = png('store/assets/google-play/feature-graphic-1024x500.png');
 check('Play feature graphic 1024×500, 24-bit (no alpha)', fg.w === 1024 && fg.h === 500 && fg.colorType === 2 && fg.bitDepth === 8 && !fg.transparent);
 const adaptive = png('apps/mobile/assets/adaptive-icon.png');
 check('Android adaptive foreground 1024×1024 with transparency', adaptive.w === 1024 && adaptive.colorType === 6);
+for (const [file, label] of [['apps/mobile/assets/icon-ios-dark.png', 'dark'], ['apps/mobile/assets/icon-ios-tinted.png', 'tinted']] as const) {
+  const i = png(file);
+  check(`iOS ${label} icon 1024×1024, opaque`, i.w === 1024 && i.h === 1024 && i.colorType === 2 && !i.transparent, `${i.w}×${i.h} type ${i.colorType}`);
+}
+const adaptiveBg = png('apps/mobile/assets/adaptive-icon-background.png');
+check('Android adaptive background 1024×1024, opaque', adaptiveBg.w === 1024 && adaptiveBg.colorType === 2 && !adaptiveBg.transparent);
+check('Android themed (monochrome) icon 1024×1024 with transparency', png('apps/mobile/assets/adaptive-icon-monochrome.png').colorType === 6);
+
+/** Distance from the centre to the farthest visible pixel (alpha > 16) of an 8-bit RGBA PNG. */
+function reach(path: string): number {
+  const b = readFileSync(join(root, path));
+  const w = b.readUInt32BE(16);
+  const h = b.readUInt32BE(20);
+  if (b[24] !== 8 || b[25] !== 6 || b[28] !== 0) throw new Error(`${path}: expected 8-bit RGBA, non-interlaced`);
+  const idat: Buffer[] = [];
+  for (let i = 8; i + 8 <= b.length; ) {
+    const len = b.readUInt32BE(i);
+    if (b.toString('latin1', i + 4, i + 8) === 'IDAT') idat.push(b.subarray(i + 8, i + 8 + len));
+    i += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = w * 4;
+  const px = Buffer.alloc(stride * h);
+  let r = 0;
+  for (let y = 0; y < h; y++) {
+    const filter = raw[y * (stride + 1)]!;
+    for (let x = 0; x < stride; x++) {
+      const v = raw[y * (stride + 1) + 1 + x]!;
+      const a = x >= 4 ? px[y * stride + x - 4]! : 0;
+      const up = y > 0 ? px[(y - 1) * stride + x]! : 0;
+      const c = x >= 4 && y > 0 ? px[(y - 1) * stride + x - 4]! : 0;
+      const paeth = () => {
+        const p = a + up - c;
+        const [pa, pb, pc] = [Math.abs(p - a), Math.abs(p - up), Math.abs(p - c)];
+        return pa <= pb && pa <= pc ? a : pb <= pc ? up : c;
+      };
+      px[y * stride + x] = (v + [0, a, up, (a + up) >> 1, filter === 4 ? paeth() : 0][filter]!) & 0xff;
+      if (x % 4 === 3 && px[y * stride + x]! > 16) r = Math.max(r, Math.hypot((x - 3) / 4 + 0.5 - w / 2, y + 0.5 - h / 2));
+    }
+  }
+  return r / w;
+}
+// Adaptive icons: launchers mask the 108 dp layer to as little as a 66 dp circle (radius 33/108).
+for (const file of ['apps/mobile/assets/adaptive-icon.png', 'apps/mobile/assets/adaptive-icon-monochrome.png']) {
+  const k = reach(file);
+  check(`${file.split('/').pop()} stays inside the 66 dp safe zone`, k <= 33 / 108, `content radius ${(k * 108).toFixed(1)} dp`);
+}
+// Android 12+ splash: the icon is masked to a circle; the content must fit the image's own circle.
+const splashReach = reach('apps/mobile/assets/splash-icon.png');
+check('splash icon content fits its circular mask', splashReach <= 0.5, `content radius ${(splashReach * 100).toFixed(1)} % of the width`);
 
 // ---------------------------------------------------------------- 4. native config (production variant)
 const cfgJson = execFileSync('npx', ['expo', 'config', '--type', 'introspect', '--json'], {

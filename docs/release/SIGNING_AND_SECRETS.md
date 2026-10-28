@@ -257,7 +257,7 @@ Optional: add an EAS build/submit job to CI using `EXPO_TOKEN` (**to confirm**).
 - Production API domain (replaces `https://api.dressmywound.invalid`), hosting, secret manager, support domain and email, `APP_LINK_DOMAIN`.
 - Store product IDs (Apple subscription products, Google subscriptions and base plans) — none exist yet.
 
-**Requires official assets (`NEEDS_OFFICIAL_ASSETS`)**: none for signing itself. App icons and store graphics are placeholders and must be replaced before the first store build that is meant to ship (see [RELEASE_STATUS.md](RELEASE_STATUS.md)).
+**Requires official assets (`NEEDS_OFFICIAL_ASSETS`)**: none for signing itself. App icons and store graphics now use the official Dress My Wound artwork (vectorised from the supplied references); brand-owner sign-off is still needed before the first store build that is meant to ship (see [RELEASE_STATUS.md](RELEASE_STATUS.md)).
 
 **Requires legal approval (`NEEDS_LEGAL_APPROVAL`)**: the legal entity name used for both developer accounts (placeholder today); the export-compliance answer (5.6).
 

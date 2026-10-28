@@ -19,6 +19,7 @@ const plex = localFont({
 export const metadata: Metadata = {
   title: 'Dress My Wound Admin',
   description: 'Operations & clinical review console',
+  icons: { icon: '/favicon.png', apple: '/favicon.png' },
   robots: { index: false, follow: false },
 };
 

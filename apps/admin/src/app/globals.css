@@ -21,9 +21,18 @@ h3 { font-size: 16px; font-weight: 600; }
 
 .shell { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
 .sidebar { background: var(--color-surface-inverse); color: var(--color-text-inverse); padding: 24px 16px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; height: 100vh; }
-.brand { display: flex; align-items: center; gap: 12px; padding: 4px 8px 24px; }
-.brand-mark { width: 38px; height: 38px; border-radius: 10px; }
-.brand small { display: block; opacity: 0.65; font-size: 12px; }
+.brand { display: flex; justify-content: center; padding: 4px 4px 24px; }
+/* Official Dress My Wound wordmark (components/brand.tsx). The subtitle is admin-only live text. */
+.dmw-lockup { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; }
+.dmw-lockup picture, .dmw-lockup img { display: block; width: 100%; height: auto; }
+.dmw-subtitle { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 9.5px; font-weight: 500; line-height: 1.4; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; color: var(--color-text-secondary); }
+.dmw-subtitle::before, .dmw-subtitle::after { content: ""; flex: 1 1 10px; min-width: 10px; height: 1px; background: currentColor; opacity: 0.45; }
+.dmw-subtitle:lang(ar) { letter-spacing: 0; text-transform: none; font-size: 12px; }
+/* Sidebar: too narrow for one line — two balanced lines, no rules. */
+.sidebar .dmw-subtitle { display: block; color: inherit; opacity: 0.72; text-wrap: balance; }
+.sidebar .dmw-subtitle::before, .sidebar .dmw-subtitle::after { content: none; }
+.login-brand { display: flex; justify-content: center; padding: 4px 0 8px; }
+.login-brand .dmw-subtitle { font-size: 10px; letter-spacing: 0.1em; white-space: nowrap; }
 .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; color: inherit; opacity: 0.78; font-weight: 500; }
 .nav-item:hover { opacity: 1; background: rgba(255,255,255,0.06); text-decoration: none; }
 .nav-item.active { opacity: 1; background: rgba(114,196,188,0.16); color: #AADDD8; }

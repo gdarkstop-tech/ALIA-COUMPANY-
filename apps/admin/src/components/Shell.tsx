@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { authClient } from '@/lib/auth-client';
+import { DmwWordmark } from './brand';
 import { useI18n } from './Providers';
 
 type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav' | 'aiAdmin.nav';
@@ -63,11 +64,7 @@ export function Shell({ children, title, actions }: { children: ReactNode; title
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/mark.png" alt="" className="brand-mark" />
-          <div>
-            <strong>{t('admin.title')}</strong>
-            <small>{t('admin.consoleSubtitle')}</small>
-          </div>
+          <DmwWordmark width={212} onInverse subtitle testId="admin-brand" />
         </div>
         {NAV.filter((n) => !n.permissions || n.permissions.some((p) => hasPermission(roles, p))).map((n) => (
           <Link key={n.href} href={n.href} className={`nav-item ${(n.href === '/' ? pathname === '/' : pathname.startsWith(n.href)) ? 'active' : ''}`} data-testid={`nav-${n.href.replace('/', '') || 'overview'}`}>

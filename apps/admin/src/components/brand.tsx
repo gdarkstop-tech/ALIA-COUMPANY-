@@ -1,5 +1,6 @@
 'use client';
 import { COMMERCE_BRAND } from '@ghayarly/shared';
+import { brandConfig } from '@ghayarly/tokens';
 import { useI18n } from './Providers';
 
 /**
@@ -28,6 +29,29 @@ export function BrandLoader({ size = 48, label }: { size?: number; label?: strin
     <div className="brand-loader" role="status" aria-live="polite" data-testid="brand-loader">
       <img src="/brand/loader-swirl.png" alt="" width={size} height={size} />
       <span>{text}</span>
+    </div>
+  );
+}
+
+/**
+ * The official Dress My Wound wordmark (vector files from scripts/brand/generate-assets.ts). The
+ * artwork itself is tagline-free; the console subtitle is live, localised text under it and is used
+ * in this admin console only — never on patient-facing screens.
+ *
+ * `onInverse`: placed on the inverse surface (the sidebar: navy in light mode, pale in dark mode).
+ * Otherwise it sits on the page surface. Each case picks the lettering colour per colour scheme.
+ */
+export function DmwWordmark({ width = 220, onInverse = false, subtitle = false, testId }: { width?: number; onInverse?: boolean; subtitle?: boolean; testId?: string }) {
+  const { t } = useI18n();
+  const darkLettering = '/brand/dmw-wordmark.svg'; // for light surfaces
+  const lightLettering = '/brand/dmw-wordmark-inverse.svg'; // for dark surfaces
+  return (
+    <div className="dmw-lockup" style={{ width }} data-testid={testId}>
+      <picture>
+        <source srcSet={onInverse ? darkLettering : lightLettering} media="(prefers-color-scheme: dark)" />
+        <img src={onInverse ? lightLettering : darkLettering} alt={`${brandConfig.product.nameEn} | ${brandConfig.product.nameAr}`} width={width} />
+      </picture>
+      {subtitle ? <div className="dmw-subtitle">{t('admin.consoleSubtitle')}</div> : null}
     </div>
   );
 }

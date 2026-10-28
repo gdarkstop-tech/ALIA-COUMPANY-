@@ -2,6 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
+import { DmwWordmark } from '@/components/brand';
 import { useI18n } from '@/components/Providers';
 import { authClient } from '@/lib/auth-client';
 
@@ -38,11 +39,13 @@ function LoginForm() {
   return (
     <div className="login-wrap">
       <form className="card login-card stack" onSubmit={submit} data-testid="admin-login">
-        <div className="spread">
-          <img src="/mark.png" alt="" width={44} height={44} style={{ borderRadius: 12 }} />
+        <div className="row" style={{ justifyContent: 'flex-end' }}>
           <button type="button" className="btn btn-sm btn-secondary" onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')}>
             {locale === 'ar' ? 'English' : 'العربية'}
           </button>
+        </div>
+        <div className="login-brand">
+          <DmwWordmark width={300} subtitle testId="login-brand" />
         </div>
         <div>
           <h1>{t('admin.signInTitle')}</h1>

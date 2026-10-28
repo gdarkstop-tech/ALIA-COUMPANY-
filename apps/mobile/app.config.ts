@@ -65,6 +65,8 @@ const withReleaseHardening: ConfigPlugin = (cfg) =>
   });
 
 const BRAND = { navy: '#0A1F3D', stone: '#FAF7F2', night: '#07152A' } as const;
+/** Soft cream of the official Dress My Wound glass icon (adaptive-icon background fallback colour). */
+const DMW_CREAM = '#FFF7EE';
 
 /**
  * Realtime voice (ADR 0010) ships only in development and preview builds until it is approved for
@@ -96,6 +98,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
   },
   ios: {
     bundleIdentifier: appId,
+    // Official glass icon (scripts/brand/generate-assets.ts): light, dark and tinted home-screen appearances.
+    icon: { light: './assets/icon.png', dark: './assets/icon-ios-dark.png', tinted: './assets/icon-ios-tinted.png' },
     // iPhone only until iPad layouts are designed and tested.
     supportsTablet: false,
     config: { usesNonExemptEncryption: false },
@@ -142,8 +146,10 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
     package: appId,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
+      backgroundImage: './assets/adaptive-icon-background.png',
+      // Android 13+ themed icons.
       monochromeImage: './assets/adaptive-icon-monochrome.png',
-      backgroundColor: BRAND.navy,
+      backgroundColor: DMW_CREAM,
     },
     // Medical data must not leave the device through Android cloud backup.
     allowBackup: false,
@@ -225,11 +231,14 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
     [
       'expo-splash-screen',
       {
+        // Android 12+ shows the splash icon inside a circle: the emblem alone, sized to stay inside it.
         image: './assets/splash-icon.png',
-        imageWidth: 132,
+        imageWidth: 168,
         resizeMode: 'contain',
         backgroundColor: BRAND.stone,
         dark: { image: './assets/splash-icon.png', backgroundColor: BRAND.night },
+        // iOS has no mask: the tagline-free wordmark, with light lettering in dark mode.
+        ios: { image: './assets/splash-wordmark.png', imageWidth: 260, dark: { image: './assets/splash-wordmark-dark.png', backgroundColor: BRAND.night } },
       },
     ],
   ],

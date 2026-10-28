@@ -45,7 +45,7 @@ export default function SignIn() {
   };
 
   return (
-    <Screen testID="sign-in-screen" header={<Header back title={t('auth.signInTitle')} subtitle={t('auth.signInSubtitle')} right={<LanguageToggle />} />}>
+    <Screen testID="sign-in-screen" header={<Header back brand title={t('auth.signInTitle')} subtitle={t('auth.signInSubtitle')} right={<LanguageToggle />} />}>
       {error ? <Notice tone="danger" body={error} testID="sign-in-error" /> : null}
       <View style={{ gap: spacing.lg }}>
         <TextField

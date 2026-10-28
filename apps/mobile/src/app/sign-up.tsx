@@ -42,7 +42,7 @@ export default function SignUp() {
   };
 
   return (
-    <Screen testID="sign-up-screen" header={<Header back title={t('auth.signUpTitle')} subtitle={t('auth.signUpSubtitle')} right={<LanguageToggle />} />}>
+    <Screen testID="sign-up-screen" header={<Header back brand title={t('auth.signUpTitle')} subtitle={t('auth.signUpSubtitle')} right={<LanguageToggle />} />}>
       {error ? <Notice tone="danger" body={error} /> : null}
       <View style={{ gap: spacing.lg }}>
         <TextField testID="sign-up-name" label={t('auth.fullName')} value={name} onChangeText={setName} autoComplete="name" textContentType="name" error={errs.name} />

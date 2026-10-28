@@ -1,8 +1,8 @@
 # Brand identity (as implemented): Dress My Wound | غير لي
 
-Verified on: 2026-10-15
+Verified on: 2026-10-15 · Dress My Wound identity (§4.2, §11) updated and re-verified on 2026-10-28
 
-> **The brand system is PROVISIONAL, and the app is not ready for submission.** No official Alia Group or TetraSol brand guidelines or colour specifications have been supplied. `packages/tokens/src/brand.ts` holds `status: 'PROVISIONAL'`. **The TetraSol logo file was supplied on 2026-10-28** and is rendered as supplied in TetraSol contexts (§4.1), together with the supplied orange swirl as the loading indicator; **no Alia Group logo exists**, so that name appears only as plain text. The app icon and product mark are **temporary placeholders**. Nothing has been tested on a physical or virtual device. Overall release status is in [RELEASE_STATUS.md](RELEASE_STATUS.md), which the lead engineer maintains.
+> **The brand system is PROVISIONAL, and the app is not ready for submission.** No official Alia Group or TetraSol brand guidelines or colour specifications have been supplied. `packages/tokens/src/brand.ts` holds `status: 'PROVISIONAL'`. **The TetraSol logo file was supplied on 2026-10-28** and is rendered as supplied in TetraSol contexts (§4.1), together with the supplied orange swirl as the loading indicator; **no Alia Group logo exists**, so that name appears only as plain text. **The Dress My Wound product identity (emblem + wordmark) was supplied on 2026-10-28** as two reference images; it is vectorised and drives the app icons, splash, store graphics and in-app wordmark (§4.2). The original vector handoff archive was **not** received. Nothing has been tested on a physical or virtual device. Overall release status is in [RELEASE_STATUS.md](RELEASE_STATUS.md), which the lead engineer maintains.
 
 Companion documents: [APPLE_APP_STORE_CHECKLIST.md](APPLE_APP_STORE_CHECKLIST.md) · [GOOGLE_PLAY_CHECKLIST.md](GOOGLE_PLAY_CHECKLIST.md) · [evidence/STORE_REQUIREMENTS_EVIDENCE.md](evidence/STORE_REQUIREMENTS_EVIDENCE.md)
 
@@ -35,7 +35,7 @@ Companion documents: [APPLE_APP_STORE_CHECKLIST.md](APPLE_APP_STORE_CHECKLIST.md
 | 1.4 | Store listing names and keywords (`store/metadata/en.json` en-GB, `ar.json`) | `STORE_METADATA_READY` · `NEEDS_ACCOUNT_ACTION` · `NEEDS_STORE_REVIEW` | verified by automated test (`scripts/release/check.ts`: name/title ≤ 30, keywords contain no app or company names) |
 | 1.5 | Brand hierarchy: product primary, Alia Group as endorsement, TetraSol only for commerce (§3) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (usage rules) | verified by config inspection; TetraSol-only catalogue verified by automated test (`apps/api/test/rls.test.ts`, "TetraSol-only commerce") |
 | 1.6 | TetraSol logo rendered from the supplied file in TetraSol contexts only; Alia Group as plain text (§4, §4.1) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (TetraSol usage guidelines; Alia Group logo) | verified by config inspection; provisional flag verified by automated test (`packages/tokens/test/contrast.test.ts`, "is explicitly marked provisional…") |
-| 1.7 | Product mark / app icon: **TEMPORARY PLACEHOLDER** (§4, §11) | `CODE_READY` (format only) · `NEEDS_OFFICIAL_ASSETS` | verified by automated test (`scripts/release/check.ts`: sizes and alpha) |
+| 1.7 | Product mark / app icon: **official Dress My Wound artwork** (supplied 2026-10-28), traced to vectors; iOS light/dark/tinted, Android adaptive + themed, splash, store graphics (§4.2, §11) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (original vector files; brand-owner sign-off of the traced vectors and renders) | verified by automated test (`scripts/release/check.ts`: sizes, alpha, 66 dp safe zone, splash circle; `packages/tokens/test/dmw.test.ts`); verified by native build inspection (`expo prebuild`, 2026-10-28) |
 | 1.8 | Colour tokens (navy, orange, stone, brass) with WCAG 2.2 AA pairs (§5) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (official colour specs) | verified by automated test (`packages/tokens/test/contrast.test.ts`, 43 tests); rendered contrast verified by automated test (`e2e/tests/a11y.spec.ts`, Expo **web** only) |
 | 1.9 | Orange usage rule (§6) | `CODE_READY` (convention) | verified by config inspection; accent ≠ clinical colours verified by automated test (`packages/tokens/test/contrast.test.ts`) |
 | 1.10 | Separate clinical status scale (§5.3) | `CODE_READY` | verified by automated test (`packages/tokens/test/contrast.test.ts`) |
@@ -110,7 +110,7 @@ Rules as implemented:
 | `aliaGroupLogo` | `null` | No official file supplied. The name renders as text. **No logo is drawn or imitated.** | `NEEDS_OFFICIAL_ASSETS` |
 | `tetrasolLogo` | `store/assets/official/tetrasol/tetrasol-logo-supplied.png` | Supplied by the project owner, 2026-10-28. Rendered as supplied (backdrop removed only) — see §4.1 | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (usage guidelines) |
 | `loaderArtwork` | `store/assets/official/tetrasol/loader-swirl-supplied.png` | Orange swirl supplied with the logo as the loading-indicator reference | `CODE_READY` |
-| `productMark` | `'TEMPORARY_PLACEHOLDER'` | Placeholder Dress My Wound mark | `NEEDS_OFFICIAL_ASSETS` |
+| `productMark` / `productMarkSource` | `'OFFICIAL'` / `store/assets/official/dmw/reference` | Dress My Wound emblem and wordmark supplied 2026-10-28, vectorised — see §4.2 | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (original vector files) |
 | `corporate.officialAssetsReceived` / `commerce.officialAssetsReceived` | `false` / `false` | | `NEEDS_OFFICIAL_ASSETS` |
 
 ### 4.1 TetraSol logo and loader (supplied 2026-10-28)
@@ -121,15 +121,22 @@ Rules as implemented:
 - **Loader.** `BrandLoader` (mobile: Reanimated rotation, 1.4 s per turn; admin: CSS) replaces screen-level loading (`LoadingScreen`), the app start screen, the assistant's "thinking" row, document reading, health-summary and clinical-draft generation, and admin loading states. With Reduce Motion on, it stays still and breathes. Small in-button spinners stay native.
 - **Pending:** TetraSol brand-owner confirmation of these usages and of the derived wordmark crop (`NEEDS_OFFICIAL_ASSETS`, usage guidelines).
 
-**Placeholder product mark.** A pointed (Mamluk-style) arch outline in cream `#F7F3EC` frames a rounded care cross in orange `#EE6B1F`, on a navy `#0A1F3D` tile.
-- In-app: `apps/mobile/src/ui/brand/BrandMark.tsx`, a vector drawn with `react-native-svg` and given the accessibility label "Dress My Wound | غير لي". It is used only inside `Lockup`.
-- Rasters: `scripts/brand/generate-assets.ts` (run with `pnpm brand:assets`) uses the same geometry (`apps/mobile/src/ui/brand/geometry.ts`) and then calls `scripts/brand/flatten-icon.py`, which makes the iOS icon opaque RGB and the Play icon RGBA.
-- The icon has **no texture**: no lattice is drawn in the icon jobs (`iconSquare`, "Clean, modern icon: no texture").
-- It has not been approved by any brand owner. The file header says: "TEMPORARY PLACEHOLDER ARTWORK — not an official Alia Group, TetraSol or Dress My Wound logo."
+### 4.2 Dress My Wound identity (supplied 2026-10-28)
+
+- **Received.** Two images attached by the project owner: the brand usage board (glass icon, light/dark/brand-colour/mono variants, palette) and the full wordmark with the console subtitle. Stored unchanged in `store/assets/official/dmw/reference/` with their SHA-256 (README there). **`DMW_Brand_Handoff.zip` (named in the request) was not received** — no original vector, font or icon file exists in the repository.
+- **Vectorised, not redrawn.** `scripts/brand/trace-dmw-reference.py` (`pnpm brand:trace`) separates the board colours (orange, medical silver, navy) at 4× supersampling and traces each with potrace into `packages/tokens/src/dmw-artwork.ts`. Proportions, gaps and letterforms are those of the reference. Limit: the source is a ~1.7k px raster, so very fine detail is as precise as the image allows; replace the paths with the original vectors when they arrive.
+- **One painter for every surface.** `packages/tokens/src/dmw.ts` applies the board colours (Primary Orange `#F97316`, Text/Dark `#1F2937`, Medical Silver `#9CA3AF`) with the reference's shading, and emits the SVG used by the asset generator, the app (`react-native-svg` `SvgXml`) and the admin console (static SVG files).
+- **Two distinct assets:**
+  - *External app icon* — the emblem only (cross, heart, ECG, leaf), **no text**, on a soft glass surface. Centred on its bounding box and scaled uniformly (never stretched or cropped); see §11 for every file. Android layers keep the emblem inside a 27 dp radius (66 dp safe zone = 33 dp), checked by `scripts/release/check.ts`.
+  - *Internal wordmark* — emblem + "Dress My Wound", tagline-free: welcome (`Lockup`), sign in / sign up (`Header brand`), consent (`Lockup compact`), account footer ("about": wordmark + version), iOS splash. On dark surfaces "Dress My" turns soft white `#F8FAFC`; "Wound" stays orange.
+  - *Console subtitle* — "Operations & clinical review console" is **live, localised text** under the wordmark in the admin console only (sidebar, sign-in), uppercase with flanking rules in English; never on patient-facing screens and never inside the artwork.
+- **Arabic.** No Arabic is added to the artwork. غير لي is set as text under the wordmark (`Lockup`, larger when the app is in Arabic); the artwork keeps its left-to-right reading in RTL layouts (`direction: 'ltr'` on the mark only).
+- **Unchanged on purpose.** The app's UI colour tokens (§5), the TetraSol logo and loader (§4.1) and the welcome hero ornament (§7) are not modified by this change.
+- **Placeholder removed.** The arch + care-cross placeholder mark, `apps/admin/public/mark.png` and `store/assets/shared/mark.svg` are gone; `geometry.ts` remains for the welcome hero ornament.
 
 **Documentation gaps found while verifying (config inspection):**
 - The comment in `packages/tokens/src/brand.ts` mentions a `PartnerName` component in `apps/mobile/src/ui/brand`. **No such component exists.** The partner names render as ordinary i18n text.
-- `brand.ts` and the generator also refer to `store/assets/PLACEHOLDER_ASSETS.md`. **That file does not exist.** §11 of this document is the current placeholder inventory.
+- (Resolved 2026-10-28.) `brand.ts` and the generator no longer refer to the non-existent `store/assets/PLACEHOLDER_ASSETS.md`; §11 is the asset inventory.
 
 ---
 
@@ -258,29 +265,32 @@ Rules:
 
 ---
 
-## 11. Asset inventory: every file is a PLACEHOLDER
+## 11. Asset inventory
 
-All files below come from `scripts/brand/generate-assets.ts` and `scripts/brand/flatten-icon.py` (`pnpm brand:assets`). None is official artwork. Formats were inspected on 2026-10-15 with PIL and the PNG header.
+All files below come from `pnpm brand:assets` (`scripts/brand/generate-assets.ts`, then `scripts/brand/flatten-icon.py`), rendered by Chromium directly from the vector artwork (§4.2) — nothing is upscaled from a bitmap. Formats were inspected on 2026-10-28 with PIL, the PNG header and `scripts/release/check.ts`. The artwork is the **official** Dress My Wound identity as supplied; the open item for all of them is brand-owner sign-off of the traced vectors and renders (`NEEDS_OFFICIAL_ASSETS`, original vector files).
 
 | File | Format | Purpose | Status | Verification |
 |---|---|---|---|---|
-| `apps/mobile/assets/icon.png` | 1024×1024, RGB (no alpha), 23 KB | App icon (iOS master, Expo `icon`) | **PLACEHOLDER** · `CODE_READY` (format) · `NEEDS_OFFICIAL_ASSETS` | verified by automated test (`scripts/release/check.ts`) |
-| `apps/mobile/assets/adaptive-icon.png` | 1024×1024, RGBA | Android adaptive foreground, glyph at 78% scale; background `#0A1F3D` from `app.config.ts` | **PLACEHOLDER** · `NEEDS_OFFICIAL_ASSETS` | verified by automated test (`scripts/release/check.ts`) |
-| `apps/mobile/assets/adaptive-icon-monochrome.png` | 1024×1024, RGBA | Android themed (monochrome) icon | **PLACEHOLDER** · `NEEDS_OFFICIAL_ASSETS` | verified by config inspection |
-| `apps/mobile/assets/splash-icon.png` | 1024×1024, RGBA | Splash mark (`imageWidth 132`), background stone `#FAF7F2` / dark `#07152A` | **PLACEHOLDER** · `NEEDS_OFFICIAL_ASSETS` | verified by config inspection |
-| `apps/mobile/assets/favicon.png` | 196×196, RGBA | Expo web favicon | **PLACEHOLDER** · `NEEDS_OFFICIAL_ASSETS` | verified by config inspection |
-| `apps/admin/public/mark.png` | 256×256, RGBA | Admin sidebar and login mark (`alt=""`) | **PLACEHOLDER** · `NEEDS_OFFICIAL_ASSETS` | verified by config inspection |
-| `apps/admin/public/favicon.png` | 196×196, RGBA | Admin favicon | **PLACEHOLDER** · `NEEDS_OFFICIAL_ASSETS` | verified by config inspection |
-| `store/assets/google-play/icon-512.png` | 512×512, RGBA (32-bit), 11 KB | Play store icon | **PLACEHOLDER** · `STORE_METADATA_READY` (format) · `NEEDS_OFFICIAL_ASSETS` | verified by automated test (`scripts/release/check.ts`) |
-| `store/assets/google-play/feature-graphic-1024x500.png` | 1024×500, RGB (24-bit), 44 KB | Play feature graphic: navy, 5% lattice, arch, mark, EN and AR names, "by Alia Group" | **PLACEHOLDER** · `STORE_METADATA_READY` (format) · `NEEDS_OFFICIAL_ASSETS` | verified by automated test (`scripts/release/check.ts`) |
-| `store/assets/shared/mark.svg` | SVG, 1024 viewBox | Vector master of the placeholder tile, for designers | **PLACEHOLDER** · `NEEDS_OFFICIAL_ASSETS` | verified by config inspection |
+| `apps/mobile/assets/icon.png` | 1024×1024, RGB (no alpha) | Light glass icon: Expo `icon`, iOS `ios.icon.light`, App Store icon | `CODE_READY` | verified by automated test (`scripts/release/check.ts`); verified by native build inspection (`AppIcon.appiconset`, prebuild) |
+| `apps/mobile/assets/icon-ios-dark.png` | 1024×1024, RGB | iOS dark appearance (deep-navy glass) | `CODE_READY` | verified by automated test; native build inspection (`appearances: dark`) |
+| `apps/mobile/assets/icon-ios-tinted.png` | 1024×1024, RGB | iOS tinted appearance (grayscale emblem on black) | `CODE_READY` | verified by automated test; native build inspection (`appearances: tinted`) |
+| `apps/mobile/assets/adaptive-icon.png` | 1024×1024, RGBA | Android adaptive foreground (emblem, 27 dp radius) | `CODE_READY` | verified by automated test (66 dp safe zone); native build inspection (`ic_launcher_foreground`, mdpi–xxxhdpi) |
+| `apps/mobile/assets/adaptive-icon-background.png` | 1024×1024, RGB | Android adaptive background (cream glass) | `CODE_READY` | verified by automated test; native build inspection |
+| `apps/mobile/assets/adaptive-icon-monochrome.png` | 1024×1024, RGBA | Android 13+ themed icon (white silhouette) | `CODE_READY` | verified by automated test (safe zone); native build inspection (`<monochrome>`) |
+| `apps/mobile/assets/splash-icon.png` | 1024×1024, RGBA | Android splash (emblem in its circle, `imageWidth 168` < 192 dp mask), light `#FAF7F2` / dark `#07152A` | `CODE_READY` | verified by automated test (fits its circle); native build inspection (`splashscreen_logo`, light + night) |
+| `apps/mobile/assets/splash-wordmark.png`, `splash-wordmark-dark.png` | 1200×354, RGBA | iOS splash: tagline-free wordmark (`imageWidth 260`), light / dark lettering | `CODE_READY` | verified by native build inspection (`SplashScreenLogo.imageset`, `image` + `dark_image`) |
+| `apps/mobile/assets/favicon.png`, `apps/admin/public/favicon.png` | 196×196, RGBA | Web / admin favicon (rounded glass tile) | `CODE_READY` | verified by config inspection |
+| `apps/admin/public/brand/dmw-wordmark.svg`, `dmw-wordmark-inverse.svg`, `dmw-emblem.svg` | SVG | Admin wordmark (lettering per surface and colour scheme) | `CODE_READY` | verified by screenshot inspection (Chromium, light + dark) |
+| `store/assets/google-play/icon-512.png` | 512×512, RGBA (32-bit) | Play store icon | `STORE_METADATA_READY` (format) | verified by automated test (`scripts/release/check.ts`) |
+| `store/assets/google-play/feature-graphic-1024x500.png` | 1024×500, RGB (24-bit) | Play feature graphic: light glass, wordmark, غير لي and "by Alia Group" as text | `STORE_METADATA_READY` (format) | verified by automated test (`scripts/release/check.ts`) |
+| `store/assets/official/dmw/exports/` | SVG + PNG up to 4096 px | High-resolution exports: icon light / dark / tinted / brand colour / mono (1024), emblem 2048, wordmark 4096 (+ inverse), console lockup 2400 | `CODE_READY` | verified by config inspection |
 | Store screenshots | **none exist**. Drafts can be generated from the web harness (`e2e/tests/store-screenshots.spec.ts`, `STORE_SHOTS=1`, written to `store/screenshots/draft-web-harness/`, not committed) and must be replaced by native captures | — | `NEEDS_OFFICIAL_ASSETS` | not verified |
 
 **Asset requirements:**
 
 | Requirement | Source | Project state |
 |---|---|---|
-| [verified-official] iOS icon: a square 1024×1024 master with no pre-rounded corners; the system masks it | https://developer.apple.com/design/human-interface-guidelines/app-icons | Met by format. No dark or tinted variants. |
+| [verified-official] iOS icon: a square 1024×1024 master with no pre-rounded corners; the system masks it | https://developer.apple.com/design/human-interface-guidelines/app-icons | Met by format, with dark and tinted variants (`ios.icon`). |
 | No alpha in the 1024 App Store icon (ITMS-90717). **To confirm**: secondary source only. | https://developer.apple.com/forums/thread/795411 | Enforced anyway by `scripts/release/check.ts` |
 | [verified-official] Play icon: 512×512, 32-bit PNG with alpha, sRGB, ≤ 1024 KB, full square | https://developer.android.com/distribute/google-play/resources/icon-design-specifications | Met by format (11 KB) |
 | [verified-official] Play feature graphic: required to publish; 1024×500; JPEG or 24-bit PNG with no alpha; avoid "Best", "Free" or "New" | https://support.google.com/googleplay/android-developer/answer/9866151 | Met by format. Only one version exists, with an LTR layout. The evidence *suggests* (it does not require) a separate Arabic RTL version. |
@@ -297,7 +307,7 @@ All files below come from `scripts/brand/generate-assets.ts` and `scripts/brand/
 | 1 | **Vector logos** (SVG or PDF) with clear-space, minimum-size and colour variants, plus written permission to use them in the app, the store listings and the support site | Alia Group, TetraSol | `brandConfig.assets.aliaGroupLogo` / `tetrasolLogo` | `NEEDS_OFFICIAL_ASSETS` |
 | 2 | **Official colour specifications** (HEX/sRGB, plus P3 if defined) for navy, orange, stone and brass, or the official replacements | Alia Group, TetraSol | `brandConfig.hues`, then a re-run of `contrast.test.ts` | `NEEDS_OFFICIAL_ASSETS` |
 | 3 | **Usage rules**: the endorsement wording ("by Alia Group" / "من Alia Group", uppercase treatment, Latin or Arabic script); TetraSol co-branding and the "TetraSol Care" store label; approval of the arch and mashrabiya motif and the orange-usage rule | Alia Group, TetraSol | §3, §6, §7 | `NEEDS_OFFICIAL_ASSETS` |
-| 4 | **Approval or replacement of the product mark** (arch + care cross), with final icon artwork: a 1024 master and optional dark/tinted variants, the Android adaptive layers and the splash mark | Product owner with Alia Group | Every file in §11 | `NEEDS_OFFICIAL_ASSETS` |
+| 4 | **The Dress My Wound handoff archive** (`DMW_Brand_Handoff.zip`: original vector logo, fonts, icon masters) — referenced in the 2026-10-28 request but not received — and sign-off of the traced vectors and the rendered icon set | Product owner | Replaces `dmw-artwork.ts`; confirms every file in §11 | `NEEDS_OFFICIAL_ASSETS` |
 | 5 | Final **EN and AR store screenshots** captured from the native builds | Product team (needs EAS/Xcode builds) | §11 | `NEEDS_OFFICIAL_ASSETS` · `NEEDS_ACCOUNT_ACTION` |
 | 6 | Trademark clearance of the product names, and the legal entity name for the copyright line (`<ALIA_GROUP_LEGAL_ENTITY_TO_CONFIRM>`) | Alia Group legal | §2, the store metadata | `NEEDS_LEGAL_APPROVAL` |
 
@@ -322,13 +332,14 @@ Components read only from tokens, so they need no code change. Remove the "TEMPO
   - IBM Plex Sans Arabic with Dynamic Type up to 1.8×
   - RTL switching
   - the reduced-motion root config
-  - the asset generator
+  - the asset generator, rendering the official Dress My Wound icon set and wordmark from vectors (§4.2)
 - **Verified by automated test:**
   - `scripts/release/check.ts` (58/58 on 2026-10-22: canonical names, spellings, metadata limits, off-feature claims, icon formats)
-  - `packages/tokens/test/contrast.test.ts` (43)
+  - `packages/tokens/test/contrast.test.ts` (43) and `packages/tokens/test/dmw.test.ts` (6: no lettering in the emblem, no Arabic or subtitle in the artwork, proportions, lettering colour and contrast, scoped gradient ids, flat paints)
+  - `scripts/release/check.ts` on 2026-10-28: 82 passed, 0 failed (icon formats, dark/tinted, adaptive layers, 66 dp safe zone, splash circle); 14 submission blockers are legal/listing placeholders
   - `apps/api/test/rls.test.ts` (TetraSol-only catalogue)
   - `e2e/tests/a11y.spec.ts` (9/9 at 320/360/390 px, Expo web only)
-- **Verified by native build inspection:** Android labels EN/AR (`BUILT`, debug-signed, not distributable); iOS prebuild display names (no binary).
+- **Verified by native build inspection:** Android labels EN/AR (`BUILT`, debug-signed, not distributable); iOS prebuild display names (no binary); `expo prebuild` (production variant, 2026-10-28) generates the adaptive icon XML with background / foreground / monochrome, every mipmap density, the light/night splash drawables, and the iOS `AppIcon.appiconset` with light, dark and tinted 1024 images plus the light/dark splash wordmark. No launcher, home screen or splash has been seen on a device or emulator.
 - **Requires a developer account (`NEEDS_ACCOUNT_ACTION`):** entering the names, keywords, icon, feature graphic and screenshots in App Store Connect and Play Console; native builds for screenshots.
 - **Requires official assets (`NEEDS_OFFICIAL_ASSETS`):** everything in §12 items 1–5; every file in §11.
 - **Requires legal approval (`NEEDS_LEGAL_APPROVAL`):** trademark clearance (**to confirm**), the legal entity name.

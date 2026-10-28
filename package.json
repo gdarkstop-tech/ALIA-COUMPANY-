@@ -22,7 +22,8 @@
     "e2e": "pnpm --filter @ghayarly/e2e e2e",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "release:check": "node --no-warnings scripts/release/check.ts",
-    "brand:assets": "node --no-warnings scripts/brand/generate-assets.ts && python3 scripts/brand/flatten-icon.py apps/mobile/assets/icon.png && python3 scripts/brand/flatten-icon.py --rgba store/assets/google-play/icon-512.png"
+    "brand:trace": "python3 -I scripts/brand/trace-dmw-reference.py",
+    "brand:assets": "node --no-warnings scripts/brand/generate-assets.ts && python3 scripts/brand/flatten-icon.py apps/mobile/assets/icon.png apps/mobile/assets/icon-ios-dark.png apps/mobile/assets/icon-ios-tinted.png apps/mobile/assets/adaptive-icon-background.png && python3 scripts/brand/flatten-icon.py --rgba store/assets/google-play/icon-512.png"
   },
   "devDependencies": {
     "turbo": "2.11.8",

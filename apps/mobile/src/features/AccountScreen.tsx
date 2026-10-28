@@ -10,7 +10,7 @@ import { useI18n } from '@/providers/i18n';
 import { usePreferences, type ThemeMode } from '@/providers/preferences';
 import { activeExperience, useMe, useSignOut, useResetTo } from '@/providers/session';
 import { useTheme } from '@/providers/theme';
-import { Avatar, Badge, Button, Card, Divider, Header, ListRow, Notice, Screen, Section, Segmented, Sheet, Text, TextField, useToast } from '@/ui';
+import { Avatar, Badge, Button, Card, Divider, Header, ListRow, Notice, Screen, Section, Segmented, Sheet, Text, TextField, useToast, Wordmark } from '@/ui';
 
 /** Shared account & settings screen for patient and clinician experiences. */
 export function AccountScreen({ experience }: { experience: 'patient' | 'clinician' }) {
@@ -136,9 +136,12 @@ export function AccountScreen({ experience }: { experience: 'patient' | 'clinici
           resetTo('/welcome');
         }}
       />
-      <Text variant="caption" color="textTertiary" align="center" style={{ color: colors.textTertiary }}>
-        {t('app.name')} · {t('me.version', { version: APP_VERSION })}
-      </Text>
+      <View style={{ alignItems: 'center', gap: spacing.sm }} testID="about-brand">
+        <Wordmark width={148} />
+        <Text variant="caption" color="textTertiary" align="center" style={{ color: colors.textTertiary }}>
+          {t('app.name')} · {t('me.version', { version: APP_VERSION })}
+        </Text>
+      </View>
 
       <Sheet visible={assistantOpen} onClose={() => setAssistantOpen(false)} title={t('me.assistantName')}>
         <TextField label={t('me.assistantName')} hint={t('me.assistantNameHint')} value={assistantName} onChangeText={setAssistantName} maxLength={40} />

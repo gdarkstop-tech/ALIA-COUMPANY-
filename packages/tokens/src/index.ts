@@ -18,6 +18,9 @@ import { brandConfig } from './brand';
 
 export { brandConfig } from './brand';
 export type { BrandConfig } from './brand';
+export { dmwArtwork } from './dmw-artwork';
+export { dmwAspect, dmwBox, dmwColors, dmwGradients, dmwParts, dmwSvg } from './dmw';
+export type { DmwArtwork, DmwPaintOptions, DmwPart } from './dmw';
 
 export const palette = {
   navy: { 950: '#07152A', 900: '#0A1F3D', 800: '#102A4C', 700: '#18375F', 600: '#234673', 500: '#355B8C', 400: '#5578A6', 300: '#87A0C2', 200: '#B9C8DC', 100: '#DDE5EF', 50: '#F0F4F9' },

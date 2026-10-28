@@ -16,7 +16,7 @@ if sys.argv[1:2] == ["--rgba"]:
 for path in sys.argv[1:]:
     img = Image.open(path)
     if img.mode != "RGB":
-        background = Image.new("RGB", img.size, (10, 31, 61))  # brand navy
+        background = Image.new("RGB", img.size, (255, 247, 238))  # Dress My Wound icon cream
         background.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
         background.save(path, optimize=True)
     print(f"{path}: {Image.open(path).mode} {Image.open(path).size}")

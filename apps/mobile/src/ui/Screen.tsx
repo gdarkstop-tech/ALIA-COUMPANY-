@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View, type 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
+import { Wordmark } from './brand/BrandMark';
 import { DemoBanner } from './DemoBanner';
 import { Icon } from './Icon';
 import { PressableScale } from './Pressable';
@@ -58,9 +59,10 @@ export function Screen({ children, scroll = true, header, footer, refreshing, on
   );
 }
 
-type HeaderProps = { title: string; subtitle?: string; back?: boolean; right?: ReactNode; large?: boolean; eyebrow?: string };
+/** `brand`: shows the official wordmark above the title (entry screens: sign in, sign up). */
+type HeaderProps = { title: string; subtitle?: string; back?: boolean; right?: ReactNode; large?: boolean; eyebrow?: string; brand?: boolean };
 
-export function Header({ title, subtitle, back, right, large = true, eyebrow }: HeaderProps) {
+export function Header({ title, subtitle, back, right, large = true, eyebrow, brand }: HeaderProps) {
   const router = useRouter();
   const { t } = useI18n();
   return (
@@ -83,6 +85,7 @@ export function Header({ title, subtitle, back, right, large = true, eyebrow }: 
           {right ?? <View />}
         </View>
       ) : null}
+      {brand ? <Wordmark width={184} /> : null}
       <View style={{ gap: spacing.xs }}>
         {eyebrow ? (
           <Text variant="footnote" weight="semibold" color="primary">

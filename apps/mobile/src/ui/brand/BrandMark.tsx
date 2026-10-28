@@ -1,31 +1,54 @@
-import { brandConfig } from '@ghayarly/tokens';
+import { brandConfig, dmwArtwork, dmwAspect, dmwColors, dmwSvg } from '@ghayarly/tokens';
+import { useId, useMemo } from 'react';
 import { View } from 'react-native';
-import Svg, { Path, Rect } from 'react-native-svg';
-import { pointedArchOutline } from './geometry';
+import { SvgXml } from 'react-native-svg';
+import { useTheme } from '@/providers/theme';
 
 /**
- * PROVISIONAL product mark for Dress My Wound | غير لي: a pointed arch (Alia Group architecture)
- * sheltering a care cross in TetraSol orange. Replace via brandConfig.assets once an official
- * mark is approved. Rendered as vector so it stays crisp at every size and density.
+ * Official Dress My Wound marks, rendered from the vector artwork traced from the supplied
+ * reference (packages/tokens/src/dmw.ts) — crisp at every size and density, identical to the app
+ * icon and the admin console. The artwork never contains Arabic text: غير لي is set as live text
+ * next to it (Lockup), so localisation stays intact.
  */
-export function BrandMark({ size = 64, variant = 'tile' }: { size?: number; variant?: 'tile' | 'plain' }) {
-  const s = size;
-  const archW = s * 0.5;
-  const archH = s * 0.6;
-  const ax = (s - archW) / 2;
-  const ay = s * 0.2;
-  const arm = s * 0.085;
-  const len = s * 0.15;
-  const cx = s / 2;
-  const cy = ay + archH * 0.62;
+const LABEL = `${brandConfig.product.nameEn} | ${brandConfig.product.nameAr}`;
+
+/** Gradient ids must be unique per document on the web, where every inline SVG shares one DOM. */
+function usePrefix(tag: string) {
+  return `${tag}${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+}
+
+/** The emblem (cross, heart, ECG, leaf) — no text. `tile` sits it on the icon's soft cream glass. */
+export function BrandMark({ size = 64, variant = 'plain' }: { size?: number; variant?: 'tile' | 'plain' }) {
+  const prefix = usePrefix('m');
+  const xml = useMemo(() => dmwSvg(dmwArtwork, { part: 'emblem', idPrefix: prefix }), [prefix]);
+  const inner = variant === 'tile' ? size * 0.72 : size;
+  const height = inner / dmwAspect(dmwArtwork, 'emblem');
   return (
-    <View accessible accessibilityRole="image" accessibilityLabel={`${brandConfig.product.nameEn} | ${brandConfig.product.nameAr}`} style={{ width: s, height: s }}>
-    <Svg width={s} height={s} aria-hidden>
-      {variant === 'tile' ? <Rect x={0} y={0} width={s} height={s} rx={s * 0.23} fill={brandConfig.hues.navy} /> : null}
-      <Path d={pointedArchOutline(archW, archH, 0.5)} transform={`translate(${ax} ${ay})`} stroke={variant === 'tile' ? '#F7F3EC' : brandConfig.hues.navy} strokeWidth={s * 0.045} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <Rect x={cx - arm / 2} y={cy - len} width={arm} height={len * 2} rx={arm / 2} fill={brandConfig.hues.orange} />
-      <Rect x={cx - len} y={cy - arm / 2} width={len * 2} height={arm} rx={arm / 2} fill={brandConfig.hues.orange} />
-    </Svg>
+    <View
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={LABEL}
+      style={[{ width: size, height: variant === 'tile' ? size : height, alignItems: 'center', justifyContent: 'center', direction: 'ltr' }, variant === 'tile' ? { borderRadius: size * 0.23, backgroundColor: dmwColors.cream, borderWidth: 1, borderColor: 'rgba(249, 115, 22, 0.18)' } : null]}
+    >
+      <SvgXml xml={xml} width={inner} height={height} />
+    </View>
+  );
+}
+
+/**
+ * The tagline-free wordmark (emblem + "Dress My Wound"), as supplied — never stretched or cropped.
+ * `inverse` = on a dark surface ("Dress My" in soft white); by default it follows the colour scheme.
+ */
+export function Wordmark({ width = 240, inverse }: { width?: number; inverse?: boolean }) {
+  const { scheme } = useTheme();
+  const onDark = inverse ?? scheme === 'dark';
+  const prefix = usePrefix('w');
+  const xml = useMemo(() => dmwSvg(dmwArtwork, { part: 'wordmark', inverse: onDark, idPrefix: prefix }), [onDark, prefix]);
+  const height = width / dmwAspect(dmwArtwork, 'wordmark');
+  return (
+    // The artwork reads left to right in both languages.
+    <View accessible accessibilityRole="image" accessibilityLabel={LABEL} style={{ width, height, direction: 'ltr' }} testID="dmw-wordmark">
+      <SvgXml xml={xml} width={width} height={height} />
     </View>
   );
 }

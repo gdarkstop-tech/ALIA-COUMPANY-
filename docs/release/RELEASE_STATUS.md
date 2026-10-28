@@ -70,8 +70,8 @@ Needs **macOS or EAS cloud** plus an **Apple Developer Program organisation acco
 | Area | Status | Verified by | What blocks the next level |
 |---|---|---|---|
 | Official names (EN `Dress My Wound`, AR `غير لي`) | CODE_READY | release check + APK labels | — |
-| Brand system (TetraSol navy/orange, subtle Alia Group architecture) | CODE_READY (provisional) | contrast tests (43) | `NEEDS_OFFICIAL_ASSETS`: logos, colour specs, approval of the placeholder product mark |
-| App icon, splash, Play icon, feature graphic | placeholders | release check (sizes/alpha) | `NEEDS_OFFICIAL_ASSETS` |
+| Brand system (TetraSol navy/orange, subtle Alia Group architecture) | CODE_READY (provisional) | contrast tests (43) | `NEEDS_OFFICIAL_ASSETS`: Alia Group logo, colour specs |
+| App icon (iOS light/dark/tinted, Android adaptive + themed), splash, Play icon, feature graphic, in-app/admin wordmark | CODE_READY — official Dress My Wound artwork (supplied 2026-10-28, vectorised) | release check (formats, 66 dp safe zone, splash circle), `dmw.test.ts` (6), prebuild inspection, web screenshots; **not seen on a device** | `NEEDS_OFFICIAL_ASSETS`: original vector files (`DMW_Brand_Handoff.zip` not received), sign-off of the renders |
 | Authentication, RLS, medical records, family profiles, provider dashboards, TetraSol-only store | CODE_READY | API tests + E2E A–E | `DEVICE_TESTED` |
 | Consent (terms, privacy, health data, marketing) | CODE_READY | compliance tests + E2E A/F | `NEEDS_LEGAL_APPROVAL` (texts are drafts `2026-10-draft`) |
 | In-app account deletion + web deletion page | CODE_READY | compliance tests + E2E F | public URL needs a real domain (`NEEDS_ACCOUNT_ACTION`) |
@@ -98,7 +98,7 @@ Needs **macOS or EAS cloud** plus an **Apple Developer Program organisation acco
 - Production hosting for the API, database and public site with a real domain (support, privacy and account-deletion URLs; optional Universal/App Links).
 - Store products: subscription group and products (Apple), subscriptions and base plans (Google), App Store Server Notifications and Play RTDN (Pub/Sub push with OIDC) pointing to the API.
 
-**Official assets (`NEEDS_OFFICIAL_ASSETS`)**: Alia Group and TetraSol logos (vector), official colour specifications and usage rules, approval or replacement of the placeholder product mark and app icon.
+**Official assets (`NEEDS_OFFICIAL_ASSETS`)**: Alia Group and TetraSol logos (vector), official colour specifications and usage rules, the original Dress My Wound vector files and sign-off of the app icon set rendered from the traced artwork.
 
 **Legal (`NEEDS_LEGAL_APPROVAL`)**: legal entity name, privacy contact, hosting provider and region, retention periods, dispute-resolution clause (all marked `[to be confirmed]` in `packages/shared/src/legal.ts`); approval of the privacy policy, terms, health-data consent and medical disclaimer in Arabic and English.
 
