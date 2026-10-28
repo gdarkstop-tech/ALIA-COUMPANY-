@@ -37,6 +37,7 @@ export const consentBasisEnum = appSchema.enum('consent_basis', ['SELF', 'GUARDI
 export const accessStatusEnum = appSchema.enum('access_status', ['ACTIVE', 'REVOKED']);
 export const healthEntryKindEnum = appSchema.enum('health_entry_kind', ['ALLERGY', 'CONDITION', 'MEDICATION', 'SURGERY']);
 export const recordStatusEnum = appSchema.enum('record_status', ['ACTIVE', 'ENTERED_IN_ERROR']);
+export const observationKindEnum = appSchema.enum('observation_kind', ['BLOOD_PRESSURE', 'HEART_RATE', 'BLOOD_GLUCOSE', 'WEIGHT', 'TEMPERATURE', 'OXYGEN_SATURATION', 'PAIN_SCORE']);
 export const providerTypeEnum = appSchema.enum('provider_type', ['DOCTOR', 'NURSE']);
 export const verificationStatusEnum = appSchema.enum('verification_status', ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'REJECTED', 'SUSPENDED']);
 export const availabilityStatusEnum = appSchema.enum('availability_status', [
@@ -669,6 +670,7 @@ export const aiEvalCases = appSchema.table('ai_eval_cases', {
   // Migration 0021: document-reading cases carry a synthetic report definition.
   routeKey: text('route_key').notNull().default('patient.chat'),
   documentSpec: jsonb('document_spec').$type<Record<string, unknown> | null>(),
+  summarySpec: jsonb('summary_spec').$type<Record<string, unknown> | null>(),
   status: text('status').notNull().default('DRAFT'),
   version: integer('version').notNull().default(1),
   authoredByUserId: text('authored_by_user_id'),
@@ -952,4 +954,44 @@ export const labResults = appSchema.table('lab_results', {
   corrected: boolean('corrected').notNull().default(false),
   recordedByUserId: text('recorded_by_user_id'),
   createdAt: ts('created_at').notNull().default(sql`now()`),
+});
+
+// Slice 6 (migration 0022): readings and AI summaries.
+const numericRequired = customType<{ data: number; driverData: string }>({
+  dataType: () => 'numeric',
+  fromDriver: (v) => Number(v),
+  toDriver: (v) => String(v),
+});
+export const healthObservations = appSchema.table('health_observations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull(),
+  kind: observationKindEnum('kind').notNull(),
+  value: numericRequired('value').notNull(),
+  value2: numericNumber('value2'),
+  unit: text('unit').notNull(),
+  context: text('context'),
+  measuredAt: ts('measured_at').notNull(),
+  note: text('note'),
+  source: text('source').notNull().default('MANUAL'),
+  provenance: provenanceEnum('provenance').notNull(),
+  recordedByUserId: text('recorded_by_user_id').notNull(),
+  verifiedAt: ts('verified_at'),
+  status: recordStatusEnum('status').notNull().default('ACTIVE'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+});
+
+export const healthSummaries = appSchema.table('health_summaries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull(),
+  requestedByUserId: text('requested_by_user_id').notNull(),
+  status: text('status').notNull(),
+  periodDays: integer('period_days').notNull(),
+  language: text('language').notNull(),
+  facts: jsonb('facts').$type<unknown[]>().notNull(),
+  content: jsonb('content').$type<Record<string, unknown> | null>(),
+  provider: aiProviderEnum('provider'),
+  modelId: text('model_id'),
+  policyVersion: text('policy_version').notNull(),
+  createdAt: ts('created_at').notNull(),
+  completedAt: ts('completed_at'),
 });

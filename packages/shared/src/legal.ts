@@ -231,6 +231,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
           heading: 'What you agree to',
           paragraphs: [
             'I allow Dress My Wound to send what I type to the assistant — and, only if I choose it for a conversation, a summary of a profile I manage (age, sex, recorded allergies, conditions and medications) — to an AI provider that processes it on Dress My Wound’s behalf to produce the answer. [Provider names, processing locations and the providers’ retention terms — to be confirmed by legal before launch.]',
+            'When I ask for a summary of my readings, Dress My Wound sends the provider only figures the app calculated from readings and lab results I confirmed (for example the latest value, an average, or whether a value is within the range printed on the report) — not my notes, my name or my contact details. The summary is checked against those figures before it is shown, is labelled as AI-generated and is not a medical assessment.',
             'My conversations are visible only to me; staff cannot read them. Usage counts and costs are recorded without their content. Deleting my account deletes my conversations.',
             'This consent is optional and separate from storing my health records. I can withdraw it at any time in Privacy & consent; the assistant then stops sending anything.',
           ],
@@ -252,6 +253,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
           heading: 'ما الذي توافق عليه',
           paragraphs: [
             'أسمح لتطبيق غير لي بإرسال ما أكتبه للمساعد — وإذا اخترت ذلك في محادثة ما، ملخص ملف أديره (العمر والجنس والحساسية والأمراض والأدوية المسجلة) — إلى مزوّد ذكاء اصطناعي يعالجه نيابةً عن غير لي لإنتاج الإجابة. [أسماء المزوّدين ومواقع المعالجة وشروط احتفاظهم بالبيانات — يحددها الفريق القانوني قبل الإطلاق.]',
+            'عندما أطلب ملخصًا لقراءاتي، يرسل غير لي إلى المزوّد فقط أرقامًا حسبها التطبيق من القراءات ونتائج التحاليل التي أكّدتها (مثل آخر قيمة، أو المتوسط، أو هل القيمة ضمن المعدل المطبوع في التقرير) — وليس ملاحظاتي أو اسمي أو بيانات التواصل. يُراجَع الملخص مقابل تلك الأرقام قبل عرضه، ويُوسَم بأنه من الذكاء الاصطناعي، وليس تقييمًا طبيًا.',
             'محادثاتي مرئية لي وحدي ولا يستطيع الموظفون قراءتها. تُسجَّل أعداد الاستخدام والتكاليف دون محتواها. حذف حسابي يحذف محادثاتي.',
             'هذه الموافقة اختيارية ومنفصلة عن حفظ سجلاتي الصحية، ويمكنني سحبها في أي وقت من "الخصوصية والموافقات"، فيتوقف المساعد عن إرسال أي شيء.',
           ],

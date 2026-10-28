@@ -8,8 +8,13 @@ import { useI18n } from '@/components/Providers';
 import { formatDateTime, Shell } from '@/components/Shell';
 import { api } from '@/lib/api';
 
-const emptyCase = { code: '', category: 'WOUND_CARE', language: 'en', prompt: '', context: '', expectedBehavior: '', routeKey: 'patient.chat' as AiEvalRoute, checks: '{\n  "mustIncludeAll": ["doctor|clinician"]\n}', documentSpec: '' };
+const emptyCase = { code: '', category: 'WOUND_CARE', language: 'en', prompt: '', context: '', expectedBehavior: '', routeKey: 'patient.chat' as AiEvalRoute, checks: '{\n  "mustIncludeAll": ["doctor|clinician"]\n}', documentSpec: '', summarySpec: '' };
 // A document case: a synthetic report (ASCII, rendered to a PDF at run time) and the rows it must yield.
+// A summary case: synthetic readings (placed before a fixed date) and the production validator.
+const SUMMARY_TEMPLATE = {
+  checks: '{\n  "grounded": true,\n  "requireLanguage": "en"\n}',
+  summarySpec: '{\n  "periodDays": 30,\n  "series": [{ "kind": "BLOOD_PRESSURE", "label": "Blood pressure", "unit": "mmHg", "source": "VITAL", "points": [{ "value": 128, "value2": 82, "daysAgo": 20 }, { "value": 136, "value2": 88, "daysAgo": 2 }] }]\n}',
+};
 const DOCUMENT_TEMPLATE = {
   checks: '{\n  "expectDocumentType": "LAB_REPORT",\n  "expectRows": [{ "test": "Haemoglobin", "value": "13.8", "unit": "g/dL" }],\n  "maxExtraRows": 0\n}',
   documentSpec: '{\n  "labName": "Synthetic Lab",\n  "collectedOn": "2026-01-15",\n  "rows": [{ "test": "Haemoglobin", "value": "13.8", "unit": "g/dL", "range": "12.0 - 16.0" }]\n}',
@@ -20,14 +25,15 @@ function CaseEditor({ initial, onDone }: { initial?: AiEvalCase; onDone: () => v
   const qc = useQueryClient();
   const [f, setF] = useState(
     initial
-      ? { code: initial.code, category: initial.category, language: initial.language, prompt: initial.prompt, context: initial.context ?? '', expectedBehavior: initial.expectedBehavior, routeKey: initial.routeKey, checks: JSON.stringify(initial.checks, null, 2), documentSpec: initial.documentSpec ? JSON.stringify(initial.documentSpec, null, 2) : '' }
+      ? { code: initial.code, category: initial.category, language: initial.language, prompt: initial.prompt, context: initial.context ?? '', expectedBehavior: initial.expectedBehavior, routeKey: initial.routeKey, checks: JSON.stringify(initial.checks, null, 2), documentSpec: initial.documentSpec ? JSON.stringify(initial.documentSpec, null, 2) : '', summarySpec: initial.summarySpec ? JSON.stringify(initial.summarySpec, null, 2) : '' }
       : emptyCase,
   );
   const isDocument = f.routeKey === 'patient.document';
+  const isSummary = f.routeKey === 'patient.health_summary';
   const [jsonError, setJsonError] = useState<string | null>(null);
   const save = useMutation({
     mutationFn: () => {
-      const body = { code: f.code, category: f.category, language: f.language, prompt: f.prompt, context: f.context.trim() || null, expectedBehavior: f.expectedBehavior, routeKey: f.routeKey, checks: JSON.parse(f.checks), documentSpec: isDocument ? JSON.parse(f.documentSpec) : null };
+      const body = { code: f.code, category: f.category, language: f.language, prompt: f.prompt, context: f.context.trim() || null, expectedBehavior: f.expectedBehavior, routeKey: f.routeKey, checks: JSON.parse(f.checks), documentSpec: isDocument ? JSON.parse(f.documentSpec) : null, summarySpec: isSummary ? JSON.parse(f.summarySpec) : null };
       return initial ? api.aiAdmin.updateCase(initial.id, body) : api.aiAdmin.createCase(body);
     },
     onSuccess: () => {
@@ -39,6 +45,7 @@ function CaseEditor({ initial, onDone }: { initial?: AiEvalCase; onDone: () => v
     try {
       JSON.parse(f.checks);
       if (isDocument) JSON.parse(f.documentSpec);
+      if (isSummary) JSON.parse(f.summarySpec);
       setJsonError(null);
       save.mutate();
     } catch {
@@ -59,7 +66,13 @@ function CaseEditor({ initial, onDone }: { initial?: AiEvalCase; onDone: () => v
             data-testid="ai-case-route"
             onChange={(e) => {
               const routeKey = e.target.value as AiEvalRoute;
-              setF((v) => ({ ...v, routeKey, ...(routeKey === 'patient.document' && !v.documentSpec ? DOCUMENT_TEMPLATE : {}), ...(routeKey === 'patient.chat' ? { checks: emptyCase.checks, documentSpec: '' } : {}) }));
+              setF((v) => ({
+                ...v,
+                routeKey,
+                ...(routeKey === 'patient.document' ? { ...DOCUMENT_TEMPLATE, summarySpec: '' } : {}),
+                ...(routeKey === 'patient.health_summary' ? { ...SUMMARY_TEMPLATE, documentSpec: '' } : {}),
+                ...(routeKey === 'patient.chat' ? { checks: emptyCase.checks, documentSpec: '', summarySpec: '' } : {}),
+              }));
             }}
           >
             {AI_EVAL_ROUTES.map((r) => <option key={r}>{r}</option>)}
@@ -75,6 +88,13 @@ function CaseEditor({ initial, onDone }: { initial?: AiEvalCase; onDone: () => v
           <label htmlFor="case-document">{t('aiAdmin.documentSpec')}</label>
           <textarea id="case-document" className="input mono" rows={6} dir="ltr" value={f.documentSpec} onChange={(e) => setF((v) => ({ ...v, documentSpec: e.target.value }))} data-testid="ai-case-document" />
           <span className="subtle">{t('aiAdmin.documentSpecHint')}</span>
+        </div>
+      ) : null}
+      {isSummary ? (
+        <div className="field">
+          <label htmlFor="case-summary">{t('aiAdmin.summarySpec')}</label>
+          <textarea id="case-summary" className="input mono" rows={6} dir="ltr" value={f.summarySpec} onChange={(e) => setF((v) => ({ ...v, summarySpec: e.target.value }))} data-testid="ai-case-summary" />
+          <span className="subtle">{t('aiAdmin.summarySpecHint')}</span>
         </div>
       ) : null}
       <div className="field"><label htmlFor="case-checks">{t('aiAdmin.checks')}</label><textarea id="case-checks" className="input mono" rows={4} dir="ltr" value={f.checks} onChange={(e) => setF((v) => ({ ...v, checks: e.target.value }))} /></div>
@@ -98,7 +118,7 @@ export default function AiEvaluationPage() {
   const cc = useQuery({ queryKey: AI_KEY, queryFn: () => api.aiAdmin.controlCentre(30), enabled: can('ai.eval.manage') });
   const [editing, setEditing] = useState<AiEvalCase | 'new' | null>(null);
   const [runModel, setRunModel] = useState('');
-  const [runRoute, setRunRoute] = useState<'patient.chat' | 'patient.voice' | 'patient.document'>('patient.chat');
+  const [runRoute, setRunRoute] = useState<'patient.chat' | 'patient.voice' | 'patient.document' | 'patient.health_summary'>('patient.chat');
   const [revokeNote, setRevokeNote] = useState<Record<string, string>>({});
   const review = useMutation({ mutationFn: (v: { id: string; decision: 'REVIEWED' | 'RETIRED' }) => api.aiAdmin.reviewCase(v.id, v.decision), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
   const start = useMutation({ mutationFn: () => api.aiAdmin.startRun(runModel, runRoute), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
@@ -125,6 +145,7 @@ export default function AiEvaluationPage() {
                   <option value="patient.chat">patient.chat</option>
                   <option value="patient.voice">patient.voice</option>
                   <option value="patient.document">patient.document</option>
+                  <option value="patient.health_summary">patient.health_summary</option>
                 </select>
                 <select className="input" aria-label={t('aiAdmin.runModel')} value={runModel} onChange={(e) => setRunModel(e.target.value)} data-testid="ai-run-model">
                   <option value="">{t('aiAdmin.runModel')}</option>

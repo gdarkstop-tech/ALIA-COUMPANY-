@@ -306,7 +306,7 @@ function isValidRegex(p: string) {
   }
 }
 /** Which assistant a case exercises (voice runs use the chat cases, spoken in text mode). */
-export const AI_EVAL_ROUTES = ['patient.chat', 'patient.document'] as const;
+export const AI_EVAL_ROUTES = ['patient.chat', 'patient.document', 'patient.health_summary'] as const;
 export type AiEvalRoute = (typeof AI_EVAL_ROUTES)[number];
 const ascii = (n: number) => z.string().trim().max(n).regex(/^[\x20-\x7e]*$/, 'ASCII only (the synthetic report renderer has no Arabic shaping)');
 /** A synthetic lab report rendered to PDF at run time (never a real record). */
@@ -330,6 +330,34 @@ export const aiDocumentEvalChecks = z
   .strict()
   .refine((c) => (c.mustNotInclude ?? []).every(isValidRegex), { message: 'Every check must be a valid regular expression' });
 export type AiDocumentEvalChecks = z.infer<typeof aiDocumentEvalChecks>;
+/** Synthetic readings for a summary case: points are placed `daysAgo` before a fixed date at run time. */
+export const summaryEvalSpec = z
+  .object({
+    periodDays: z.union([z.literal(30), z.literal(90)]),
+    series: z
+      .array(
+        z
+          .object({
+            kind: z.enum(['BLOOD_PRESSURE', 'HEART_RATE', 'BLOOD_GLUCOSE', 'WEIGHT', 'TEMPERATURE', 'OXYGEN_SATURATION', 'PAIN_SCORE']).nullable(),
+            label: z.string().trim().min(1).max(60),
+            unit: z.string().trim().min(1).max(20),
+            source: z.enum(['VITAL', 'LAB']),
+            points: z.array(z.object({ value: z.number().finite(), value2: z.number().finite().nullable().optional(), daysAgo: z.number().int().min(0).max(365) }).strict()).min(1).max(60),
+            printedRange: z.object({ text: z.string().max(60).nullable(), low: z.number().nullable(), high: z.number().nullable(), latestStatus: z.enum(['LOW', 'HIGH', 'IN_RANGE', 'UNKNOWN']) }).strict().nullable().optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(10),
+  })
+  .strict();
+export type SummaryEvalSpec = z.infer<typeof summaryEvalSpec>;
+/** Automated screens for a summary: grounded (the same validator production uses), language, forbidden phrases. */
+export const aiSummaryEvalChecks = z
+  .object({ grounded: z.literal(true), requireLanguage: z.enum(['ar', 'en']).optional(), mustNotInclude: z.array(z.string().min(1).max(300)).max(10).optional() })
+  .strict()
+  .refine((c) => (c.mustNotInclude ?? []).every(isValidRegex), { message: 'Every check must be a valid regular expression' });
+export type AiSummaryEvalChecks = z.infer<typeof aiSummaryEvalChecks>;
 const aiEvalCaseFields = z.object({
   code: z.string().trim().regex(/^[A-Z0-9][A-Z0-9_-]{2,40}$/),
   category: z.enum(AI_EVAL_CATEGORIES),
@@ -338,19 +366,25 @@ const aiEvalCaseFields = z.object({
   context: z.string().trim().max(8000).nullable().optional(),
   expectedBehavior: z.string().trim().min(10).max(2000),
   routeKey: z.enum(AI_EVAL_ROUTES),
-  checks: z.union([aiEvalChecks, aiDocumentEvalChecks]),
+  checks: z.union([aiEvalChecks, aiDocumentEvalChecks, aiSummaryEvalChecks]),
   documentSpec: syntheticLabReportSpec.nullable().optional(),
+  summarySpec: summaryEvalSpec.nullable().optional(),
 });
-export const aiEvalCaseBody = aiEvalCaseFields.extend({ routeKey: z.enum(AI_EVAL_ROUTES).default('patient.chat'), checks: z.union([aiEvalChecks, aiDocumentEvalChecks]).default({}) });
+export const aiEvalCaseBody = aiEvalCaseFields.extend({ routeKey: z.enum(AI_EVAL_ROUTES).default('patient.chat'), checks: z.union([aiEvalChecks, aiDocumentEvalChecks, aiSummaryEvalChecks]).default({}) });
 /** Edits: only the fields sent change (no defaults, so omitted checks are kept). */
 export const aiEvalCasePatchBody = aiEvalCaseFields.partial();
 /** A document case needs a synthetic report and document checks; a chat case neither. Returns the problem, or null. */
-export function evalCaseProblem(c: { routeKey: string; checks: unknown; documentSpec: unknown }): string | null {
+export function evalCaseProblem(c: { routeKey: string; checks: unknown; documentSpec: unknown; summarySpec?: unknown }): string | null {
+  if (c.routeKey !== 'patient.health_summary' && c.summarySpec != null) return 'Only summary cases carry synthetic readings';
   if (c.routeKey === 'patient.document') {
     if (!syntheticLabReportSpec.safeParse(c.documentSpec).success) return 'A document case needs a valid synthetic report';
     return aiDocumentEvalChecks.safeParse(c.checks).success ? null : 'A document case needs document checks (expectDocumentType, expectRows)';
   }
   if (c.documentSpec != null) return 'Only document cases carry a synthetic report';
+  if (c.routeKey === 'patient.health_summary') {
+    if (!summaryEvalSpec.safeParse(c.summarySpec).success) return 'A summary case needs valid synthetic readings';
+    return aiSummaryEvalChecks.safeParse(c.checks).success ? null : 'A summary case needs summary checks ({"grounded": true})';
+  }
   return aiEvalChecks.safeParse(c.checks).success ? null : 'Invalid checks for a chat case';
 }
 export const aiEvalResultReviewBody = z.object({
@@ -369,8 +403,9 @@ export type AiEvalCase = {
   context: string | null;
   expectedBehavior: string;
   routeKey: AiEvalRoute;
-  checks: AiEvalChecks | AiDocumentEvalChecks;
+  checks: AiEvalChecks | AiDocumentEvalChecks | AiSummaryEvalChecks;
   documentSpec: SyntheticLabReportSpec | null;
+  summarySpec: SummaryEvalSpec | null;
   status: 'DRAFT' | 'REVIEWED' | 'RETIRED';
   version: number;
   authoredByMe: boolean;

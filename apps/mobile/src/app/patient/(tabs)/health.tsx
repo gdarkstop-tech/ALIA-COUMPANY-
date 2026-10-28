@@ -153,12 +153,27 @@ export default function MyHealth() {
         </Card>
       </PressableScale>
 
+      <PressableScale testID="open-readings" accessibilityRole="button" accessibilityLabel={t('readings.healthCardTitle')} onPress={() => router.push('/patient/readings')}>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <View style={{ width: 44, height: 44, borderRadius: radii.md, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="mci:chart-line-variant" color="primary" />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="callout" weight="semibold">{t('readings.healthCardTitle')}</Text>
+              <Text variant="footnote" color="textSecondary">{t('readings.healthCardBody')}</Text>
+            </View>
+            <Icon name="chevron-right" color="textTertiary" />
+          </View>
+        </Card>
+      </PressableScale>
+
       <Section title={t('health.timelineTitle')}>
         <Card>
           <View style={{ gap: spacing.md }}>
-            {(['health.vitalsTitle', 'health.timelineTitle'] as const).map((k, i) => (
+            {(['health.timelineTitle'] as const).map((k, i) => (
               <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                <Icon name={(['mci:chart-line-variant', 'mci:timeline-clock-outline'] as const)[i]!} color="textTertiary" />
+                <Icon name={(['mci:timeline-clock-outline'] as const)[i]!} color="textTertiary" />
                 <Text variant="footnote" color="textSecondary" style={{ flex: 1 }}>{t(k)}</Text>
                 <Badge label={t('app.comingNext')} />
               </View>

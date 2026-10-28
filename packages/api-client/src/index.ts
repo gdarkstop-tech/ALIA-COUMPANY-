@@ -77,6 +77,12 @@ import type {
   LabResult,
   MedicalDocument,
   MedicalDocumentDetail,
+  CreateObservationBody,
+  HealthAnalytics,
+  HealthSummary,
+  HealthSummaryStatus,
+  Observation,
+  ObservationKind,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -274,6 +280,18 @@ export function createApiClient(options: ApiClientOptions) {
       review: (id: string, body: { decision: 'CONFIRM' | 'REJECT'; testName?: string; valueText?: string; unit?: string | null; referenceText?: string | null; observedOn?: string | null }) =>
         post<LabResult>(`/v1/lab-results/${id}/review`, body),
       add: (body: { patientId: string; testName: string; valueText: string; unit?: string | null; referenceText?: string | null; observedOn: string; documentId?: string | null }) => post<LabResult>('/v1/lab-results', body),
+    },
+    /** Readings, calculated trends and grounded AI summaries of a profile. */
+    health: {
+      observations: (patientId: string, query: { kind?: ObservationKind; days?: number } = {}) => get<Observation[]>(`/v1/patients/${patientId}/observations`, query),
+      addObservation: (patientId: string, body: CreateObservationBody) => post<Observation>(`/v1/patients/${patientId}/observations`, body),
+      /** Marks a reading as entered in error (it is never deleted). */
+      removeObservation: (patientId: string, id: string) => del<{ ok: true }>(`/v1/patients/${patientId}/observations/${id}`),
+      analytics: (patientId: string, days: 30 | 90 | 365 = 90) => get<HealthAnalytics>(`/v1/patients/${patientId}/analytics`, { days }),
+      summaryStatus: () => get<HealthSummaryStatus>('/v1/ai/health-summary'),
+      summaries: (patientId: string) => get<HealthSummary[]>(`/v1/patients/${patientId}/health-summaries`),
+      createSummary: (patientId: string, days: 30 | 90 = 30) => post<HealthSummary>(`/v1/patients/${patientId}/health-summaries`, { days }),
+      removeSummary: (id: string) => del<{ ok: true }>(`/v1/health-summaries/${id}`),
     },
     /** Clinically approved knowledge versions (as cited by the assistant). */
     knowledge: {

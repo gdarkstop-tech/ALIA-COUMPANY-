@@ -108,3 +108,61 @@ describe('lab report parsing (deterministic, never the model)', () => {
     expect(safeIsoDate('14/09/2026')).toBeNull();
   });
 });
+
+describe('health analytics (deterministic; AI summaries validated against the facts)', () => {
+  const pt = (id: string, value: number, at: string, value2: number | null = null) => ({ id, value, value2, at, provenance: 'PATIENT_REPORTED' as const });
+
+  it('computes statistics without judging them', async () => {
+    const { seriesStats, directionOf } = await import('../src');
+    expect(seriesStats([])).toBeNull();
+    const s = seriesStats([pt('b', 142, '2026-10-20T08:00:00Z', 91), pt('a', 136, '2026-10-13T08:00:00Z', 88), pt('c', 130, '2026-10-01T08:00:00Z', 85)])!;
+    expect(s).toMatchObject({ count: 3, change: 6, change2: 3, mean: 136, mean2: 88, min: 130, max: 142, firstAt: '2026-10-01T08:00:00Z' });
+    expect(s.latest.id).toBe('b');
+    expect(s.previous!.id).toBe('a');
+    expect(seriesStats([pt('a', 70.4, '2026-10-01T00:00:00Z'), pt('b', 70.1, '2026-10-08T00:00:00Z')])).toMatchObject({ change: -0.3, mean: 70.25 });
+    expect(seriesStats([pt('a', 98, '2026-10-01T00:00:00Z')])).toMatchObject({ count: 1, previous: null, change: null });
+    expect([directionOf(6), directionOf(-0.3), directionOf(0), directionOf(null)]).toEqual(['HIGHER', 'LOWER', 'UNCHANGED', null]);
+  });
+
+  it('builds numbered facts from statistics only', async () => {
+    const { buildHealthFacts, seriesStats } = await import('../src');
+    const points = [pt('a', 136, '2026-10-13T08:00:00Z', 88), pt('b', 142, '2026-10-20T08:00:00Z', 91)];
+    const facts = buildHealthFacts([{ key: 'VITAL:BLOOD_PRESSURE', source: 'VITAL', kind: 'BLOOD_PRESSURE', label: 'Blood pressure', unit: 'mmHg', points, stats: seriesStats(points), printedRange: null }], 30);
+    expect(facts.map((f) => f.id)).toEqual(['F1', 'F2', 'F3', 'F4']);
+    expect(facts[0]!.text).toBe('Blood pressure (mmHg): latest 142/91 on 2026-10-20, reported by the patient.');
+    expect(facts[2]!.text).toContain('higher than the previous one (difference +6/+3)');
+    expect(facts[3]!.numbers).toEqual([2, 30, 139, 89.5, 136, 142]);
+    expect(facts.map((f) => f.display)).toEqual([
+      { kind: 'LATEST', value: '142/91', date: '2026-10-20' },
+      { kind: 'PREVIOUS', value: '136/88', date: '2026-10-13' },
+      { kind: 'CHANGE', direction: 'HIGHER', difference: '+6/+3' },
+      { kind: 'STATS', count: 2, days: 30, mean: '139/89.5', min: 136, max: 142 },
+    ]);
+  });
+
+  it('accepts only grounded, non-judgemental summaries', async () => {
+    const { checkHealthSummary } = await import('../src');
+    const base = { seriesKey: 'k', seriesLabel: 'Blood pressure', unit: 'mmHg', text: '' };
+    const facts = [
+      { ...base, id: 'F1', type: 'MEASURED' as const, numbers: [142, 91, 2026, 10, 20], display: { kind: 'LATEST' as const, value: '142/91', date: '2026-10-20' } },
+      { ...base, id: 'F2', type: 'CALCULATED' as const, numbers: [6, 3], display: { kind: 'CHANGE' as const, direction: 'HIGHER' as const, difference: '+6/+3' } },
+    ];
+    const ok = checkHealthSummary(JSON.stringify({ points: [{ text: 'Your latest reading was 142/91 on 20 October (F1).', facts: ['F1'] }, { text: 'It is 6/3 higher than the one before.', facts: ['F2'] }], questions: ['What should my readings be?'] }), facts);
+    expect(ok.ok).toBe(true);
+    const ar = checkHealthSummary(JSON.stringify({ points: [{ text: 'آخر قراءة كانت ١٤٢/٩١.', facts: ['F1'] }], questions: [] }), facts);
+    expect(ar.ok).toBe(true);
+    const cases: [object | string, string][] = [
+      ['not json', 'INVALID_JSON'],
+      [{ points: [], questions: [] }, 'INVALID_JSON'],
+      [{ points: [{ text: 'x', facts: ['F9'] }], questions: [] }, 'UNKNOWN_FACT'],
+      [{ points: [{ text: 'Your average was 135.', facts: ['F1'] }], questions: [] }, 'UNGROUNDED_NUMBER'],
+      [{ points: [{ text: 'It went up by 6.', facts: ['F1'] }], questions: [] }, 'UNGROUNDED_NUMBER'], // 6 is in F2, not in F1
+      [{ points: [{ text: 'Latest 142/91.', facts: ['F1'] }], questions: ['Is 140 too high?'] }, 'UNGROUNDED_NUMBER'],
+      [{ points: [{ text: 'Your blood pressure is improving.', facts: ['F1'] }], questions: [] }, 'FORBIDDEN_CLAIM'],
+      [{ points: [{ text: 'This is normal.', facts: ['F1'] }], questions: [] }, 'FORBIDDEN_CLAIM'],
+      [{ points: [{ text: 'ضغطك تحسّن.', facts: ['F1'] }], questions: [] }, 'FORBIDDEN_CLAIM'],
+      [{ points: [{ text: 'Latest 142/91.', facts: ['F1'] }], questions: ['Should I change my medication?'] }, 'FORBIDDEN_CLAIM'],
+    ];
+    for (const [out, reason] of cases) expect(checkHealthSummary(typeof out === 'string' ? out : JSON.stringify(out), facts), JSON.stringify(out)).toMatchObject({ ok: false, reason });
+  });
+});

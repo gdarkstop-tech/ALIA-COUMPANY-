@@ -78,6 +78,12 @@ export type ColorTokens = {
   demoSoft: string;
   focusRing: string;
   overlay: string;
+  /**
+   * Chart series, in fixed order (never cycled). Validated per mode with the data-viz palette
+   * checks (lightness band, chroma floor, colour-vision-deficiency separation, contrast vs surface).
+   */
+  chart1: string;
+  chart2: string;
   shadow: string;
   skeleton: string;
   skeletonHighlight: string;
@@ -126,6 +132,8 @@ export const lightColors: ColorTokens = {
   demoSoft: '#F2EEF9',
   focusRing: palette.orange[500],
   overlay: 'rgba(7, 21, 42, 0.5)',
+  chart1: palette.blue[600],
+  chart2: palette.orange[500],
   shadow: 'rgba(10, 31, 61, 0.08)',
   skeleton: '#EDE6DB',
   skeletonHighlight: '#F6F1EA',
@@ -174,6 +182,8 @@ export const darkColors: ColorTokens = {
   demoSoft: '#221A33',
   focusRing: palette.orange[400],
   overlay: 'rgba(0, 0, 0, 0.6)',
+  chart1: '#4F86D6',
+  chart2: '#E8692A',
   shadow: 'rgba(0, 0, 0, 0.35)',
   skeleton: '#15305A',
   skeletonHighlight: '#1B3A68',

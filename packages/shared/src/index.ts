@@ -13,3 +13,4 @@ export * from './catalog';
 export * from './accounts';
 export * from './ai';
 export * from './documents';
+export * from './analytics';

@@ -11,6 +11,16 @@ export function createSimulatedProvider(): AiProvider {
     async complete(req) {
       const last = req.messages[req.messages.length - 1]?.content ?? '';
       const tokens = (s: string) => Math.ceil([...s].length / 4);
+      // Health summary: labelled points that cite the first facts it was given (no numbers of its own).
+      if (req.jsonSchema?.name === 'health_summary') {
+        const ids = [...last.matchAll(/^(F\d+) \[/gm)].map((m) => m[1]!).slice(0, 3);
+        const ar = /in Arabic/.test(last);
+        const text = JSON.stringify({
+          points: ids.map((id) => ({ text: ar ? '[محاكاة — للتطوير فقط] نقطة مبنية على إحدى الحقائق التي حسبها التطبيق.' : '[SIMULATED — development only] A point based on one of the facts the app calculated.', facts: [id] })),
+          questions: [ar ? '[محاكاة] ماذا أسأل الممرض عن هذه القراءات؟' : '[SIMULATED] What should I ask my nurse about these readings?'],
+        });
+        return { outcome: 'ANSWERED', text, servedModel: req.model, usage: { inputTokens: tokens(req.system) + tokens(last), outputTokens: tokens(text), cacheReadTokens: 0 } };
+      }
       // Document reading: a fixed, labelled result — the simulator never reads the file.
       if (req.jsonSchema && req.attachments?.length) {
         const text = JSON.stringify({

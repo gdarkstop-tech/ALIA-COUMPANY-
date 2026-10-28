@@ -1,5 +1,5 @@
 import type { Locale } from '@ghayarly/i18n';
-import { formatEgp } from '@ghayarly/shared';
+import { formatEgp, normalizeDigits } from '@ghayarly/shared';
 
 export function money(piasters: number | null | undefined, locale: Locale): string {
   if (piasters === null || piasters === undefined) return '—';
@@ -56,4 +56,9 @@ export function isValidIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+/** A number typed on any keyboard: Arabic-Indic digits and a decimal comma become "12.5". */
+export function normalizeNumberInput(value: string): string {
+  return normalizeDigits(value).replace(/,/g, '.').replace(/\s/g, '');
 }
