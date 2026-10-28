@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { BrandLoader } from '@/components/brand';
 import { useI18n, useToast } from '@/components/Providers';
 import { formatDateTime, Shell, StatusBadge, useMe } from '@/components/Shell';
 import { api, ApiError } from '@/lib/api';
@@ -73,7 +74,7 @@ export default function SubmissionReview() {
   return (
     <Shell title={p ? (locale === 'ar' ? p.displayNameAr : p.displayNameEn) : t('admin.review')} actions={<Link href="/verification" className="btn btn-sm btn-secondary">{t('admin.back')}</Link>}>
       {sub.isPending ? (
-        <div className="card stack"><div className="skeleton" /><div className="skeleton" /></div>
+        <div className="card"><BrandLoader /></div>
       ) : sub.error ? (
         <div className="notice danger">{errorText(sub.error, t as never)}</div>
       ) : p ? (

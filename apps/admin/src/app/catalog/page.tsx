@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { BrandLoader, BrandName, TetraSolLogo } from '@/components/brand';
 import { CatalogTabs, ContentBadge, imageUrl, PublicationBadge, useCatalogError, useMoney } from '@/components/catalog';
 import { ProductContentFields, emptyContent, type ContentForm } from '@/components/ProductContentFields';
 import { useI18n } from '@/components/Providers';
@@ -42,6 +43,7 @@ export default function Catalog() {
 
   return (
     <Shell title={t('catalog.nav')} actions={canEdit ? <button className="btn btn-primary" data-testid="catalog-new" onClick={() => setCreating((v) => !v)}>{t('catalog.newProduct')}</button> : null}>
+      <div style={{ marginBottom: 16 }}><TetraSolLogo variant="full" height={56} testId="catalog-tetrasol-logo" /></div>
       <CatalogTabs />
       <p className="muted">{t('catalog.intro')}</p>
 
@@ -94,6 +96,7 @@ export default function Catalog() {
       </div>
 
       <div className="card tight">
+        {list.isPending ? <BrandLoader /> : null}
         {list.data && !list.data.length ? <div className="empty">{t('catalog.empty')}</div> : null}
         {list.data?.length ? (
           <table className="table" data-testid="catalog-table">
@@ -110,7 +113,7 @@ export default function Catalog() {
                     {p.isDemo ? <span className="badge tone-demo">{t('catalog.demoItem')}</span> : null}
                     {p.lowStock ? <span className="badge tone-warning">{t('catalog.lowStock')}</span> : null}
                   </td>
-                  <td>{p.brand}</td>
+                  <td><BrandName brand={p.brand} /></td>
                   <td><ContentBadge status={p.contentStatus} /></td>
                   <td><PublicationBadge status={p.publicationStatus} /></td>
                   <td>{money(p.fromPricePiasters)}</td>

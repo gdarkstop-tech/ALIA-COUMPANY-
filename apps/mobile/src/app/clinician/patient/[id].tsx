@@ -3,7 +3,7 @@ import { spacing } from '@ghayarly/tokens';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { CLINICIAN_KEY, copilotErrorKey, useCopilotStatus, useSharedPatient } from '@/features/clinician/hooks';
 import { useConsents, useRecordConsents, consentErrorKey } from '@/features/compliance/hooks';
 import { SeriesCard } from '@/features/readings/SeriesCard';
@@ -11,7 +11,7 @@ import { api, errorKey } from '@/lib/api';
 import { formatDate, formatNumber } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Avatar, Badge, Button, Card, Chip, ErrorState, Header, LoadingScreen, Notice, PressableScale, Screen, Section, Sheet, Text, TextField, type Tone } from '@/ui';
+import { Avatar, Badge, BrandLoader, Button, Card, Chip, ErrorState, Header, LoadingScreen, Notice, PressableScale, Screen, Section, Sheet, Text, TextField, type Tone } from '@/ui';
 
 const STATUS_TONE: Record<string, Tone> = { DRAFT: 'accent', SIGNED: 'success', FAILED: 'neutral', GENERATING: 'info', DISCARDED: 'neutral' };
 
@@ -45,7 +45,6 @@ function TermsCard() {
 
 function NewDraftSheet({ patientId, role, status, visible, onClose }: { patientId: string; role: 'DOCTOR' | 'NURSE'; status: ClinicianCopilotStatus; visible: boolean; onClose: () => void }) {
   const { t, locale } = useI18n();
-  const { colors } = useTheme();
   const router = useRouter();
   const qc = useQueryClient();
   const types = DOC_TYPES_BY_ROLE[role];
@@ -73,7 +72,7 @@ function NewDraftSheet({ patientId, role, status, visible, onClose }: { patientI
       {create.error ? <Notice tone="danger" body={t(copilotErrorKey(create.error))} testID="draft-error" /> : null}
       {create.isPending ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} accessibilityLiveRegion="polite">
-          <ActivityIndicator color={colors.primary} />
+          <BrandLoader size={28} />
           <Text variant="footnote" color="textSecondary">{t('copilot.generating')}</Text>
         </View>
       ) : (

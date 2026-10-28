@@ -8,16 +8,21 @@ import { byId, shot, signInMobile } from './helpers';
 test('Flow D — TetraSol-only store with simulated checkout', async ({ page }) => {
   await signInMobile(page, 'patient.demo@demo.ghayarly.test');
   await expect(byId(page, 'patient-home')).toBeVisible();
+  // The official TetraSol logo marks every TetraSol surface.
+  await expect(byId(page, 'home-tetrasol-logo')).toHaveAccessibleName('TetraSol');
   await byId(page, 'home-tetrasol').click();
 
   await expect(byId(page, 'tetrasol-store')).toBeVisible();
   await expect(byId(page, 'store-demo-notice')).toBeVisible();
+  await expect(byId(page, 'tetrasol-logo')).toBeVisible();
+  await expect(page.getByTestId('product-visual-logo').filter({ visible: true }).first()).toBeVisible();
   await expect(byId(page, 'product-grid')).toContainText('TetraSol');
   await shot(page, 'D01-catalog');
 
   await byId(page, 'product-demo-tetrasol-placeholder-a').click();
   await expect(byId(page, 'product-detail')).toBeVisible();
   await expect(byId(page, 'product-demo-notice')).toContainText('Not a real product');
+  await expect(byId(page, 'product-visual-logo')).toBeVisible();
   await shot(page, 'D02-product-detail');
   await byId(page, 'add-to-cart').click();
   await expect(byId(page, 'toast')).toContainText('Added to cart');

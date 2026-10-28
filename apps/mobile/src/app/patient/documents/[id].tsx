@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { consentErrorKey, useConsents, useRecordConsents } from '@/features/compliance/hooks';
 import { MedicalDisclaimer } from '@/features/compliance/Safety';
 import { fileSize } from '@/features/documents/format';
@@ -15,8 +15,7 @@ import { api, errorKey } from '@/lib/api';
 import { confirmDestructive } from '@/lib/confirm';
 import { formatDate, formatNumber } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
-import { useTheme } from '@/providers/theme';
-import { Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, Screen, Section, Text } from '@/ui';
+import { Badge, BrandLoader, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, Screen, Section, Text } from '@/ui';
 
 /** Opens a single-use link to the original (the link is never stored). */
 async function openOriginal(id: string) {
@@ -28,7 +27,6 @@ async function openOriginal(id: string) {
 /** Reading with AI: what is possible right now, the inline document consent, and the read action. */
 function AiCard({ doc, status }: { doc: MedicalDocumentDetail; status: DocumentAiStatus }) {
   const { t, locale } = useI18n();
-  const { colors } = useTheme();
   const router = useRouter();
   const consents = useConsents();
   const record = useRecordConsents();
@@ -81,7 +79,7 @@ function AiCard({ doc, status }: { doc: MedicalDocumentDetail; status: DocumentA
           <Notice tone="success" body={t('documents.status_COMPLETED')} testID="document-ai-done" />
         ) : running ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} accessibilityLiveRegion="polite">
-            <ActivityIndicator color={colors.primary} />
+            <BrandLoader size={28} />
             <Text variant="footnote" color="textSecondary">{t('documents.aiReading')}</Text>
           </View>
         ) : (

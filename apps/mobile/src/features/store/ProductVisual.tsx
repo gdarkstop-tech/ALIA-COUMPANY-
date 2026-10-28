@@ -1,16 +1,18 @@
+import { COMMERCE_BRAND } from '@ghayarly/shared';
 import { radii } from '@ghayarly/tokens';
 import { Image, View } from 'react-native';
 import { API_URL } from '@/lib/config';
 import { useTheme } from '@/providers/theme';
-import { Icon, Text } from '@/ui';
+import { Icon, TetraSolLogo, Text } from '@/ui';
 
 export const productImageUri = (imageId: string) => `${API_URL}/v1/store/images/${imageId}`;
 
 /**
  * Product picture: the brand-supplied image when one has been uploaded and the product is on sale,
- * otherwise a neutral tile that must never look like a real packaging shot.
+ * otherwise a neutral tile carrying the brand's official logo — never something that looks like a
+ * real packaging shot.
  */
-export function ProductVisual({ height = 120, demo, imageId, alt }: { height?: number; demo?: boolean; imageId?: string | null; alt?: string }) {
+export function ProductVisual({ height = 120, demo, imageId, alt, brand = COMMERCE_BRAND }: { height?: number; demo?: boolean; imageId?: string | null; alt?: string; brand?: string }) {
   const { colors } = useTheme();
   return (
     <View style={{ height, borderRadius: radii.lg, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', gap: 6, overflow: 'hidden' }}>
@@ -19,10 +21,16 @@ export function ProductVisual({ height = 120, demo, imageId, alt }: { height?: n
       ) : (
         <>
           <View style={{ position: 'absolute', width: height * 1.4, height: height * 1.4, borderRadius: height, borderWidth: 1, borderColor: colors.surface, opacity: 0.6 }} />
-          <Icon name="mci:bandage" size={height * 0.28} color="primary" />
-          <Text variant="caption" weight="bold" color="primarySoftText" style={{ letterSpacing: 1.5 }}>
-            TETRASOL
-          </Text>
+          {brand === COMMERCE_BRAND ? (
+            <TetraSolLogo height={Math.round(Math.min(height * 0.22, 48))} plate testID="product-visual-logo" style={{ alignSelf: 'center' }} />
+          ) : (
+            <>
+              <Icon name="mci:bandage" size={height * 0.28} color="primary" />
+              <Text variant="caption" weight="bold" color="primarySoftText" style={{ letterSpacing: 1.5 }}>
+                {brand.toUpperCase()}
+              </Text>
+            </>
+          )}
         </>
       )}
       {demo ? (

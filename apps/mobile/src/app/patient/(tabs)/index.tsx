@@ -13,7 +13,7 @@ import { greetingKey, money } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useMe } from '@/providers/session';
 import { useTheme } from '@/providers/theme';
-import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Icon, ListRow, LoadingScreen, PressableScale, Screen, Section, Text } from '@/ui';
+import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Icon, ListRow, LoadingScreen, PressableScale, Screen, Section, TetraSolLogo, Text } from '@/ui';
 
 function Fade({ i, children }: { i: number; children: React.ReactNode }) {
   return <Animated.View entering={FadeInDown.delay(60 * i).duration(380)}>{children}</Animated.View>;
@@ -194,9 +194,7 @@ export default function PatientHome() {
           <Fade i={5}>
             <Card tone="primary" onPress={() => router.push('/patient/store')} testID="home-tetrasol">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
-                <View style={{ width: 52, height: 52, borderRadius: radii.lg, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="mci:bandage" size={26} color="primary" />
-                </View>
+                <TetraSolLogo height={22} plate testID="home-tetrasol-logo" />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text variant="title3">{t('home.tetrasolTitle')}</Text>
                   <Text variant="footnote" color="textSecondary">

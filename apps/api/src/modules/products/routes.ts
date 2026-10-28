@@ -114,7 +114,7 @@ export async function productCards(tx: Tx, messageIds: string[]): Promise<Map<st
     const v = versions.find((x) => x.id === mp.indicationVersionId);
     out.set(mp.messageId, [
       ...(out.get(mp.messageId) ?? []),
-      { label: mp.label as AiProductCard['label'], productId: p.id, slug: p.slug, nameAr: p.nameAr, nameEn: p.nameEn, summaryAr: p.summaryAr, summaryEn: p.summaryEn, warningsAr: p.warningsAr, warningsEn: p.warningsEn, imageId: images.find((i) => i.productId === p.id)?.id ?? null, indication: v ? itemDto(v) : null },
+      { label: mp.label as AiProductCard['label'], productId: p.id, slug: p.slug, brand: p.brand, nameAr: p.nameAr, nameEn: p.nameEn, summaryAr: p.summaryAr, summaryEn: p.summaryEn, warningsAr: p.warningsAr, warningsEn: p.warningsEn, imageId: images.find((i) => i.productId === p.id)?.id ?? null, indication: v ? itemDto(v) : null },
     ]);
   }
   return out;

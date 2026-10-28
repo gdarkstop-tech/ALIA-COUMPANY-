@@ -2,14 +2,14 @@ import type { HealthFact, HealthSummary, HealthSummaryStatus } from '@ghayarly/s
 import { radii, spacing } from '@ghayarly/tokens';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { api } from '@/lib/api';
 import { confirmDestructive } from '@/lib/confirm';
 import { formatDate, formatNumber, ltr } from '@/lib/format';
 import type { TranslationKey } from '@ghayarly/i18n';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Badge, Button, Card, Icon, Notice, Text } from '@/ui';
+import { Badge, BrandLoader, Button, Card, Icon, Notice, Text } from '@/ui';
 import { readingsErrorKey, useInvalidateReadings } from './hooks';
 
 /** One calculated fact in the person's language (the model received the English form). */
@@ -78,7 +78,7 @@ export function SummaryCard({ patientId, days, status, latest }: { patientId: st
           {create.error ? <Notice tone="danger" body={t(readingsErrorKey(create.error))} testID="health-summary-error" /> : null}
           {create.isPending ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} accessibilityLiveRegion="polite">
-              <ActivityIndicator color={colors.primary} />
+              <BrandLoader size={28} />
               <Text variant="footnote" color="textSecondary">{t('readings.summaryWriting')}</Text>
             </View>
           ) : (

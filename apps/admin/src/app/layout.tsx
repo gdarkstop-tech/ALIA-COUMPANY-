@@ -22,7 +22,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const themeCss = `:root{${cssVariables(lightColors)}color-scheme:light}@media (prefers-color-scheme: dark){:root{${cssVariables(darkColors)}color-scheme:dark}}`;
+// --color-logo-plate stays light in both schemes: official logos keep their colours on dark surfaces.
+const themeCss = `:root{${cssVariables(lightColors)}--color-logo-plate:${lightColors.surface};color-scheme:light}@media (prefers-color-scheme: dark){:root{${cssVariables(darkColors)}color-scheme:dark}}`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

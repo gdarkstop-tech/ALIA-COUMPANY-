@@ -1,4 +1,4 @@
-import { PRODUCT_KNOWLEDGE_KINDS } from '@ghayarly/shared';
+import { COMMERCE_BRAND, PRODUCT_KNOWLEDGE_KINDS } from '@ghayarly/shared';
 import { radii, spacing } from '@ghayarly/tokens';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,7 +12,7 @@ import { api, errorKey } from '@/lib/api';
 import { formatDate, money } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Select, Text, useToast } from '@/ui';
+import { Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Select, TetraSolLogo, Text, useToast } from '@/ui';
 
 export default function ProductDetail() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -68,8 +68,9 @@ export default function ProductDetail() {
         </View>
       }
     >
-      <ProductVisual height={200} demo={p.isDemo} imageId={p.images[0]?.id} alt={p.images[0] ? pickL(p.images[0], 'alt') || t('store.productImage') : undefined} />
+      <ProductVisual height={200} demo={p.isDemo} imageId={p.images[0]?.id} brand={p.brand} alt={p.images[0] ? pickL(p.images[0], 'alt') || t('store.productImage') : undefined} />
       <View style={{ gap: spacing.sm }}>
+        {p.images[0] && p.brand === COMMERCE_BRAND ? <TetraSolLogo height={20} testID="product-brand-logo" /> : null}
         <Text variant="title2" testID="product-name">{pickL(p, 'name')}</Text>
         <Text variant="callout" color="textSecondary">{pickL(p, 'summary')}</Text>
         <View style={{ flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' }}>

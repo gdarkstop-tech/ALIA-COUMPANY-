@@ -4,6 +4,7 @@ import { View, type DimensionValue } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
+import { BrandLoader } from './BrandLoader';
 import { Button } from './Button';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
@@ -66,12 +67,11 @@ export function CardSkeleton({ lines = 3 }: { lines?: number }) {
   );
 }
 
+/** Whole-screen loading: the orange swirl loader, centred, with its label. */
 export function LoadingScreen() {
   return (
-    <View style={{ gap: spacing.lg, paddingTop: spacing.xl }}>
-      <Skeleton height={32} width="60%" radius={radii.md} />
-      <CardSkeleton />
-      <CardSkeleton lines={2} />
+    <View testID="loading-screen" style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: spacing['4xl'] }}>
+      <BrandLoader size={64} showLabel />
     </View>
   );
 }

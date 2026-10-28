@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { BrandLoader, BrandName } from '@/components/brand';
 import { CatalogTabs, ContentBadge, egpToPiasters, fileToBase64, imageUrl, PublicationBadge, useCatalogError, useMoney } from '@/components/catalog';
 import { ProductContentFields, type ContentForm } from '@/components/ProductContentFields';
 import { useI18n, useToast } from '@/components/Providers';
@@ -78,7 +79,7 @@ export default function ProductEditor() {
     return (
       <Shell title={t('catalog.products')}>
         <CatalogTabs />
-        {product.error ? <div className="notice danger">{errorText(product.error)}</div> : <div className="skeleton" style={{ height: 120 }} />}
+        {product.error ? <div className="notice danger">{errorText(product.error)}</div> : <BrandLoader />}
       </Shell>
     );
   }
@@ -90,7 +91,7 @@ export default function ProductEditor() {
       <div className="row" style={{ gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <Link href="/catalog" className="btn btn-sm btn-ghost">← {t('catalog.products')}</Link>
         <span className="mono subtle">{p.slug}</span>
-        <span className="badge tone-neutral">{p.brand}</span>
+        <BrandName brand={p.brand} height={22} />
         <ContentBadge status={p.contentStatus} />
         <PublicationBadge status={p.publicationStatus} />
         {p.isDemo ? <span className="badge tone-demo">{t('catalog.demoItem')}</span> : null}

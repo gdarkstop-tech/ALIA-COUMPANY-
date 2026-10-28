@@ -61,6 +61,7 @@ export async function listProducts(tx: Tx): Promise<ProductCard[]> {
     return {
       id: p.id,
       slug: p.slug,
+      brand: p.brand,
       nameAr: p.nameAr,
       nameEn: p.nameEn,
       summaryAr: p.summaryAr,
@@ -212,6 +213,7 @@ export async function storeRoutes(app: FastifyInstance) {
       return {
         id: p.id,
         slug: p.slug,
+        brand: p.brand,
         nameAr: p.nameAr,
         nameEn: p.nameEn,
         summaryAr: p.summaryAr,

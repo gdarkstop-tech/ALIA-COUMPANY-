@@ -14,6 +14,7 @@ test('Flow E2 — admin creates a product draft that cannot be self-approved or 
   await page.getByTestId('admin-submit').click();
   await page.getByTestId('nav-catalog').click();
   await expect(page.getByTestId('catalog-table')).toBeVisible();
+  await expect(page.getByTestId('catalog-tetrasol-logo').getByRole('img', { name: 'TetraSol' })).toBeVisible();
   await shot(page, 'E10-catalog-list');
 
   await page.getByTestId('catalog-new').click();

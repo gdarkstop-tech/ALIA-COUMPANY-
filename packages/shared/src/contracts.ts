@@ -358,6 +358,8 @@ export type NursingService = {
 export type ProductCard = {
   id: string;
   slug: string;
+  /** Company-owned brand (TetraSol today); the apps show its official logo where one is supplied. */
+  brand: string;
   nameAr: string;
   nameEn: string;
   summaryAr: string;

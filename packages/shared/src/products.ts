@@ -156,6 +156,7 @@ export type AiProductCard = {
   label: 'P1' | 'P2';
   productId: string;
   slug: string;
+  brand: string;
   nameAr: string;
   nameEn: string;
   summaryAr: string;

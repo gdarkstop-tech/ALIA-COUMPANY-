@@ -1,9 +1,9 @@
-import type { AiProductCard } from '@ghayarly/shared';
+import { COMMERCE_BRAND, type AiProductCard } from '@ghayarly/shared';
 import { spacing } from '@ghayarly/tokens';
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 import { useI18n } from '@/providers/i18n';
-import { Badge, Button, Card, Text } from '@/ui';
+import { Badge, Button, Card, TetraSolLogo, Text } from '@/ui';
 
 /**
  * Approved company-product information next to an answer that cited it. The server decides what
@@ -16,7 +16,10 @@ export function ProductCard({ p }: { p: AiProductCard }) {
   const warnings = pickL(p, 'warnings');
   return (
     <Card style={{ gap: spacing.sm }} testID={`assistant-product-${p.label}`}>
-      <Badge tone="accent" icon="mci:tag-outline" label={t('assistant.productInfo')} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' }}>
+        <Badge tone="accent" icon="mci:tag-outline" label={t('assistant.productInfo')} />
+        {p.brand === COMMERCE_BRAND ? <TetraSolLogo height={18} testID={`assistant-product-${p.label}-logo`} /> : null}
+      </View>
       <Text variant="callout" weight="semibold">[{p.label}] {pickL(p, 'name')}</Text>
       {p.indication ? (
         <View style={{ gap: 2 }}>

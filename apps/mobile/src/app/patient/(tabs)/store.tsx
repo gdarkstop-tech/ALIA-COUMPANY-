@@ -9,7 +9,7 @@ import { api, errorKey } from '@/lib/api';
 import { money } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
-import { Badge, Button, Card, EmptyState, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Text, useToast } from '@/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, TetraSolLogo, Text, useToast } from '@/ui';
 
 export default function TetraSolStore() {
   const { t, pickL, locale } = useI18n();
@@ -54,7 +54,13 @@ export default function TetraSolStore() {
         void bundles.refetch();
       }}
     >
-      <Notice tone="info" icon="mci:shield-check-outline" body={t('store.exclusive')} />
+      <Card testID="tetrasol-banner" style={{ gap: spacing.md, alignItems: 'center' }}>
+        <TetraSolLogo variant="full" height={64} testID="tetrasol-logo" style={{ alignSelf: 'center' }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <Icon name="mci:shield-check-outline" size={18} color="primary" />
+          <Text variant="footnote" color="textSecondary" style={{ flexShrink: 1 }}>{t('store.exclusive')}</Text>
+        </View>
+      </Card>
       {products.data?.some((p) => p.isDemo) ? <Notice tone="demo" body={t('store.demoProductNotice')} testID="store-demo-notice" /> : null}
       {products.isPending ? (
         <LoadingScreen />
@@ -67,7 +73,7 @@ export default function TetraSolStore() {
           {products.data.map((p, i) => (
             <Animated.View key={p.id} entering={FadeInDown.delay(i * 60).duration(350)} style={{ width: '47.5%', flexGrow: 1 }}>
               <Card onPress={() => router.push({ pathname: '/patient/product/[slug]', params: { slug: p.slug } })} testID={`product-${p.slug}`} style={{ padding: spacing.md, gap: spacing.sm }}>
-                <ProductVisual height={110} demo={p.isDemo} imageId={p.imageId} />
+                <ProductVisual height={110} demo={p.isDemo} imageId={p.imageId} brand={p.brand} />
                 <Text variant="footnote" weight="semibold" numberOfLines={2} style={{ minHeight: 40 }}>{pickL(p, 'name')}</Text>
                 <Text variant="caption" color="textTertiary" numberOfLines={2}>{pickL(p, 'summary')}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs }}>

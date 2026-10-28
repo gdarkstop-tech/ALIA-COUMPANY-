@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { BrandLoader } from '@/components/brand';
 import { useI18n } from '@/components/Providers';
 import { formatDateTime, Shell, StatusBadge } from '@/components/Shell';
 import { api } from '@/lib/api';
@@ -31,7 +32,7 @@ export default function VerificationQueue() {
         </div>
         <div className="card tight">
           {queue.isPending ? (
-            <div style={{ padding: 22 }} className="stack"><div className="skeleton" /><div className="skeleton" /><div className="skeleton" /></div>
+            <BrandLoader />
           ) : queue.error ? (
             <div className="notice danger" style={{ margin: 16 }}>{String(queue.error.message)}</div>
           ) : queue.data.length === 0 ? (

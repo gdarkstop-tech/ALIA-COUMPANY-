@@ -1,20 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { useConsents } from '@/features/compliance/hooks';
 import { api, ApiError, errorKey } from '@/lib/api';
 import { authClient } from '@/lib/auth-client';
 import { useI18n } from '@/providers/i18n';
 import { activeExperience, useMe, useSignOut } from '@/providers/session';
 import { useTheme } from '@/providers/theme';
-import { ErrorState } from '@/ui';
+import { BrandLoader, ErrorState } from '@/ui';
 
 function Splash() {
   const { colors } = useTheme();
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-      <ActivityIndicator color={colors.primary} />
+      <BrandLoader size={72} />
     </View>
   );
 }

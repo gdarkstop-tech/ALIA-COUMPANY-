@@ -100,5 +100,14 @@ textarea.input { min-height: 88px; resize: vertical; }
 .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .login-card { width: 100%; max-width: 420px; }
 .skeleton { background: var(--color-skeleton); border-radius: 10px; height: 16px; animation: pulse 1.2s ease-in-out infinite alternate; }
+
+/* Official TetraSol logo (supplied file) and the orange swirl loader. */
+.tetrasol-logo { display: inline-block; line-height: 0; vertical-align: middle; }
+.tetrasol-logo img { display: block; width: auto; }
+@media (prefers-color-scheme: dark) { .tetrasol-logo { background: var(--color-logo-plate); border-radius: 8px; padding: 4px 8px; } }
+.brand-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 28px 0; color: var(--color-text-secondary); font-size: 14px; }
+.brand-loader img { animation: brand-spin 1.4s linear infinite; }
+@keyframes brand-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .brand-loader img { animation: pulse 0.9s ease-in-out infinite alternate; } }
 @keyframes pulse { from { opacity: .55 } to { opacity: 1 } }
 .toast { position: fixed; inset-block-start: 20px; inset-inline-end: 20px; background: var(--color-surface-inverse); color: var(--color-text-inverse); padding: 12px 18px; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.2); z-index: 50; }

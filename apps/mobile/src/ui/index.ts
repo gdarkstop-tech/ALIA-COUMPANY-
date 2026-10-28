@@ -1,5 +1,6 @@
 export * from './Avatar';
 export * from './Badge';
+export * from './BrandLoader';
 export * from './brand';
 export * from './Button';
 export * from './Card';

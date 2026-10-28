@@ -2,7 +2,7 @@
 
 Verified on: 2026-10-15
 
-> **The brand system is PROVISIONAL, and the app is not ready for submission.** No official Alia Group or TetraSol brand guidelines, logo files or colour specifications have been supplied. `packages/tokens/src/brand.ts` holds `status: 'PROVISIONAL'`. **No Alia Group or TetraSol logo is drawn anywhere**: both names appear only as plain text. The app icon and product mark are **temporary placeholders**. Nothing has been tested on a physical or virtual device. Overall release status is in [RELEASE_STATUS.md](RELEASE_STATUS.md), which the lead engineer maintains.
+> **The brand system is PROVISIONAL, and the app is not ready for submission.** No official Alia Group or TetraSol brand guidelines or colour specifications have been supplied. `packages/tokens/src/brand.ts` holds `status: 'PROVISIONAL'`. **The TetraSol logo file was supplied on 2026-10-28** and is rendered as supplied in TetraSol contexts (§4.1), together with the supplied orange swirl as the loading indicator; **no Alia Group logo exists**, so that name appears only as plain text. The app icon and product mark are **temporary placeholders**. Nothing has been tested on a physical or virtual device. Overall release status is in [RELEASE_STATUS.md](RELEASE_STATUS.md), which the lead engineer maintains.
 
 Companion documents: [APPLE_APP_STORE_CHECKLIST.md](APPLE_APP_STORE_CHECKLIST.md) · [GOOGLE_PLAY_CHECKLIST.md](GOOGLE_PLAY_CHECKLIST.md) · [evidence/STORE_REQUIREMENTS_EVIDENCE.md](evidence/STORE_REQUIREMENTS_EVIDENCE.md)
 
@@ -34,7 +34,7 @@ Companion documents: [APPLE_APP_STORE_CHECKLIST.md](APPLE_APP_STORE_CHECKLIST.md
 | 1.3 | iOS home-screen name EN/AR | `CODE_READY` (not built) | verified by native build inspection (prebuild only: `CFBundleDisplayName` Dress My Wound; `ar.lproj` غير لي) |
 | 1.4 | Store listing names and keywords (`store/metadata/en.json` en-GB, `ar.json`) | `STORE_METADATA_READY` · `NEEDS_ACCOUNT_ACTION` · `NEEDS_STORE_REVIEW` | verified by automated test (`scripts/release/check.ts`: name/title ≤ 30, keywords contain no app or company names) |
 | 1.5 | Brand hierarchy: product primary, Alia Group as endorsement, TetraSol only for commerce (§3) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (usage rules) | verified by config inspection; TetraSol-only catalogue verified by automated test (`apps/api/test/rls.test.ts`, "TetraSol-only commerce") |
-| 1.6 | No Alia Group or TetraSol logo drawn; names as plain text (§4) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` | verified by config inspection; provisional flag verified by automated test (`packages/tokens/test/contrast.test.ts`, "is explicitly marked provisional…") |
+| 1.6 | TetraSol logo rendered from the supplied file in TetraSol contexts only; Alia Group as plain text (§4, §4.1) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (TetraSol usage guidelines; Alia Group logo) | verified by config inspection; provisional flag verified by automated test (`packages/tokens/test/contrast.test.ts`, "is explicitly marked provisional…") |
 | 1.7 | Product mark / app icon: **TEMPORARY PLACEHOLDER** (§4, §11) | `CODE_READY` (format only) · `NEEDS_OFFICIAL_ASSETS` | verified by automated test (`scripts/release/check.ts`: sizes and alpha) |
 | 1.8 | Colour tokens (navy, orange, stone, brass) with WCAG 2.2 AA pairs (§5) | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (official colour specs) | verified by automated test (`packages/tokens/test/contrast.test.ts`, 43 tests); rendered contrast verified by automated test (`e2e/tests/a11y.spec.ts`, Expo **web** only) |
 | 1.9 | Orange usage rule (§6) | `CODE_READY` (convention) | verified by config inspection; accent ≠ clinical colours verified by automated test (`packages/tokens/test/contrast.test.ts`) |
@@ -108,9 +108,18 @@ Rules as implemented:
 | Asset slot (`brandConfig.assets`) | Value on 2026-10-15 | Meaning | Status |
 |---|---|---|---|
 | `aliaGroupLogo` | `null` | No official file supplied. The name renders as text. **No logo is drawn or imitated.** | `NEEDS_OFFICIAL_ASSETS` |
-| `tetrasolLogo` | `null` | No official file supplied. The name renders as text. **No logo is drawn or imitated.** | `NEEDS_OFFICIAL_ASSETS` |
+| `tetrasolLogo` | `store/assets/official/tetrasol/tetrasol-logo-supplied.png` | Supplied by the project owner, 2026-10-28. Rendered as supplied (backdrop removed only) — see §4.1 | `CODE_READY` · `NEEDS_OFFICIAL_ASSETS` (usage guidelines) |
+| `loaderArtwork` | `store/assets/official/tetrasol/loader-swirl-supplied.png` | Orange swirl supplied with the logo as the loading-indicator reference | `CODE_READY` |
 | `productMark` | `'TEMPORARY_PLACEHOLDER'` | Placeholder Dress My Wound mark | `NEEDS_OFFICIAL_ASSETS` |
 | `corporate.officialAssetsReceived` / `commerce.officialAssetsReceived` | `false` / `false` | | `NEEDS_OFFICIAL_ASSETS` |
+
+### 4.1 TetraSol logo and loader (supplied 2026-10-28)
+
+- **Files.** Source files in `store/assets/official/tetrasol/` (with a README). `scripts/brand/prepare-supplied-assets.py` derives the app files: backdrop removed, a tagline-free **wordmark** for small sizes (the "Delaware-based incorporation, USA" line is unreadable below ~150 px of logo height) and the swirl scaled to 288 px. The artwork is never redrawn or recoloured.
+- **Where the logo appears** (`TetraSolLogo` in `apps/mobile/src/ui/brand` and `apps/admin/src/components/brand.tsx`): store banner (full logo), product tiles and product pages without a photo (on the neutral tile), product pages with a photo (above the name), the home card that opens the store, approved product information under assistant answers, the admin catalogue (header, brand column, product page, brands list) and the TetraSol knowledge page. Never in the Dress My Wound lockup, the app icon or the store keywords. Products of other company brands show the brand name as text until their logo is supplied.
+- **Dark surfaces.** The navy ink would disappear on dark backgrounds, so the logo sits on a light plate there (token `lightColors.surface` / `--color-logo-plate`) instead of being recoloured.
+- **Loader.** `BrandLoader` (mobile: Reanimated rotation, 1.4 s per turn; admin: CSS) replaces screen-level loading (`LoadingScreen`), the app start screen, the assistant's "thinking" row, document reading, health-summary and clinical-draft generation, and admin loading states. With Reduce Motion on, it stays still and breathes. Small in-button spinners stay native.
+- **Pending:** TetraSol brand-owner confirmation of these usages and of the derived wordmark crop (`NEEDS_OFFICIAL_ASSETS`, usage guidelines).
 
 **Placeholder product mark.** A pointed (Mamluk-style) arch outline in cream `#F7F3EC` frames a rounded care cross in orange `#EE6B1F`, on a navy `#0A1F3D` tile.
 - In-app: `apps/mobile/src/ui/brand/BrandMark.tsx`, a vector drawn with `react-native-svg` and given the accessibility label "Dress My Wound | غير لي". It is used only inside `Lockup`.

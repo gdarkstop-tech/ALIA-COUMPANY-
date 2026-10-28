@@ -2,6 +2,7 @@
 import { hasPermission } from '@ghayarly/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { BrandName } from '@/components/brand';
 import { CatalogTabs, useCatalogError } from '@/components/catalog';
 import { useI18n, useToast } from '@/components/Providers';
 import { Shell, useMe } from '@/components/Shell';
@@ -42,7 +43,7 @@ export default function BrandsAndCategories() {
             <tbody>
               {(brands.data ?? []).map((x) => (
                 <tr key={x.name}>
-                  <td><strong>{x.name}</strong>{!x.active ? <div><span className="badge tone-neutral">{t('catalog.inactive')}</span></div> : null}</td>
+                  <td><strong><BrandName brand={x.name} height={22} /></strong>{!x.active ? <div><span className="badge tone-neutral">{t('catalog.inactive')}</span></div> : null}</td>
                   <td>{pending(x.ownerEntity) ? <span className="badge tone-warning">{t('catalog.toConfirm')}</span> : x.ownerEntity}</td>
                   <td>{pending(x.ownershipReference) ? <span className="badge tone-warning">{t('catalog.toConfirm')}</span> : <span className="mono">{x.ownershipReference}</span>}</td>
                   <td>{canBrand ? <button className="btn btn-sm btn-ghost" onClick={() => toggleBrand.mutate(x)}>{x.active ? t('catalog.deactivate') : t('catalog.activate')}</button> : null}</td>

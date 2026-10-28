@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { AiTabs, ErrorNotice, useCan } from '@/components/ai';
+import { BrandLoader, TetraSolLogo } from '@/components/brand';
 import { useI18n } from '@/components/Providers';
 import { formatDateTime, Shell } from '@/components/Shell';
 import { api } from '@/lib/api';
@@ -224,6 +225,7 @@ function ProductKnowledge() {
   const onSale = o && o.product.contentStatus === 'APPROVED' && o.product.publicationStatus === 'PUBLISHED';
   return (
     <>
+      <div style={{ marginBottom: 8 }}><TetraSolLogo variant="full" height={52} testId="pk-tetrasol-logo" /></div>
       <p className="muted">{t('aiAdmin.productsIntro')}</p>
       <p className="subtle" data-testid="pk-flag-note">{t('aiAdmin.flagNote')}</p>
       <EngineTest />
@@ -236,6 +238,7 @@ function ProductKnowledge() {
         </select>
       </div>
       <ErrorNotice error={products.error ?? overview.error} />
+      {products.isPending || (productId && overview.isPending) ? <BrandLoader /> : null}
       {o ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {o.product.isDemo ? <div className="notice warning">{t('aiAdmin.demoProduct')}</div> : !onSale ? <div className="notice warning" data-testid="pk-not-on-sale">{t('aiAdmin.notOnSale')}</div> : null}
