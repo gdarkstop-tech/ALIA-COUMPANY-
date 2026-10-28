@@ -141,6 +141,8 @@ export const ar: Dictionary = {
     SUPPORT: 'الدعم',
     TRUST_AND_SAFETY: 'الثقة والسلامة',
     COMMERCE_MANAGER: 'مدير المتجر',
+    WOUND_RESEARCHER: 'باحث بيانات الجروح',
+    PRESENTATION_APPROVER: 'معتمد العروض التقديمية',
     switchRole: 'تبديل الواجهة',
     addRole: 'إضافة دور',
   },

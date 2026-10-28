@@ -59,6 +59,15 @@ const schema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Encryption key for stored medical images (32 bytes, base64). From the secret manager; never committed. */
+  OBJECT_STORAGE_KEY: z
+    .string()
+    .refine((v) => Buffer.from(v, 'base64').length === 32, 'OBJECT_STORAGE_KEY must be 32 bytes, base64-encoded')
+    .optional(),
+  /** Development / test object store directory (the local adapter is refused in production). */
+  OBJECT_STORAGE_DIR: z.string().default('.data/objects'),
+  /** Signs short-lived media links (≥ 32 chars). Development falls back to a key derived from BETTER_AUTH_SECRET. */
+  MEDIA_LINK_SECRET: z.string().min(32).optional(),
 
   // Platform store billing (digital subscriptions). Unset → NOT_CONFIGURED, nothing purchasable.
   APPLE_IAP_BUNDLE_ID: z.string().optional(),
@@ -111,6 +120,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (env.AUTH_SIGNIN_RATE_LIMIT && env.AUTH_SIGNIN_RATE_LIMIT > 10) problems.push('AUTH_SIGNIN_RATE_LIMIT must be ≤ 10 in production');
     if (env.DATABASE_URL_OWNER) problems.push('DATABASE_URL_OWNER must not be provided to the production server process');
     if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
+    if (!env.MEDIA_LINK_SECRET) problems.push('MEDIA_LINK_SECRET is required in production (signs medical image links)');
     for (const [name, url] of [['AI_QWEN_BASE_URL', env.AI_QWEN_BASE_URL], ['AI_GROK_BASE_URL', env.AI_GROK_BASE_URL], ['AI_KIMI_BASE_URL', env.AI_KIMI_BASE_URL], ['AI_MEDGEMMA_BASE_URL', env.AI_MEDGEMMA_BASE_URL]] as const) {
       if (url && !url.startsWith('https://')) problems.push(`${name} must use https in production (patient data in transit)`);
     }

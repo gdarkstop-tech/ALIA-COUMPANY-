@@ -16,3 +16,4 @@ export * from './documents';
 export * from './analytics';
 export * from './clinical';
 export * from './products';
+export * from './wounds';

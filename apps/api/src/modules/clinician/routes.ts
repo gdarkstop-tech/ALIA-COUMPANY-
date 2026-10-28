@@ -102,6 +102,7 @@ export async function clinicianRoutes(app: FastifyInstance) {
       providerName: locale === 'en' ? r.providerNameEn : r.providerNameAr,
       providerType: r.providerType as ClinicianRole,
       aiAllowed: r.aiAllowed,
+      woundsAllowed: r.woundsAllowed,
       status: r.status === 'ACTIVE' && Date.parse(r.expiresAt) <= now ? 'EXPIRED' : (r.status as CareShare['status']),
       expiresAt: r.expiresAt,
       createdAt: r.createdAt,
@@ -126,6 +127,15 @@ export async function clinicianRoutes(app: FastifyInstance) {
       const rows = await tx.select().from(careShares).where(eq(careShares.patientId, id)).orderBy(desc(careShares.createdAt)).limit(50);
       return shareDtos(rows, await localeOf(tx, principal.userId));
     });
+  });
+
+  // Wound photos are a separate choice per share (off unless turned on; needs the scanning permission).
+  app.post('/care-shares/:id/wounds', async (request) => {
+    const principal = await requirePrincipal(request);
+    const { id } = parse(idParam, request.params);
+    const { allowed } = parse(z.object({ allowed: z.boolean() }), request.body);
+    await inContext(request, principal, (tx) => tx.execute(sql`select app.care_share_set_wounds(${id}::uuid, ${allowed})`));
+    return { ok: true, woundsAllowed: allowed };
   });
 
   app.post('/care-shares/:id/revoke', async (request) => {
@@ -185,7 +195,7 @@ export async function clinicianRoutes(app: FastifyInstance) {
       const out: ClinicianPatient[] = [];
       for (const r of rows) {
         const s = await patientSummary(tx, r.patientId);
-        out.push({ shareId: r.id, patientId: r.patientId, displayName: s.display_name, ageYears: ageInYears(s.date_of_birth), sex: s.sex, bloodType: s.blood_type === 'UNKNOWN' ? null : s.blood_type, governorate: s.governorate, isDemo: s.is_demo, aiAllowed: r.aiAllowed, expiresAt: r.expiresAt });
+        out.push({ shareId: r.id, patientId: r.patientId, displayName: s.display_name, ageYears: ageInYears(s.date_of_birth), sex: s.sex, bloodType: s.blood_type === 'UNKNOWN' ? null : s.blood_type, governorate: s.governorate, isDemo: s.is_demo, aiAllowed: r.aiAllowed, woundsAllowed: r.woundsAllowed, expiresAt: r.expiresAt });
       }
       return out;
     });
@@ -203,7 +213,7 @@ export async function clinicianRoutes(app: FastifyInstance) {
         .where(and(eq(patientHealthEntries.patientId, id), eq(patientHealthEntries.status, 'ACTIVE')))
         .limit(200);
       const drafts = await tx.select().from(clinicalDrafts).where(and(eq(clinicalDrafts.patientId, id), eq(clinicalDrafts.authorUserId, principal.userId))).orderBy(desc(clinicalDrafts.createdAt)).limit(50);
-      const patient: ClinicianPatient = { shareId: share!.id, patientId: id, displayName: s.display_name, ageYears: ageInYears(s.date_of_birth), sex: s.sex, bloodType: s.blood_type === 'UNKNOWN' ? null : s.blood_type, governorate: s.governorate, isDemo: s.is_demo, aiAllowed: share!.aiAllowed, expiresAt: share!.expiresAt };
+      const patient: ClinicianPatient = { shareId: share!.id, patientId: id, displayName: s.display_name, ageYears: ageInYears(s.date_of_birth), sex: s.sex, bloodType: s.blood_type === 'UNKNOWN' ? null : s.blood_type, governorate: s.governorate, isDemo: s.is_demo, aiAllowed: share!.aiAllowed, woundsAllowed: share!.woundsAllowed, expiresAt: share!.expiresAt };
       await tx.execute(sql`select app.write_audit('clinician.record.viewed', 'patient', ${id}, ${id}::uuid, '{}'::jsonb)`);
       return { patient, entries, analytics: await buildAnalytics(tx, id, 90), drafts: drafts.filter((d) => d.status !== 'DISCARDED').map((d) => draftDto(d, null)) };
     });

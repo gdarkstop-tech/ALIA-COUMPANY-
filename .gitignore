@@ -37,3 +37,6 @@ credentials.json
 service-account*.json
 play-service-account*.json
 AuthKey_*.p8
+
+# Local encrypted object store (development / tests)
+.data/

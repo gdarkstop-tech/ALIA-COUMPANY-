@@ -45,6 +45,12 @@ const UNAPPROVED_CLAIMS = [
   'مثبت علميا', 'مثبت سريريا', 'رقم 1', 'ينصح به اطباء', 'يوصي به اطباء', 'خصم', 'تخفيض',
 ].map(normalizeSearch);
 
+/** The first claim (normalised) found in `text` among the never-allowed claims plus `extra`; null when none. */
+export function findUnapprovedClaim(text: string, extra: readonly string[] = []): string | null {
+  const t = normalizeSearch(text);
+  return [...UNAPPROVED_CLAIMS, ...extra.map(normalizeSearch)].find((c) => has(t, c)) ?? null;
+}
+
 export type ProductNameTerm = { productId: string | null; brand: string; term: string };
 export type OfferedProduct = { label: 'P1' | 'P2'; productId: string; brand: string; approvedText: string };
 export type ProductAnswerCheck = { ok: true; cited: ('P1' | 'P2')[] } | { ok: false; reason: 'UNOFFERED_PRODUCT' | 'UNAPPROVED_CLAIM'; detail: string };

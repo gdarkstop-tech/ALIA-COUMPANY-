@@ -139,6 +139,8 @@ export const en = {
     SUPPORT: 'Support',
     TRUST_AND_SAFETY: 'Trust & safety',
     COMMERCE_MANAGER: 'Commerce manager',
+    WOUND_RESEARCHER: 'Wound researcher',
+    PRESENTATION_APPROVER: 'Presentation approver',
     switchRole: 'Switch experience',
     addRole: 'Add a role',
   },

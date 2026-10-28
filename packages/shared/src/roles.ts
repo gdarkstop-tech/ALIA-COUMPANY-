@@ -14,6 +14,8 @@ export const ROLES = [
   'SUPPORT',
   'TRUST_AND_SAFETY',
   'COMMERCE_MANAGER',
+  'WOUND_RESEARCHER',
+  'PRESENTATION_APPROVER',
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -27,6 +29,8 @@ export const STAFF_ROLES = [
   'SUPPORT',
   'TRUST_AND_SAFETY',
   'COMMERCE_MANAGER',
+  'WOUND_RESEARCHER',
+  'PRESENTATION_APPROVER',
 ] as const satisfies readonly Role[];
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
@@ -63,6 +67,14 @@ export const PERMISSIONS = [
   'ai.safety.review',
   /** Write and edit medical knowledge articles (a clinical reviewer approves them). */
   'knowledge.manage',
+  /** Wound registry counts and status (aggregates only — never a patient photo). */
+  'wound.registry.read',
+  /** Clinical quality review of research items (de-identified copies). */
+  'wound.research.review',
+  /** Build, freeze and use consented, de-identified research datasets; product-outcome analytics. */
+  'wound.research.access',
+  /** Prepare and approve presentation cases (a second approver signs each case). */
+  'wound.presentation.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -93,13 +105,27 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'ai.eval.manage',
     'ai.data.approve',
     'knowledge.manage',
+    'wound.registry.read',
   ],
   // Clinical reviewers approve medical product text and AI models for medical routes; commerce
   // managers can edit product text but never approve it.
-  CLINICAL_REVIEWER: ['provider.verification.review', 'provider.verification.decide', 'catalog.content.approve', 'ai.clinical.review', 'ai.safety.review', 'knowledge.manage'],
+  CLINICAL_REVIEWER: [
+    'provider.verification.review',
+    'provider.verification.decide',
+    'catalog.content.approve',
+    'ai.clinical.review',
+    'ai.safety.review',
+    'knowledge.manage',
+    'wound.registry.read',
+    'wound.research.review',
+  ],
   SUPPORT: ['users.read', 'provider.verification.review'],
   TRUST_AND_SAFETY: ['audit.read', 'safety.reports.read', 'users.read', 'users.status.manage', 'users.appeals.decide', 'ai.safety.review'],
   COMMERCE_MANAGER: ['catalog.tetrasol.manage'],
+  // Wound registry duties are separate from administration: research staff see de-identified copies
+  // only; presentation approvers see one eligible case at a time. Neither sees the vault.
+  WOUND_RESEARCHER: ['wound.registry.read', 'wound.research.access'],
+  PRESENTATION_APPROVER: ['wound.registry.read', 'wound.presentation.manage'],
 };
 
 export function permissionsFor(roles: readonly Role[]): Set<Permission> {

@@ -35,6 +35,10 @@ import { createRealtimeProviders, type RealtimeProviders } from './integrations/
 import { voiceRoutes, type VoiceTiming } from './modules/ai/voice';
 import { AI_VOICE_PROTOCOL } from '@ghayarly/shared';
 import { dashboardRoutes } from './modules/dashboard/routes';
+import { createObjectStore, type ObjectStore } from './integrations/storage';
+import { mediaLinkKey } from './lib/media-links';
+import { startWoundMaintenance, woundRoutes } from './modules/wounds/routes';
+import { woundStaffRoutes } from './modules/wounds/staff';
 import { devRoutes } from './modules/dev/routes';
 import { meRoutes } from './modules/me/routes';
 import { patientRoutes } from './modules/patients/routes';
@@ -54,6 +58,10 @@ export type Services = {
   ai: AiProviders;
   /** Realtime voice adapters (only providers with a realtime adapter can be CONFIGURED). */
   realtime: RealtimeProviders;
+  /** Encrypted object storage for medical images (ADR 0015). */
+  objects: ObjectStore;
+  /** Signs short-lived media links. */
+  mediaKey: Buffer;
   /** Tests only: shorter voice timers. */
   voiceTiming?: Partial<VoiceTiming>;
 };
@@ -67,7 +75,7 @@ declare module 'fastify' {
 /** `overrides` exists for tests only (e.g. a store adapter fed with fixture payloads). */
 export async function buildServer(
   env: Env,
-  overrides: { stores?: Stores; ai?: Partial<AiProviders>; realtime?: Partial<RealtimeProviders>; voiceTiming?: Partial<VoiceTiming> } = {},
+  overrides: { stores?: Stores; ai?: Partial<AiProviders>; realtime?: Partial<RealtimeProviders>; voiceTiming?: Partial<VoiceTiming>; objects?: ObjectStore } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
@@ -97,7 +105,8 @@ export async function buildServer(
   const stores = overrides.stores ?? createStores(env);
   const ai: AiProviders = { ...createAiProviders(env), ...overrides.ai };
   const realtime: RealtimeProviders = { ...createRealtimeProviders(env), ...overrides.realtime };
-  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai, realtime, voiceTiming: overrides.voiceTiming });
+  const objects = overrides.objects ?? createObjectStore(env);
+  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai, realtime, objects, mediaKey: mediaLinkKey(env), voiceTiming: overrides.voiceTiming });
 
   const redis = env.REDIS_URL && env.NODE_ENV !== 'test' ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false, lazyConnect: false }) : null;
   redis?.on('error', (err) => app.log.warn({ err: err.message }, 'redis unavailable — rate limiting falls back per request'));
@@ -220,6 +229,9 @@ export async function buildServer(
   await app.register(serviceRoutes, { prefix: '/v1' });
   await app.register(storeRoutes, { prefix: '/v1' });
   await app.register(dashboardRoutes, { prefix: '/v1' });
+  await app.register(woundRoutes, { prefix: '/v1' });
+  await app.register(woundStaffRoutes, { prefix: '/v1/admin/wounds' });
+  if (env.NODE_ENV !== 'test') startWoundMaintenance(app);
   await app.register(adminRoutes, { prefix: '/v1/admin' });
   await app.register(adminCatalogRoutes, { prefix: '/v1/admin/catalog' });
   if (env.DEV_TOOLS_ENABLED && env.NODE_ENV !== 'production') await app.register(devRoutes, { prefix: '/dev' });

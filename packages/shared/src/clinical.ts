@@ -133,6 +133,8 @@ export type CareShare = {
   providerName: string | null;
   providerType: ClinicianRole | null;
   aiAllowed: boolean;
+  /** Wound photos and wound records are included only when turned on for this share (ADR 0015). */
+  woundsAllowed: boolean;
   status: 'ACTIVE' | 'REVOKED' | 'EXPIRED';
   expiresAt: string;
   createdAt: string;
@@ -147,6 +149,7 @@ export type ClinicianPatient = {
   governorate: string | null;
   isDemo: boolean;
   aiAllowed: boolean;
+  woundsAllowed: boolean;
   expiresAt: string;
 };
 export type ClinicalDraft = {

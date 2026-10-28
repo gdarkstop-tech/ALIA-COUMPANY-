@@ -24,7 +24,7 @@ const timestamptz = customType<{ data: string; driverData: string }>({
 const ts = (name: string) => timestamptz(name);
 
 // ------------------------------------------------------------------ enums
-export const roleEnum = appSchema.enum('role', ['PATIENT', 'DOCTOR', 'NURSE', 'ADMIN', 'CLINICAL_REVIEWER', 'SUPPORT', 'TRUST_AND_SAFETY', 'COMMERCE_MANAGER']);
+export const roleEnum = appSchema.enum('role', ['PATIENT', 'DOCTOR', 'NURSE', 'ADMIN', 'CLINICAL_REVIEWER', 'SUPPORT', 'TRUST_AND_SAFETY', 'COMMERCE_MANAGER', 'WOUND_RESEARCHER', 'PRESENTATION_APPROVER']);
 export const localeEnum = appSchema.enum('locale', ['ar', 'en']);
 export const sexEnum = appSchema.enum('sex', ['FEMALE', 'MALE', 'UNSPECIFIED']);
 export const genderEnum = appSchema.enum('gender', ['FEMALE', 'MALE']);
@@ -1004,6 +1004,8 @@ export const careShares = appSchema.table('care_shares', {
   providerUserId: text('provider_user_id').notNull(),
   grantedByUserId: text('granted_by_user_id').notNull(),
   aiAllowed: boolean('ai_allowed').notNull(),
+  /** Wound photos are included only when the person turned this on for this share (0027). */
+  woundsAllowed: boolean('wounds_allowed').notNull().default(false),
   testData: boolean('test_data').notNull(),
   providerType: text('provider_type').notNull(),
   providerNameAr: text('provider_name_ar').notNull(),
@@ -1089,3 +1091,207 @@ export const aiMessageProducts = appSchema.table(
   { messageId: uuid('message_id').notNull(), productId: uuid('product_id').notNull(), indicationVersionId: uuid('indication_version_id'), label: text('label').notNull() },
   (t) => [primaryKey({ columns: [t.messageId, t.productId] })],
 );
+
+// Wound Intelligence Registry (migration 0027, ADR 0015). Binaries live in encrypted object storage.
+const numericOptional = customType<{ data: number | null; driverData: string | null }>({
+  dataType: () => 'numeric',
+  fromDriver: (v) => (v === null ? null : Number(v)),
+  toDriver: (v) => (v === null ? null : String(v)),
+});
+
+export const woundConsentEvents = appSchema.table('wound_consent_events', {
+  id: uuid('id').primaryKey(),
+  seq: bigint('seq', { mode: 'number' }).notNull(),
+  patientId: uuid('patient_id').notNull(),
+  purpose: text('purpose').notNull(),
+  action: text('action').notNull(),
+  version: text('version').notNull(),
+  scope: jsonb('scope').notNull(),
+  actorUserId: text('actor_user_id').notNull(),
+  actorBasis: text('actor_basis').notNull(),
+  reason: text('reason'),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const woundCases = appSchema.table('wound_cases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull(),
+  createdByUserId: text('created_by_user_id').notNull(),
+  label: text('label').notNull(),
+  bodySite: text('body_site').notNull(),
+  bodySide: text('body_side').notNull(),
+  reportedCategory: text('reported_category').notNull(),
+  onsetDate: date('onset_date', { mode: 'string' }),
+  followUpDays: integer('follow_up_days').array().notNull(),
+  status: text('status').notNull(),
+  clinicalCategory: text('clinical_category'),
+  diabetes: text('diabetes'),
+  clinicallyReviewedAt: ts('clinically_reviewed_at'),
+  outcome: text('outcome'),
+  outcomeOn: date('outcome_on', { mode: 'string' }),
+  outcomeAt: ts('outcome_at'),
+  testData: boolean('test_data').notNull(),
+  createdAt: ts('created_at').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+export const woundImages = appSchema.table('wound_images', {
+  id: uuid('id').primaryKey(),
+  caseId: uuid('case_id').notNull(),
+  patientId: uuid('patient_id').notNull(),
+  uploadedByUserId: text('uploaded_by_user_id').notNull(),
+  uploaderRole: text('uploader_role').notNull(),
+  status: text('status').notNull(),
+  contentType: text('content_type').notNull(),
+  byteSize: integer('byte_size').notNull(),
+  width: integer('width').notNull(),
+  height: integer('height').notNull(),
+  derivedWidth: integer('derived_width').notNull(),
+  derivedHeight: integer('derived_height').notNull(),
+  capturedAt: ts('captured_at').notNull(),
+  capturedAtSource: text('captured_at_source').notNull(),
+  metadataRemoved: text('metadata_removed').array().notNull(),
+  quality: jsonb('quality').notNull(),
+  note: text('note'),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const woundObservations = appSchema.table('wound_observations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  caseId: uuid('case_id').notNull(),
+  patientId: uuid('patient_id').notNull(),
+  imageId: uuid('image_id'),
+  observedOn: date('observed_on', { mode: 'string' }).notNull(),
+  authorUserId: text('author_user_id').notNull(),
+  authorRole: text('author_role').notNull(),
+  provenance: text('provenance').notNull(),
+  painScore: smallint('pain_score'),
+  exudate: text('exudate'),
+  signs: text('signs').array().notNull(),
+  lengthMm: numericOptional('length_mm'),
+  widthMm: numericOptional('width_mm'),
+  depthMm: numericOptional('depth_mm'),
+  note: text('note'),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const woundTreatments = appSchema.table('wound_treatments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  caseId: uuid('case_id').notNull(),
+  patientId: uuid('patient_id').notNull(),
+  kind: text('kind').notNull(),
+  productId: uuid('product_id'),
+  description: text('description').notNull(),
+  frequency: text('frequency'),
+  startedOn: date('started_on', { mode: 'string' }).notNull(),
+  endedOn: date('ended_on', { mode: 'string' }),
+  recordedByUserId: text('recorded_by_user_id').notNull(),
+  recorderRole: text('recorder_role').notNull(),
+  provenance: text('provenance').notNull(),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const woundPresentationCases = appSchema.table('wound_presentation_cases', {
+  id: uuid('id').primaryKey(),
+  caseId: uuid('case_id').notNull(),
+  patientId: uuid('patient_id').notNull(),
+  status: text('status').notNull(),
+  testData: boolean('test_data').notNull(),
+  nominatedByUserId: text('nominated_by_user_id').notNull(),
+  nominatedAt: ts('nominated_at').notNull(),
+  preparedByUserId: text('prepared_by_user_id'),
+  preparedAt: ts('prepared_at'),
+  title: text('title'),
+  summaryEn: text('summary_en'),
+  summaryAr: text('summary_ar'),
+  audience: text('audience'),
+  organization: text('organization'),
+  scopeNote: text('scope_note'),
+  validUntil: date('valid_until', { mode: 'string' }),
+  clinicalCategory: text('clinical_category'),
+  clinicalOutcome: text('clinical_outcome'),
+  requestHash: text('request_hash'),
+  patientDecidedAt: ts('patient_decided_at'),
+  approvedByUserId: text('approved_by_user_id'),
+  approvedAt: ts('approved_at'),
+  closedReason: text('closed_reason'),
+  closedAt: ts('closed_at'),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+export const woundPresentationImages = appSchema.table(
+  'wound_presentation_images',
+  {
+    presentationId: uuid('presentation_id').notNull(),
+    imageId: uuid('image_id').notNull(),
+    position: smallint('position').notNull(),
+    day: integer('day').notNull(),
+    captionEn: text('caption_en').notNull(),
+    captionAr: text('caption_ar').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.presentationId, t.imageId] })],
+);
+
+export const woundPresentationExports = appSchema.table('wound_presentation_exports', {
+  id: uuid('id').primaryKey(),
+  presentationId: uuid('presentation_id').notNull(),
+  title: text('title').notNull(),
+  format: text('format').notNull(),
+  audience: text('audience').notNull(),
+  organization: text('organization').notNull(),
+  scopeNote: text('scope_note').notNull(),
+  sha256: text('sha256').notNull(),
+  testData: boolean('test_data').notNull(),
+  exportedByUserId: text('exported_by_user_id').notNull(),
+  exportedAt: ts('exported_at').notNull(),
+});
+
+export const woundResearchDatasets = appSchema.table('wound_research_datasets', {
+  id: uuid('id').primaryKey(),
+  lineageId: uuid('lineage_id').notNull(),
+  version: integer('version').notNull(),
+  previousVersionId: uuid('previous_version_id'),
+  name: text('name').notNull(),
+  description: text('description'),
+  purpose: text('purpose').notNull(),
+  recipient: text('recipient').notNull(),
+  criteria: jsonb('criteria').notNull(),
+  status: text('status').notNull(),
+  testData: boolean('test_data').notNull(),
+  createdByUserId: text('created_by_user_id').notNull(),
+  approvalReference: text('approval_reference'),
+  retentionUntil: date('retention_until', { mode: 'string' }),
+  frozenAt: ts('frozen_at'),
+  frozenItemCount: integer('frozen_item_count'),
+  retiredAt: ts('retired_at'),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const woundResearchItems = appSchema.table('wound_research_items', {
+  id: uuid('id').primaryKey(),
+  datasetId: uuid('dataset_id').notNull(),
+  pseudonym: text('pseudonym').notNull(),
+  snapshot: jsonb('snapshot').notNull(),
+  status: text('status').notNull(),
+  qualityStatus: text('quality_status').notNull(),
+  qualityNote: text('quality_note'),
+  reviewedAt: ts('reviewed_at'),
+  withdrawnAt: ts('withdrawn_at'),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const woundResearchImages = appSchema.table('wound_research_images', {
+  id: uuid('id').primaryKey(),
+  itemId: uuid('item_id').notNull(),
+  day: integer('day').notNull(),
+  status: text('status').notNull(),
+});
+
+export const woundResearchExports = appSchema.table('wound_research_exports', {
+  id: uuid('id').primaryKey(),
+  datasetId: uuid('dataset_id').notNull(),
+  recipient: text('recipient').notNull(),
+  itemCount: integer('item_count').notNull(),
+  requestedByUserId: text('requested_by_user_id').notNull(),
+  createdAt: ts('created_at').notNull(),
+});

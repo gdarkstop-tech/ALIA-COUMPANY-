@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { integrationStatus } from '../../integrations/status';
 
 export async function systemRoutes(app: FastifyInstance) {
-  const { env, pools, messaging, payments, ai } = app.services;
+  const { env, pools, messaging, payments, ai, objects } = app.services;
 
   app.get('/health', { config: { rateLimit: false } }, async () => ({ status: 'ok' }));
 
@@ -20,6 +20,6 @@ export async function systemRoutes(app: FastifyInstance) {
   app.get('/v1/system/status', async (): Promise<SystemStatus> => ({
     environment: env.NODE_ENV,
     demoMode: env.DEMO_MODE,
-    integrations: integrationStatus(env, messaging, payments, ai),
+    integrations: integrationStatus(env, messaging, payments, ai, objects),
   }));
 }

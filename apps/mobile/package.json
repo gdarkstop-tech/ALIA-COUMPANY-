@@ -33,6 +33,7 @@
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-iap": "6.0.2",
+    "expo-image-picker": "57.0.20",
     "expo-linking": "~57.0.13",
     "expo-localization": "~57.0.2",
     "expo-network": "~57.0.3",

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestServer, ownerPool, signUp, type Client } from './helpers';
+import { loadEnv } from '../src/config/env';
+import { createObjectStore } from '../src/integrations/storage';
 
 let app: FastifyInstance;
 let shopper: Client;
@@ -95,7 +97,11 @@ describe('TetraSol Care (Flow D)', () => {
 describe('system status', () => {
   it('reports unconfigured integrations honestly', async () => {
     const res = await app.inject({ method: 'GET', url: '/v1/system/status' });
-    // No provider keys in the test environment: only the development simulator is available.
-    expect(JSON.parse(res.body).integrations).toMatchObject({ payments: 'NOT_CONFIGURED', ai: 'DEV_ADAPTER', storage: 'NOT_CONFIGURED' });
+    // No provider keys in the test environment: only the development simulator is available, and
+    // medical-image storage is the encrypted local development adapter (refused in production).
+    expect(JSON.parse(res.body).integrations).toMatchObject({ payments: 'NOT_CONFIGURED', ai: 'DEV_ADAPTER', storage: 'DEV_ADAPTER' });
+    const prod = loadEnv({ ...process.env, NODE_ENV: 'production', DEMO_MODE: 'false', DEV_TOOLS_ENABLED: 'false', MFA_ENFORCEMENT: 'required', AUTH_REQUIRE_EMAIL_VERIFICATION: 'true', DATABASE_URL_OWNER: '', BETTER_AUTH_SECRET: 'prod-like-secret-0123456789abcdefghijklmnopqrstuvwxyz', MEDIA_LINK_SECRET: 'prod-like-media-secret-0123456789abcdef' });
+    expect(createObjectStore(prod).status).toBe('NOT_CONFIGURED');
+    expect(() => loadEnv({ ...process.env, NODE_ENV: 'production', DEMO_MODE: 'false', DEV_TOOLS_ENABLED: 'false', MFA_ENFORCEMENT: 'required', AUTH_REQUIRE_EMAIL_VERIFICATION: 'true', DATABASE_URL_OWNER: '', BETTER_AUTH_SECRET: 'prod-like-secret-0123456789abcdefghijklmnopqrstuvwxyz' })).toThrow(/MEDIA_LINK_SECRET is required/);
   });
 });
