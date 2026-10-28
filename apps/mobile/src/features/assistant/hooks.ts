@@ -70,6 +70,8 @@ export function useAssistantErrorText() {
     if (e instanceof ApiError) {
       if (e.code === 'AI_QUOTA_EXCEEDED') return allowance ? t('assistant.quotaExceeded', { date: formatDate(allowance.resetsAt, locale) }) : t('assistant.quotaExceededNoDate');
       if (e.code === 'AI_UNAVAILABLE') return t('assistant.unavailable');
+      if (e.code === 'AI_ANSWER_REJECTED') return t('assistant.answerRejected');
+      if (e.code === 'AI_ANSWER_LIMIT') return t('assistant.answerLimit');
       if (e.code === 'AI_BUDGET_NOT_SET' || e.code === 'AI_BUDGET_EXHAUSTED') return t('assistant.budgetPaused');
       if (e.code === 'AI_CONSENT_REQUIRED') return t('assistant.CONSENT_REQUIRED');
       if (e.code === 'FEATURE_DISABLED' || e.code === 'AI_ROUTE_DISABLED') return t('assistant.FEATURE_DISABLED');

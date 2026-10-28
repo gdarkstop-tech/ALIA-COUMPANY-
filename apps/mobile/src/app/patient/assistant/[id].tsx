@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, TextInput, View } from 'react-native';
 import { EMERGENCY_NUMBER, MAX_CHARS, useAssistantErrorText, useAssistantStatus, useConversation, useDeleteConversation, useReportAnswer, useSendMessage, useVoiceStatus } from '@/features/assistant/hooks';
+import { ProductCard } from '@/features/assistant/ProductCard';
 import { voiceSupported } from '@/features/assistant/voice/audio';
 import { usePatients } from '@/features/patient/hooks';
 import { errorKey } from '@/lib/api';
@@ -46,6 +47,7 @@ function Bubble({ m, onReport }: { m: AiChatMessage; onReport?: () => void }) {
           ))}
         </View>
       ) : null}
+      {!mine ? m.products.map((p) => <ProductCard key={p.productId} p={p} />) : null}
       {!mine && onReport ? (
         m.reported ? (
           <Text variant="caption" color="textTertiary" testID={`assistant-reported-${m.id}`}>{t('assistant.reported')}</Text>
@@ -185,7 +187,7 @@ export default function AssistantChat() {
         ))}
         {pending ? (
           <>
-            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', channel: 'TEXT', content: pending, createdAt: new Date().toISOString(), reported: false, citations: [] }} />
+            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', channel: 'TEXT', content: pending, createdAt: new Date().toISOString(), reported: false, citations: [], products: [] }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} testID="assistant-thinking">
               <ActivityIndicator color={colors.primary} />
               <Text variant="footnote" color="textSecondary">{t('assistant.sending')}</Text>

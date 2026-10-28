@@ -94,6 +94,7 @@ export default function ProductEditor() {
         <ContentBadge status={p.contentStatus} />
         <PublicationBadge status={p.publicationStatus} />
         {p.isDemo ? <span className="badge tone-demo">{t('catalog.demoItem')}</span> : null}
+        <Link href={`/ai/products?product=${p.id}`} className="btn btn-sm btn-secondary" data-testid="catalog-product-knowledge">{t('aiAdmin.tabProducts')}</Link>
       </div>
       {error ? <div className="notice danger" data-testid="product-error" role="alert" style={{ marginBottom: 16 }}>{error}</div> : null}
 

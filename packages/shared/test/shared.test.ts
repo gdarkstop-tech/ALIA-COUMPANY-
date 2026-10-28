@@ -194,3 +194,31 @@ describe('clinical draft guard (the AI organises the clinician’s notes; it add
     expect(checkClinicalDraft('VISIT_NOTE', '{"plan": "x"}', notes, [])).toMatchObject({ ok: false, reason: 'INVALID_JSON' });
   });
 });
+
+describe('product answer guard (company products only as offered and approved)', () => {
+  const terms = [
+    { productId: 'p1', brand: 'TetraSol', term: 'tetrasol gel' },
+    { productId: 'p1', brand: 'TetraSol', term: 'تتراسول جل' },
+    { productId: 'p2', brand: 'TetraSol', term: 'tetrasol spray' },
+    { productId: null, brand: 'TetraSol', term: 'tetrasol' },
+  ];
+  const offered = [{ label: 'P1' as const, productId: 'p1', brand: 'TetraSol', approvedText: 'Approved for superficial wounds. Gentle on the skin; clinically tested on 40 volunteers.' }];
+
+  it('accepts approved, cited mentions and keeps judgement words that are not about the product', async () => {
+    const { checkProductAnswer } = await import('../src');
+    expect(checkProductAnswer('Keep it clean. It is best to ask your nurse.\nOne option to discuss is [P1]; it was clinically tested on 40 volunteers.', offered, terms)).toEqual({ ok: true, cited: ['P1'] });
+    expect(checkProductAnswer('Keep it clean and dry.', [], terms)).toEqual({ ok: true, cited: [] });
+    expect(checkProductAnswer('[P2] is not offered here.', offered, terms)).toEqual({ ok: true, cited: [] });
+  });
+
+  it('rejects unoffered products and unapproved claims (EN/AR)', async () => {
+    const { checkProductAnswer } = await import('../src');
+    expect(checkProductAnswer('Try TetraSol Spray instead.', offered, terms)).toMatchObject({ ok: false, reason: 'UNOFFERED_PRODUCT', detail: 'tetrasol spray' });
+    expect(checkProductAnswer('TetraSol makes good gels.', [], terms)).toMatchObject({ ok: false, reason: 'UNOFFERED_PRODUCT', detail: 'tetrasol' });
+    expect(checkProductAnswer('TetraSol Gel cures wounds.', offered, terms)).toMatchObject({ ok: false, reason: 'UNAPPROVED_CLAIM', detail: 'cures' });
+    expect(checkProductAnswer('[P1] is the best option, with a 20% discount.', offered, terms)).toMatchObject({ ok: false, reason: 'UNAPPROVED_CLAIM' });
+    expect(checkProductAnswer('تتراسول جل يشفي الجروح.', offered, terms)).toMatchObject({ ok: false, reason: 'UNAPPROVED_CLAIM', detail: 'يشفي' });
+    expect(checkProductAnswer('[P1] هو الحل الوحيد ومضمون.', offered, terms)).toMatchObject({ ok: false, reason: 'UNAPPROVED_CLAIM' });
+    expect(checkProductAnswer('[P1] has no side-effects.', offered, terms)).toMatchObject({ ok: false, detail: 'no side effects' });
+  });
+});

@@ -19,6 +19,7 @@ import { cartItems, patients, productBundleItems, productBundles, productCategor
 import { notFound } from '../../lib/errors';
 import { getPrincipal, inContext, requirePrincipal } from '../../lib/principal';
 import { parse } from '../../lib/validate';
+import { liveKnowledge } from '../products/routes';
 
 const STOCK_RANK: Record<StockStatus, number> = { IN_STOCK: 0, LOW_STOCK: 1, UNKNOWN: 2, OUT_OF_STOCK: 3 };
 
@@ -233,6 +234,8 @@ export async function storeRoutes(app: FastifyInstance) {
         imageId: images[0]?.id ?? null,
         images,
         variants: vs.map((v) => ({ id: v.id, sku: v.sku, labelAr: v.labelAr, labelEn: v.labelEn, pricePiasters: v.pricePiasters, stockStatus: v.stockStatus })),
+        // Live, clinically approved statements only (official indications, contraindications, FAQs…).
+        knowledge: (await liveKnowledge(tx, [p.id])).get(p.id) ?? [],
       };
     });
   });

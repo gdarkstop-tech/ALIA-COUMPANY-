@@ -2,13 +2,17 @@
  * Patient AI assistant (route `patient.chat`). Order of operations for every message:
  *   1. Deterministic emergency check — emergencies get fixed guidance (call 123), no model, no quota.
  *   2. Reserve allowance in the database (every gate: flag, consent, model, budget, weekly quota),
- *      committed BEFORE the provider is called so concurrent requests cannot overspend.
+ *      committed BEFORE the provider is called so concurrent requests cannot overspend. Approved
+ *      knowledge and — only from the person's current words, never their records — approved
+ *      company-product information are retrieved (products never when signs need a clinician).
  *   3. Call the provider outside any database transaction (fallback model on provider failure).
- *   4. Settle with the provider's reported usage (cost from verified prices) — or release.
+ *   4. Check the answer's product mentions (unoffered products / unapproved claims → rejected,
+ *      paid, not counted), then settle with the provider's reported usage — or release.
  */
 import {
   aiPreferencesBody,
   aiReportBody,
+  checkProductAnswer,
   createConversationBody,
   sendMessageBody,
   type AiPreferences,
@@ -16,6 +20,8 @@ import {
   type AiCitation,
   type AiAssistantStatus,
   type AiChatMessage,
+  type AiProductCard,
+  type ProductAnswerCheck,
   type AiConversation,
   type AiConversationDetail,
   type AiReply,
@@ -32,11 +38,28 @@ import { inContext, requirePrincipal, type Principal } from '../../lib/principal
 import { sessionKey } from '../../lib/rateLimitKey';
 import { parse } from '../../lib/validate';
 import { retrieveKnowledge, type KnowledgePassage } from '../knowledge/routes';
-import { ASSISTANT_POLICY, citedLabels, emergencyGuidance, endUserRefFor, looksLikeEmergency, patientSummary, preferenceContext, referenceContext, refusalNotice, replyLocale } from './safety';
+import { discoverProducts, productCards, productNameTerms, type ProductOffer } from '../products/routes';
+import {
+  ASSISTANT_POLICY,
+  citedLabels,
+  emergencyGuidance,
+  endUserRefFor,
+  looksLikeEmergency,
+  needsClinicianSoon,
+  patientSummary,
+  preferenceContext,
+  PRODUCT_INFORMATION_POLICY,
+  productContext,
+  referenceContext,
+  refusalNotice,
+  replyLocale,
+} from './safety';
 
 const ROUTE = 'patient.chat';
 const HISTORY_MESSAGES = 20;
 const HISTORY_CHARS = 24_000;
+/** Answers refused by the product guard are paid by the company; after this many a day the assistant pauses for the person. */
+const DAILY_REJECTIONS = 5;
 const idParam = z.object({ id: z.string().uuid() });
 const iso = (v: string) => new Date(v).toISOString();
 
@@ -46,8 +69,8 @@ type Reservation = { reservation_id: string; candidates: Candidate[]; max_output
 /** The providers this server can call, as a PostgreSQL array literal for the router. */
 export const providerArray = (codes: AiProviderCode[]) => sql`${`{${codes.join(',')}}`}::app.ai_provider[]`;
 
-function messageDto(m: typeof aiMessages.$inferSelect, reported = false, citations: AiCitation[] = []): AiChatMessage {
-  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], channel: m.channel as AiChatMessage['channel'], content: m.content, createdAt: iso(m.createdAt), reported, citations };
+function messageDto(m: typeof aiMessages.$inferSelect, reported = false, citations: AiCitation[] = [], products: AiProductCard[] = []): AiChatMessage {
+  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], channel: m.channel as AiChatMessage['channel'], content: m.content, createdAt: iso(m.createdAt), reported, citations, products };
 }
 
 async function citationsFor(tx: Tx, messageIds: string[]): Promise<Map<string, AiCitation[]>> {
@@ -141,8 +164,10 @@ export async function aiRoutes(app: FastifyInstance) {
           ? (await tx.select({ m: aiResponseReports.messageId }).from(aiResponseReports).where(and(eq(aiResponseReports.reporterUserId, principal.userId), inArray(aiResponseReports.messageId, msgs.map((m) => m.id))))).map((r) => r.m)
           : [],
       );
-      const cites = await citationsFor(tx, msgs.filter((m) => m.role === 'assistant').map((m) => m.id));
-      return { id: c.id, title: c.title, patientId: c.patientId, createdAt: iso(c.createdAt), updatedAt: iso(c.updatedAt), messages: msgs.map((m) => messageDto(m, reported.has(m.id), cites.get(m.id))) };
+      const answers = msgs.filter((m) => m.role === 'assistant').map((m) => m.id);
+      const cites = await citationsFor(tx, answers);
+      const cards = await productCards(tx, answers);
+      return { id: c.id, title: c.title, patientId: c.patientId, createdAt: iso(c.createdAt), updatedAt: iso(c.updatedAt), messages: msgs.map((m) => messageDto(m, reported.has(m.id), cites.get(m.id), cards.get(m.id))) };
     });
   });
 
@@ -174,6 +199,8 @@ export async function aiRoutes(app: FastifyInstance) {
         const [m] = await tx.select().from(aiMessages).where(eq(aiMessages.id, r.rows[0]!.id));
         return { emergency: messageDto(m!), allowance: await allowance(tx) } as const;
       }
+      const rejected = (await tx.execute<{ n: number }>(sql`select app.ai_rejections_today(${ROUTE}) as n`)).rows[0]!.n;
+      if (rejected >= DAILY_REJECTIONS) throw new AppError(429, 'AI_ANSWER_LIMIT', 'Several answers today could not be shown. Please try again tomorrow.');
       const summary = c.patientId ? await patientSummary(tx, c.patientId) : null;
       // The router sees only the size of the request and its language, never its content.
       const requestChars = [...content].length + (summary ? [...summary].length : 0);
@@ -186,11 +213,15 @@ export async function aiRoutes(app: FastifyInstance) {
       const history = (await tx.select().from(aiMessages).where(and(eq(aiMessages.conversationId, id), inArray(aiMessages.kind, ['MESSAGE', 'SIMULATED']))).orderBy(desc(aiMessages.createdAt)).limit(HISTORY_MESSAGES)).reverse();
       // Approved, clinically reviewed passages only (never drafts); cited back to the person.
       const knowledge: KnowledgePassage[] = await retrieveKnowledge(tx, content, locale);
-      return { reservation, history, summary, locale, prefs, knowledge } as const;
+      // Company-product information: matched on the person's current words only (never the
+      // profile, history or records), withheld whenever the message shows signs that need a clinician.
+      const offers: ProductOffer[] = needsClinicianSoon(content) ? [] : await discoverProducts(tx, content, locale);
+      const productTerms = await productNameTerms(tx);
+      return { reservation, history, summary, locale, prefs, knowledge, offers, productTerms } as const;
     });
     if ('emergency' in prep) return { message: prep.emergency!, allowance: prep.allowance ?? null };
 
-    const { reservation, history, summary, locale, prefs, knowledge } = prep;
+    const { reservation, history, summary, locale, prefs, knowledge, offers, productTerms } = prep;
     const turns: AiTurn[] = [];
     let budget = HISTORY_CHARS;
     for (const m of [...history].reverse()) {
@@ -203,7 +234,7 @@ export async function aiRoutes(app: FastifyInstance) {
 
     // 3. Provider call(s), outside the database transaction: the first eligible candidate, then —
     //    only for a retryable failure — one fallback, preferring a different provider.
-    const extra = [preferenceContext(prefs, prefs.assistantName), referenceContext(knowledge)].filter(Boolean).join('\n\n');
+    const extra = [preferenceContext(prefs, prefs.assistantName), referenceContext(knowledge), offers.length ? PRODUCT_INFORMATION_POLICY : null, productContext(offers, locale)].filter(Boolean).join('\n\n');
     const base = { system: ASSISTANT_POLICY, systemExtra: extra, messages: turns, maxOutputTokens: reservation.max_output_tokens, requestId: request.id, endUserRef: endUserRef(principal.userId) };
     const [primary, ...rest] = reservation.candidates;
     let result: AiResult | null = null;
@@ -228,11 +259,21 @@ export async function aiRoutes(app: FastifyInstance) {
       throw new AppError(503, 'AI_UNAVAILABLE', 'The assistant could not answer right now. Nothing was counted against your allowance.');
     }
 
-    // 4. Settle with the provider's own usage report.
+    // 4. Untrusted output: product mentions are checked against what was offered and approved.
     const final = result;
+    const text = final.outcome === 'REFUSED' ? refusalNotice(locale) : final.text.slice(0, 12_000);
+    const check: ProductAnswerCheck = final.outcome === 'REFUSED' ? { ok: true, cited: [] } : checkProductAnswer(text, offers, productTerms);
+    if (!check.ok) {
+      request.log.warn({ reason: check.reason }, 'ai answer rejected by the product guard');
+      const u = final.usage;
+      await inContext(request, principal, (tx) => tx.execute(sql`select app.ai_chat_reject(${reservation.reservation_id}::uuid, ${servedBy}::app.ai_provider, ${final.servedModel}, ${u.inputTokens}, ${u.outputTokens}, ${u.cacheReadTokens})`));
+      throw new AppError(502, 'AI_ANSWER_REJECTED', 'The answer did not meet our safety rules, so it was not shown. Nothing was counted against your allowance.');
+    }
+    const cited = check.cited;
+
+    // 5. Settle with the provider's own usage report.
     return inContext(request, principal, async (tx) => {
       const kind = final.outcome === 'REFUSED' ? 'REFUSAL' : servedBy === 'SIMULATED' ? 'SIMULATED' : 'MESSAGE';
-      const text = final.outcome === 'REFUSED' ? refusalNotice(locale) : final.text.slice(0, 12_000);
       const r = await tx.execute<{ id: string }>(
         sql`select app.ai_settle(${reservation.reservation_id}::uuid, ${id}::uuid, ${servedBy}::app.ai_provider, ${final.servedModel}, ${final.usage.inputTokens}, ${final.usage.outputTokens}, ${final.usage.cacheReadTokens}, ${final.outcome}, ${kind}, ${text}) as id`,
       );
@@ -242,8 +283,14 @@ export async function aiRoutes(app: FastifyInstance) {
         const versions = labels.map((l) => knowledge[Number(l.slice(1)) - 1]!.versionId);
         await tx.execute(sql`select app.ai_attach_citations(${messageId}::uuid, ${`{${versions.join(',')}}`}::uuid[], ${`{${labels.join(',')}}`}::text[])`);
       }
+      const shown = offers.filter((o) => cited.includes(o.label));
+      if (shown.length) {
+        await tx.execute(
+          sql`select app.ai_attach_products(${messageId}::uuid, ${`{${shown.map((o) => o.productId).join(',')}}`}::uuid[], ${`{${shown.map((o) => o.indicationVersionId ?? 'NULL').join(',')}}`}::uuid[], ${`{${shown.map((o) => o.label).join(',')}}`}::text[])`,
+        );
+      }
       const [m] = await tx.select().from(aiMessages).where(eq(aiMessages.id, messageId));
-      return { message: messageDto(m!, false, (await citationsFor(tx, [messageId])).get(messageId)), allowance: await allowance(tx) };
+      return { message: messageDto(m!, false, (await citationsFor(tx, [messageId])).get(messageId), (await productCards(tx, [messageId])).get(messageId)), allowance: await allowance(tx) };
     });
   });
 

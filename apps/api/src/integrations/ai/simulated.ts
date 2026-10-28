@@ -44,7 +44,9 @@ export function createSimulatedProvider(): AiProvider {
       }
       // Cites the first reference item when one was offered, so the citation flow can be exercised.
       const cites = req.systemExtra?.includes('[K1]') ? ' Approved reference material was provided [K1].' : '';
-      const text = `[SIMULATED — development only, not a real AI answer] I received ${[...last].length} characters. A real deployment answers here with general information only.${cites}`;
+      // Cites the first approved company-product item when one was offered (product cards flow).
+      const productCite = req.systemExtra?.includes('\n[P1] ') ? ' Approved company product information was provided [P1].' : '';
+      const text = `[SIMULATED — development only, not a real AI answer] I received ${[...last].length} characters. A real deployment answers here with general information only.${cites}${productCite}`;
       return {
         outcome: 'ANSWERED',
         text,

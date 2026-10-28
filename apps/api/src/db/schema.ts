@@ -1034,3 +1034,58 @@ export const clinicalDrafts = appSchema.table('clinical_drafts', {
   signedAt: ts('signed_at'),
   createdAt: ts('created_at').notNull(),
 });
+
+// ------------------------------------------------------------------ company-product knowledge (migration 0025)
+export const productKnowledge = appSchema.table('product_knowledge', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  productId: uuid('product_id').notNull(),
+  kind: text('kind').notNull(),
+  topic: text('topic'),
+  titleAr: text('title_ar').notNull(),
+  titleEn: text('title_en').notNull(),
+  bodyAr: text('body_ar').notNull(),
+  bodyEn: text('body_en').notNull(),
+  evidenceReference: text('evidence_reference').notNull(),
+  status: text('status').notNull().default('DRAFT'),
+  editedByUserId: text('edited_by_user_id'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+  updatedAt: ts('updated_at').notNull().default(sql`now()`),
+});
+export const productKnowledgeVersions = appSchema.table('product_knowledge_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  entryId: uuid('entry_id').notNull(),
+  productId: uuid('product_id').notNull(),
+  version: integer('version').notNull(),
+  kind: text('kind').notNull(),
+  topic: text('topic'),
+  titleAr: text('title_ar').notNull(),
+  titleEn: text('title_en').notNull(),
+  bodyAr: text('body_ar').notNull(),
+  bodyEn: text('body_en').notNull(),
+  evidenceReference: text('evidence_reference').notNull(),
+  editedByUserId: text('edited_by_user_id'),
+  approvedByUserId: text('approved_by_user_id'),
+  approvedAt: ts('approved_at').notNull(),
+  approvalNote: text('approval_note').notNull(),
+  supersededAt: ts('superseded_at'),
+});
+export const productKeywords = appSchema.table('product_keywords', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  productId: uuid('product_id').notNull(),
+  indicationId: uuid('indication_id'),
+  term: text('term').notNull(),
+  termNormalized: text('term_normalized').notNull(),
+  locale: text('locale').notNull(),
+  variant: text('variant').notNull(),
+  status: text('status').notNull().default('PENDING'),
+  createdByUserId: text('created_by_user_id'),
+  approvedByUserId: text('approved_by_user_id'),
+  approvedAt: ts('approved_at'),
+  retiredAt: ts('retired_at'),
+  createdAt: ts('created_at').notNull().default(sql`now()`),
+});
+export const aiMessageProducts = appSchema.table(
+  'ai_message_products',
+  { messageId: uuid('message_id').notNull(), productId: uuid('product_id').notNull(), indicationVersionId: uuid('indication_version_id'), label: text('label').notNull() },
+  (t) => [primaryKey({ columns: [t.messageId, t.productId] })],
+);

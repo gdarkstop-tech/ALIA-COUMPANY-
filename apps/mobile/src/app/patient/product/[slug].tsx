@@ -1,3 +1,4 @@
+import { PRODUCT_KNOWLEDGE_KINDS } from '@ghayarly/shared';
 import { radii, spacing } from '@ghayarly/tokens';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,7 +9,7 @@ import { relationshipLabel } from '@/features/patient/ProfileSwitcher';
 import { stockTone } from '@/features/store/hooks';
 import { ProductVisual } from '@/features/store/ProductVisual';
 import { api, errorKey } from '@/lib/api';
-import { money } from '@/lib/format';
+import { formatDate, money } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
 import { Badge, Button, Card, ErrorState, Header, Icon, LoadingScreen, Notice, PressableScale, Screen, Section, Select, Text, useToast } from '@/ui';
@@ -131,6 +132,22 @@ export default function ProductDetail() {
         <Card><Text variant="callout" color="textSecondary">{pickL(p, 'usage')}</Text></Card>
       </Section>
       {pickL(p, 'warnings') ? <Notice tone="warning" icon="alert-triangle" title={t('store.warnings')} body={pickL(p, 'warnings')} testID="product-warnings" /> : null}
+      {PRODUCT_KNOWLEDGE_KINDS.map((kind) => {
+        const items = p.knowledge.filter((k) => k.kind === kind);
+        return items.length ? (
+          <Section key={kind} title={t(`store.knowledge_${kind}`)} testID={`product-knowledge-${kind}`}>
+            <Card padded={false}>
+              {items.map((k, i) => (
+                <View key={k.versionId} style={{ padding: spacing.lg, gap: spacing.xs, borderTopWidth: i ? 1 : 0, borderTopColor: colors.divider }}>
+                  <Text variant="callout" weight="semibold">{pickL(k, 'title')}</Text>
+                  <Text variant="callout" color="textSecondary">{pickL(k, 'body')}</Text>
+                  <Text variant="caption" color="textTertiary">{t('store.knowledgeApproved', { version: k.version, date: formatDate(k.approvedAt, locale) })}</Text>
+                </View>
+              ))}
+            </Card>
+          </Section>
+        ) : null;
+      })}
       <Section title={t('store.regulatory')}>
         <Card>
           <Text variant="footnote" color="textSecondary">{p.approvalReference ?? t('store.noApprovalRef')}</Text>

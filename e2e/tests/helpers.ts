@@ -72,3 +72,39 @@ export async function createSelfProfile(api: Awaited<ReturnType<typeof apiSessio
   if (!updated.ok()) throw new Error(`self profile details: ${await updated.text()}`);
   return id as string;
 }
+
+type Api = Awaited<ReturnType<typeof apiSession>>;
+/** A TetraSol product on sale (synthetic E2E fixture): drafted and published by the admin, content approved by the reviewer. */
+export async function liveProduct(admin: Api, reviewer: Api, tag: string) {
+  const slug = `e2e-${tag}-${Date.now().toString(36)}`;
+  const nameEn = `TetraSol E2E ${tag}`;
+  const created = await admin.post('/v1/admin/catalog/products', {
+    data: { slug, brand: 'TetraSol', nameAr: `تتراسول تجربة ${tag}`, nameEn, summaryAr: 'منتج اختبار مُصطنع', summaryEn: 'Synthetic E2E test product', descriptionAr: 'منتج اختبار مُصطنع.', descriptionEn: 'Synthetic E2E test product.', usageAr: 'ضع طبقة رقيقة مرة يوميًا.', usageEn: 'Apply a thin layer once a day.', approvedUsesAr: '', approvedUsesEn: '', warningsAr: 'للاستخدام الخارجي فقط.', warningsEn: 'For external use only.' },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const id = (await created.json()).id as string;
+  expect((await admin.post(`/v1/admin/catalog/products/${id}/variants`, { data: { sku: slug.toUpperCase().slice(0, 40), labelAr: 'عبوة', labelEn: 'Pack', pricePiasters: 9900 } })).ok()).toBeTruthy();
+  const approved = await reviewer.post(`/v1/admin/catalog/products/${id}/approve`, { data: { approvalReference: 'E2E-SYNTHETIC-REF' } });
+  expect(approved.ok(), await approved.text()).toBeTruthy();
+  expect((await admin.post(`/v1/admin/catalog/products/${id}/publication`, { data: { status: 'PUBLISHED' } })).ok()).toBeTruthy();
+  return { id, slug, nameEn };
+}
+
+/** An official indication written by the admin and approved by the clinical reviewer. */
+export async function approvedIndication(admin: Api, reviewer: Api, productId: string) {
+  const created = await admin.post('/v1/admin/product-knowledge/entries', {
+    data: { productId, kind: 'INDICATION', topic: 'pressure-ulcers', titleAr: 'قرح الفراش السطحية', titleEn: 'Superficial pressure ulcers', bodyAr: 'للمساعدة في العناية بقرح الفراش السطحية تحت إشراف ممرض (اختبار).', bodyEn: 'Helps care for superficial pressure ulcers under a nurse’s supervision (E2E fixture).', evidenceReference: 'E2E synthetic label, section 4.1' },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const id = (await created.json()).id as string;
+  expect((await admin.post(`/v1/admin/product-knowledge/entries/${id}/submit`, { data: {} })).ok()).toBeTruthy();
+  const ok = await reviewer.post(`/v1/admin/product-knowledge/entries/${id}/approve`, { data: { note: 'E2E fixture approval' } });
+  expect(ok.ok(), await ok.text()).toBeTruthy();
+  return id;
+}
+
+/** Takes an E2E product off sale (archived) so repeated runs do not fill the store. */
+export async function archiveProduct(admin: Api, productId: string) {
+  await admin.post(`/v1/admin/catalog/products/${productId}/publication`, { data: { status: 'UNPUBLISHED' } });
+  await admin.post(`/v1/admin/catalog/products/${productId}/publication`, { data: { status: 'ARCHIVED' } });
+}

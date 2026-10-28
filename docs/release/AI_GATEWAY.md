@@ -1,13 +1,14 @@
 # DMW Medical AI — gateway status, setup and cost control
 
-**Verified on:** 2026-10-28 · Design: [ADR 0008](../adr/0008-ai-gateway.md), [ADR 0009](../adr/0009-model-registry-routing-evaluation.md), [ADR 0010](../adr/0010-realtime-voice-relay.md), [ADR 0011](../adr/0011-lab-report-reading.md), [ADR 0012](../adr/0012-health-analytics.md), [ADR 0013](../adr/0013-record-shares-clinician-copilot.md)
+**Verified on:** 2026-10-28 · Design: [ADR 0008](../adr/0008-ai-gateway.md), [ADR 0009](../adr/0009-model-registry-routing-evaluation.md), [ADR 0010](../adr/0010-realtime-voice-relay.md), [ADR 0011](../adr/0011-lab-report-reading.md), [ADR 0012](../adr/0012-health-analytics.md), [ADR 0013](../adr/0013-record-shares-clinician-copilot.md), [ADR 0014](../adr/0014-product-knowledge-discovery.md)
 
 > **Status:** the multi-provider gateway, model registry, eligibility-based routing, evaluation
 > suite, quotas, budgets, cost metering, admin control centre, the patient text chat, realtime
 > voice (server relay), lab-report reading (transcription + person-confirmed rows), grounded health
-> summaries and the clinician documentation copilot (drafts signed by the clinician) are `CODE_READY`. **No AI provider is configured on any environment** — Anthropic, OpenAI, Gemini,
+> summaries, the clinician documentation copilot (drafts signed by the clinician) and controlled
+> company-product discovery are `CODE_READY`. **No AI provider is configured on any environment** — Anthropic, OpenAI, Gemini,
 > Qwen, Grok, Kimi and MedGemma are all `NOT_CONFIGURED` — no model price is verified, no monthly
-> cap is set, no model has patient-data or clinical approval, and `ai.assistant`, `ai.voice`, `ai.document_analysis`, `ai.health_summary` and `ai.clinician_copilot` are OFF. **No real
+> cap is set, no model has patient-data or clinical approval, and `ai.assistant`, `ai.voice`, `ai.document_analysis`, `ai.health_summary`, `ai.clinician_copilot` and `ai.product_discovery` are OFF. **No real
 > AI answer has been produced by this system.** Every run so far used scripted providers in automated
 > tests or the labelled development simulator.
 
@@ -35,10 +36,11 @@
 | Health summaries (route `patient.health_summary`, flag `ai.health_summary` OFF): the model receives only numbered facts the app calculated from readings and **confirmed** lab results (no names, notes or free text) and returns JSON points citing them; the API rejects any number not in the cited facts, numbers in questions, and judgements of progress, normality, conditions, medicines or treatment (EN/AR); rejected answers are never shown, recorded as cost (`INVALID_OUTPUT`), not counted, ≤ 5 a day; facts and summary stored together and shown side by side | migration 0022; `apps/api/src/modules/analytics/`; `packages/shared/src/analytics.ts`; mobile `app/patient/readings.tsx` | `test/analytics.test.ts` (8: readings validation / provenance / immutability / RLS / consent, trends from confirmed data only and unmixed units, gates, request contents, rejection reasons and metering, refusal, evaluation run with grounded vs judgemental writers), shared validator tests, E2E `flow-f-readings` (**web harness only**, simulator). Summary quality **not evaluated** with any real model |
 | Record shares (Milestone 3 primitive): a person who manages a profile shares it with one verified clinician for 7 / 30 / 90 days (health-data consent), AI help off by default and allowed per share; revocable by either side; expiry, revocation and suspension end access on the next read; read-only, limited record (no contacts, address, documents or notes); every grant, revoke and record view audited; test data (demo profiles, review / internal-test accounts) is never shared with a real clinician and real records never with a demo or internal-test clinician | migration 0024; `apps/api/src/modules/clinician/routes.ts`; mobile `app/patient/shares.tsx`, provider page *Share my record* | `test/clinician.test.ts` (shares, limited read-only access, expiry / revoke / suspension, test-vs-real isolation incl. an account changed later), E2E `flow-f-clinician` (**web harness only**) |
 | Clinician documentation copilot (route `clinician.documentation`, flag `ai.clinician_copilot` OFF, per-route consent = clinician AI terms, weekly `CLINICAL_DRAFTS` 40): organises the clinician's own notes (sent as delimited data with a minimal context) into fixed sections per note type; doctors: visit note / patient instructions, nurses: nursing note / wound-care note / patient instructions (API, database constraint, prompt and guard); deterministic guard rejects any dose not in the notes or recorded medicines and any diagnosis / prescribing / order / dose-change / start / stop word the clinician did not use (EN/AR); rejected drafts never shown, recorded as cost, not counted, ≤ 5 a day; draft visible only to its author until signed; signing audited and frozen; the person sees signed notes with the signer's name and an AI-assisted label, never the working notes | migrations 0023–0024; `apps/api/src/modules/clinician/`; `packages/shared/src/clinical.ts`; mobile `app/clinician/` | `test/clinician.test.ts` (6: gates incl. flag / internal accounts / terms / share AI permission / role scope, request contents and minimal context, edit-sign-discard and visibility, guard rejections and metering, daily cap, evaluation run with careful vs dose-adding writers), shared guard tests, E2E `flow-f-clinician` (**web harness only**, simulator). Draft quality **not evaluated** with any real model; no clinical evaluation |
+| Company-product knowledge (Admin → AI → TetraSol knowledge): official indications, approved claims, contraindications, FAQs and education per product, bilingual, each with an evidence reference; catalogue staff propose, a clinical reviewer who did not write it approves (admins and commerce managers cannot); immutable versions; withdrawal at once; shown on the product page; keyword engine with Arabic / English terms, synonyms and curated misspellings, each clinically approved, condition keywords only while their indication is approved; engine tester for staff | migration 0025; `apps/api/src/modules/products/routes.ts`; `packages/shared/src/products.ts`; `apps/admin/src/app/ai/products/` | `test/product-knowledge.test.ts` (8: workflow and separation of duties, keyword gates, whole-word AR/EN matching and DB/JS normalisation parity, withdrawal and unpublishing), E2E `flow-e-products` |
+| Product discovery in the assistant (flag `ai.product_discovery` OFF; internal test accounts only): ≤ 2 approved, published, non-demo products matched on the **current message only**; nothing when the message shows signs that need a clinician (EN/AR); approved statements sent as labelled data with fixed rules; deterministic guard rejects unoffered products / brands and unapproved claims (EN/AR) — paid, not counted, ≤ 5 a day then the assistant pauses for the person; a product card only when the answer cited it | `apps/api/src/modules/ai/routes.ts`, `safety.ts`; mobile `features/assistant/ProductCard.tsx` | `product-knowledge.test.ts` (flag and internal accounts, request contents, history / profile not used, red flags EN/AR, cards only when cited, rejection reasons, metering and daily pause, withdrawn products), shared guard tests, E2E `flow-f-products` (**web harness only**, simulator). Product answers **not evaluated** with any real model |
 | Operator smoke test with a real key: one short non-patient question, prints outcome, usage and latency | `pnpm --filter @ghayarly/api ai:smoke -- --provider <CODE> --model <id>` | Run on 2026-10-27: `NOT_CONFIGURED` for every provider (no keys) |
 
-Not built yet (later slices): product
-knowledge, wound and imaging research. Voice gaps: no Gemini Live / xAI voice adapter (they are
+Not built yet (later slices): wound and imaging research. Voice gaps: no Gemini Live / xAI voice adapter (they are
 `NOT_CONFIGURED` for voice), no approved-knowledge retrieval in voice answers, no device testing. No medical articles are seeded: the
 clinical team must write (or import) and approve them, each with its real source. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
 have no adapter yet.
@@ -144,6 +146,13 @@ have no adapter yet.
   English by doctors and nurses, a nursing-scope review, legal approval of the clinician AI terms and of
   the patient sharing notice, and a decision on how long signed notes are kept.
 
+### Product discovery specifics
+- No real indications, claims or keywords are approved; the TetraSol brand ownership record is still
+  "TO CONFIRM". Launch needs: the brand owner's approved label / registrations as evidence, clinical
+  approval of each indication and keyword, legal approval of product claims for AI use and of the
+  sales disclosure wording, an evaluation of real answers that mention products (EN/AR), and
+  `ai.product_discovery` evidence.
+
 ## 3. Cost metering
 
 - Cost per request = provider-reported tokens × verified price of the model that served it (input,
@@ -177,5 +186,10 @@ have no adapter yet.
   `gemini-3.8-flash` ≈ US$0.002–0.006. Weekly ceiling per clinician with Sonnet: 40 drafts ≈
   ≤ US$0.65 (plus up to 5 rejected drafts a day, ≈ ≤ US$0.08 a day). Paid by the company, never by the
   clinician or the patient.
+- Product information: when products are offered, the chat request carries ~250 tokens of rules plus
+  ~150–600 tokens of approved statements per product. **Estimate, not measured**: with
+  `claude-opus-5-5` / `claude-sonnet-5-5` prices in the registry, ≈ US$0.001–0.008 extra per message
+  that offers products; nothing extra otherwise. Rejected answers are paid by the company and capped
+  at 5 per person per day.
 - **Missing billing data:** no verified prices, no caps, no provider invoices to reconcile against;
   Kimi, Qwen and MedGemma prices are unknown. Prices are not assumed free and are not final until verified.

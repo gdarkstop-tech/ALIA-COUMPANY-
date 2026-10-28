@@ -25,6 +25,7 @@ import { knowledgeRoutes } from './modules/knowledge/routes';
 import { documentRoutes } from './modules/documents/routes';
 import { analyticsRoutes } from './modules/analytics/routes';
 import { clinicianRoutes } from './modules/clinician/routes';
+import { productKnowledgeRoutes } from './modules/products/routes';
 import { adminAiRoutes } from './modules/ai/admin';
 import { complianceRoutes } from './modules/compliance/routes';
 import { billingRoutes } from './modules/billing/routes';
@@ -210,6 +211,7 @@ export async function buildServer(
   await app.register(analyticsRoutes, { prefix: '/v1' });
   await app.register(clinicianRoutes, { prefix: '/v1' });
   await app.register(knowledgeRoutes, { prefix: '/v1' });
+  await app.register(productKnowledgeRoutes, { prefix: '/v1' });
   await app.register(adminAiRoutes, { prefix: '/v1/admin/ai' });
   await app.register(complianceRoutes, { prefix: '/v1' });
   await app.register(billingRoutes);

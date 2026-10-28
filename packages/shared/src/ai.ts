@@ -1,3 +1,4 @@
+import type { AiProductCard } from './products';
 import { z } from 'zod';
 
 /**
@@ -48,7 +49,8 @@ export type AiMessageKind = 'MESSAGE' | 'EMERGENCY_GUIDANCE' | 'REFUSAL' | 'SIMU
 /** An approved knowledge version the answer cited (label matches the [K1] marker in the text). */
 export type AiCitation = { label: string; versionId: string; title: string; locale: 'ar' | 'en'; version: number; sourcePublisher: string; sourceTitle: string; sourceUrl: string | null; sourceDate: string | null };
 /** VOICE = a transcript of a realtime voice conversation (text only; audio is never stored). */
-export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; channel: 'TEXT' | 'VOICE'; content: string; createdAt: string; reported: boolean; citations: AiCitation[] };
+/** `products`: approved company-product information the answer cited (shown apart from the answer). */
+export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; channel: 'TEXT' | 'VOICE'; content: string; createdAt: string; reported: boolean; citations: AiCitation[]; products: AiProductCard[] };
 export type AiConversation = { id: string; title: string; patientId: string | null; createdAt: string; updatedAt: string };
 export type AiConversationDetail = AiConversation & { messages: AiChatMessage[] };
 export type AiReply = { message: AiChatMessage; allowance: AiAllowance | null };

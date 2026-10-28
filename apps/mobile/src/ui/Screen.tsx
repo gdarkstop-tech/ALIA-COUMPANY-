@@ -26,7 +26,9 @@ type ScreenProps = {
 export function Screen({ children, scroll = true, header, footer, refreshing, onRefresh, contentStyle, edges = ['top'], testID }: ScreenProps) {
   const { colors } = useTheme();
   const content = (
-    <View style={[{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center', paddingHorizontal: layout.screenPadding, gap: spacing.xl, paddingBottom: spacing['4xl'] }, contentStyle]}>
+    // Without page scrolling the content takes the remaining height, so an inner list (e.g. a chat)
+    // scrolls within it instead of running under the footer.
+    <View style={[{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center', paddingHorizontal: layout.screenPadding, gap: spacing.xl, paddingBottom: scroll ? spacing['4xl'] : 0 }, scroll ? null : { flex: 1, minHeight: 0 }, contentStyle]}>
       {children}
     </View>
   );

@@ -89,7 +89,13 @@ import type {
   ClinicalDraftContent,
   ClinicianCopilotStatus,
   ClinicianPatient,
+  ProductDiscoveryMatch,
+  ProductKeywordAdmin,
+  ProductKnowledgeAdmin,
+  ProductKnowledgeOverview,
 } from '@ghayarly/shared';
+
+export type ProductKnowledgeProductRow = { id: string; slug: string; nameAr: string; nameEn: string; contentStatus: string; publicationStatus: string; isDemo: boolean; approved: number; inReview: number };
 
 export class ApiError extends Error {
   constructor(
@@ -325,6 +331,20 @@ export function createApiClient(options: ApiClientOptions) {
       submit: (id: string) => post<KnowledgeArticleAdmin>(`/v1/admin/knowledge/articles/${id}/submit`, {}),
       approve: (id: string, note: string) => post<KnowledgeArticleAdmin>(`/v1/admin/knowledge/articles/${id}/approve`, { note }),
       retire: (id: string, note: string) => post<KnowledgeArticleAdmin>(`/v1/admin/knowledge/articles/${id}/retire`, { note }),
+    },
+    /** Company-product knowledge and the keyword engine (catalogue staff propose, clinical reviewers approve). */
+    productKnowledge: {
+      products: () => get<ProductKnowledgeProductRow[]>('/v1/admin/product-knowledge'),
+      overview: (productId: string) => get<ProductKnowledgeOverview>(`/v1/admin/product-knowledge/products/${productId}`),
+      createEntry: (body: Record<string, unknown>) => post<ProductKnowledgeAdmin>('/v1/admin/product-knowledge/entries', body),
+      updateEntry: (id: string, body: Record<string, unknown>) => patch<ProductKnowledgeAdmin>(`/v1/admin/product-knowledge/entries/${id}`, body),
+      submit: (id: string) => post<ProductKnowledgeAdmin>(`/v1/admin/product-knowledge/entries/${id}/submit`, {}),
+      approve: (id: string, note: string) => post<ProductKnowledgeAdmin>(`/v1/admin/product-knowledge/entries/${id}/approve`, { note }),
+      retire: (id: string, note: string) => post<ProductKnowledgeAdmin>(`/v1/admin/product-knowledge/entries/${id}/retire`, { note }),
+      createKeyword: (body: Record<string, unknown>) => post<ProductKeywordAdmin>('/v1/admin/product-knowledge/keywords', body),
+      approveKeyword: (id: string) => post<ProductKeywordAdmin>(`/v1/admin/product-knowledge/keywords/${id}/approve`, {}),
+      retireKeyword: (id: string) => post<ProductKeywordAdmin>(`/v1/admin/product-knowledge/keywords/${id}/retire`, {}),
+      preview: (q: string) => get<ProductDiscoveryMatch[]>('/v1/admin/product-knowledge/preview', { q }),
     },
     /** AI control centre: configuration only — provider keys never leave the backend. */
     aiAdmin: {

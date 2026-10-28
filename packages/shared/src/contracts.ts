@@ -3,6 +3,7 @@
  * Request bodies are validated with these schemas on the server; response types are
  * inferred for the typed API client.
  */
+import type { ProductKnowledgeItem } from './products';
 import { z } from 'zod';
 import {
   ACCESS_LEVELS,
@@ -386,6 +387,8 @@ export type ProductDetail = ProductCard & {
   warningsEn: string;
   images: { id: string; altAr: string; altEn: string }[];
   variants: { id: string; sku: string; labelAr: string; labelEn: string; pricePiasters: number; stockStatus: (typeof STOCK_STATUSES)[number] }[];
+  /** Live, clinically approved statements: official indications, contraindications, claims, FAQs, education. */
+  knowledge: ProductKnowledgeItem[];
 };
 
 export type StoreBundle = {
