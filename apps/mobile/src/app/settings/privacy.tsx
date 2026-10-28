@@ -22,6 +22,7 @@ export default function PrivacyCenter() {
   const state = consents.data;
   const marketing = state.consents.find((c) => c.type === 'MARKETING_COMMUNICATIONS')?.granted ?? false;
   const aiConsent = state.consents.find((c) => c.type === 'AI_ASSISTANT_PROCESSING');
+  const voiceConsent = state.consents.find((c) => c.type === 'AI_VOICE_PROCESSING');
   const setHealth = (granted: boolean) => record.mutate({ state, answers: { HEALTH_DATA_PROCESSING: granted } });
 
   return (
@@ -76,6 +77,26 @@ export default function PrivacyCenter() {
               />
             </View>
             <Button label={`${t('legal.read')} · ${t('legal.aiConsent')}`} variant="ghost" size="sm" fullWidth={false} onPress={() => router.push('/legal/ai-assistant-consent' as Href)} testID="open-ai-consent" />
+          </>
+        ) : null}
+        {voiceConsent ? (
+          <>
+            <Divider />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="callout" weight="semibold">{t('privacy.aiVoice')}</Text>
+                <Text variant="footnote" color="textSecondary">{t('privacy.aiVoiceBody')}</Text>
+              </View>
+              <Switch
+                testID="ai-voice-consent-switch"
+                accessibilityLabel={t('privacy.aiVoice')}
+                value={voiceConsent.granted}
+                disabled={record.isPending}
+                onValueChange={(v) => record.mutate({ state, answers: { AI_VOICE_PROCESSING: v } })}
+                trackColor={{ true: colors.accent, false: colors.border }}
+              />
+            </View>
+            <Button label={`${t('legal.read')} · ${t('legal.aiVoiceConsent')}`} variant="ghost" size="sm" fullWidth={false} onPress={() => router.push('/legal/ai-voice-consent' as Href)} testID="open-ai-voice-consent" />
           </>
         ) : null}
       </Card>

@@ -47,13 +47,82 @@ export type AiAssistantStatus = {
 export type AiMessageKind = 'MESSAGE' | 'EMERGENCY_GUIDANCE' | 'REFUSAL' | 'SIMULATED';
 /** An approved knowledge version the answer cited (label matches the [K1] marker in the text). */
 export type AiCitation = { label: string; versionId: string; title: string; locale: 'ar' | 'en'; version: number; sourcePublisher: string; sourceTitle: string; sourceUrl: string | null; sourceDate: string | null };
-export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; content: string; createdAt: string; reported: boolean; citations: AiCitation[] };
+/** VOICE = a transcript of a realtime voice conversation (text only; audio is never stored). */
+export type AiChatMessage = { id: string; role: 'user' | 'assistant'; kind: AiMessageKind; channel: 'TEXT' | 'VOICE'; content: string; createdAt: string; reported: boolean; citations: AiCitation[] };
 export type AiConversation = { id: string; title: string; patientId: string | null; createdAt: string; updatedAt: string };
 export type AiConversationDetail = AiConversation & { messages: AiChatMessage[] };
 export type AiReply = { message: AiChatMessage; allowance: AiAllowance | null };
 
+// ---------------------------------------------------------------- realtime voice (migration 0018)
+/**
+ * The app streams microphone audio to OUR API (never to a provider) over a WebSocket opened with a
+ * single-use ticket; the API relays it with the business key. Audio frames are 16-bit little-endian
+ * mono PCM at 24 kHz, base64 in JSON text frames.
+ */
+export const AI_VOICE_PROTOCOL = 'dmw.voice.v1';
+export const AI_VOICE_SAMPLE_RATE = 24_000;
+/** Longest audio frame the app may send: base64 of ~1 s of audio. */
+export const AI_VOICE_MAX_FRAME_CHARS = 64_000;
+/** A voice session lasts at most 10 minutes (the app can start another). */
+export const AI_VOICE_MAX_SESSION_SECONDS = 600;
+export const AI_VOICE_END_REASONS = ['USER_ENDED', 'QUOTA', 'MAX_DURATION', 'IDLE', 'DISCONNECTED', 'PROVIDER_ERROR', 'EMERGENCY', 'STOPPED', 'SERVER_SHUTDOWN'] as const;
+export type AiVoiceEndReason = (typeof AI_VOICE_END_REASONS)[number];
+
+export type AiVoiceStatus = {
+  /** null = available. VOICE_CONSENT_REQUIRED: the separate voice consent is missing. */
+  unavailableReason: AiAssistantStatus['unavailableReason'] | 'VOICE_CONSENT_REQUIRED';
+  /** Weekly voice seconds. */
+  allowance: AiAllowance | null;
+};
+export const startVoiceBody = z.object({
+  /** Continue an existing conversation (its recent turns are given to the model as context). */
+  conversationId: z.string().uuid().optional(),
+});
+export type AiVoiceSessionStart = {
+  sessionId: string;
+  conversationId: string;
+  /** Single-use, valid for 60 seconds; sent as a WebSocket subprotocol, never in the URL. */
+  ticket: string;
+  protocol: typeof AI_VOICE_PROTOCOL;
+  streamPath: string;
+  expiresAt: string;
+  sampleRate: typeof AI_VOICE_SAMPLE_RATE;
+  maxSessionSeconds: number;
+  allowance: AiAllowance | null;
+};
+/** App → API. */
+export type AiVoiceClientEvent =
+  | { type: 'audio'; data: string }
+  /** The person interrupted the answer: stop it; `playedMs` = how much of that answer they heard. */
+  | { type: 'interrupt'; itemId: string | null; playedMs: number }
+  | { type: 'end' };
+/** API → app. */
+export type AiVoiceServerEvent =
+  | { type: 'ready'; sessionId: string; maxSessionSeconds: number; remainingSeconds: number; simulated: boolean }
+  | { type: 'speech_started' }
+  | { type: 'speech_stopped' }
+  | { type: 'user_transcript'; messageId: string | null; text: string }
+  /** The person's words could not be understood: nothing was sent to the model; please repeat. */
+  | { type: 'not_understood' }
+  | { type: 'audio'; itemId: string; data: string }
+  | { type: 'assistant_delta'; itemId: string; text: string }
+  | { type: 'assistant_done'; itemId: string; messageId: string | null; text: string; kind: AiMessageKind }
+  /** Deterministic emergency guidance (no model): show the call button; the session ends. */
+  | { type: 'emergency'; messageId: string | null; text: string }
+  | { type: 'usage'; usedSeconds: number; remainingSeconds: number }
+  | { type: 'ended'; reason: AiVoiceEndReason; usedSeconds: number }
+  | { type: 'error'; code: string };
+
 // ---------------------------------------------------------------- AI control centre (admin)
-export type AiProviderStatus = { code: AiProviderCode; configured: boolean; productionAllowed: boolean; envVars: string[] };
+export type AiProviderStatus = {
+  code: AiProviderCode;
+  configured: boolean;
+  /** Realtime voice: an adapter exists for this provider and its key is set. */
+  realtimeConfigured: boolean;
+  realtimeAdapter: boolean;
+  productionAllowed: boolean;
+  envVars: string[];
+};
 export type AiModelAdmin = {
   id: string;
   provider: AiProviderCode;
@@ -63,6 +132,10 @@ export type AiModelAdmin = {
   inputPriceMicros: number | null;
   outputPriceMicros: number | null;
   cacheReadPriceMicros: number | null;
+  /** Realtime voice models: USD per 1M audio tokens, micro-dollars. */
+  audioInputPriceMicros: number | null;
+  audioOutputPriceMicros: number | null;
+  audioCacheReadPriceMicros: number | null;
   priceSource: string | null;
   priceVerifiedAt: string | null;
   active: boolean;
@@ -136,6 +209,9 @@ export const aiModelCreateBody = z.object({
   inputPriceMicros: micros.nullable(),
   outputPriceMicros: micros.nullable(),
   cacheReadPriceMicros: micros.nullable().optional(),
+  audioInputPriceMicros: micros.nullable().optional(),
+  audioOutputPriceMicros: micros.nullable().optional(),
+  audioCacheReadPriceMicros: micros.nullable().optional(),
   /** Where the price comes from (the provider's pricing page, contract, date). */
   priceSource: z.string().trim().min(3).max(300),
   capabilities: capabilities.default(['CHAT']),
@@ -150,6 +226,9 @@ export const aiModelPatchBody = z
     inputPriceMicros: micros.nullable(),
     outputPriceMicros: micros.nullable(),
     cacheReadPriceMicros: micros.nullable(),
+    audioInputPriceMicros: micros.nullable(),
+    audioOutputPriceMicros: micros.nullable(),
+    audioCacheReadPriceMicros: micros.nullable(),
     priceSource: z.string().trim().min(3).max(300),
     /** true = "I checked these prices against the provider today" (records who and when). */
     verifyPrice: z.boolean(),
@@ -299,6 +378,8 @@ export type AiEvaluationOverview = {
   approvals: AiModelApproval[];
   thresholds: { minCases: number; minAutomatedPassRate: number; minMeanAccuracy: number; maxHallucinationRate: number };
   currentPolicyVersion: string;
+  /** Per route (voice adds spoken-conversation rules to the same policy). */
+  currentPolicyVersions: Record<string, string>;
 };
 
 // ---------------------------------------------------------------- personal preferences

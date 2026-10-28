@@ -68,7 +68,7 @@ export const commerceEventTypeEnum = appSchema.enum('commerce_event_type', ['PRO
 export const ledgerEntryTypeEnum = appSchema.enum('ledger_entry_type', ['VISIT_EARNING', 'PLATFORM_FEE', 'ADJUSTMENT', 'PAYOUT']);
 export const ledgerStatusEnum = appSchema.enum('ledger_status', ['PENDING', 'AVAILABLE', 'PAID_OUT']);
 export const accountKindEnum = appSchema.enum('account_kind', ['STANDARD', 'REVIEW', 'INTERNAL_TEST']);
-export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING']);
+export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING', 'AI_VOICE_PROCESSING']);
 export const featureRiskEnum = appSchema.enum('feature_risk', ['LOW', 'MEDIUM', 'HIGH']);
 export const planCodeEnum = appSchema.enum('plan_code', ['SILVER', 'GOLD', 'PLATINUM']);
 export const paymentClassEnum = appSchema.enum('payment_class', ['PHYSICAL_PRODUCT', 'PHYSICAL_SERVICE', 'ELIGIBLE_PERSON_TO_PERSON_SERVICE', 'DIGITAL_SUBSCRIPTION', 'DIGITAL_FEATURE']);
@@ -604,6 +604,10 @@ export const aiModels = appSchema.table('ai_models', {
   notes: text('notes'),
   patientDataApprovalRef: text('patient_data_approval_ref'),
   patientDataApprovedAt: ts('patient_data_approved_at'),
+  // Audio-token prices for realtime voice models (migration 0018)
+  audioInputPriceMicros: bigint('audio_input_price_micros', { mode: 'number' }),
+  audioOutputPriceMicros: bigint('audio_output_price_micros', { mode: 'number' }),
+  audioCacheReadPriceMicros: bigint('audio_cache_read_price_micros', { mode: 'number' }),
 });
 
 export const aiRoutes = appSchema.table('ai_routes', {
@@ -784,8 +788,27 @@ export const aiMessages = appSchema.table('ai_messages', {
   userId: text('user_id').notNull(),
   role: text('role').notNull(),
   kind: text('kind').notNull().default('MESSAGE'),
+  /** VOICE = a transcript written by app.ai_voice_record() (migration 0018). */
+  channel: text('channel').notNull().default('TEXT'),
   content: text('content').notNull(),
   createdAt: ts('created_at').notNull().default(sql`clock_timestamp()`),
+});
+
+/** Realtime voice sessions (migration 0018): metering only, never audio or content. Written by functions. */
+export const aiVoiceSessions = appSchema.table('ai_voice_sessions', {
+  id: uuid('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  conversationId: uuid('conversation_id'),
+  usageId: uuid('usage_id').notNull(),
+  provider: aiProviderEnum('provider').notNull(),
+  modelId: text('model_id').notNull(),
+  locale: text('locale').notNull(),
+  status: text('status').notNull(),
+  createdAt: ts('created_at').notNull(),
+  startedAt: ts('started_at'),
+  endedAt: ts('ended_at'),
+  usedSeconds: integer('used_seconds').notNull(),
+  endReason: text('end_reason'),
 });
 
 // ------------------------------------------------------------------ AI preferences and reports (migration 0015)

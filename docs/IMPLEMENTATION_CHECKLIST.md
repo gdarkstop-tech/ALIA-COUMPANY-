@@ -78,7 +78,7 @@ Midjourney are out of scope for this phase.
 | 1 — Multi-model gateway (ADR 0009) | DONE (no live provider) | Qwen, Grok, Kimi, MedGemma adapters; registry; eligibility routing; budgets; concurrency; evaluation suite with clinical approval. All providers NOT_CONFIGURED |
 | 2 — Real patient AI | DONE (no live provider) | Report AI response + reviewer queue, preferences and assistant name, stronger emergency detection, operator smoke test (`ai:smoke`). A real answer still needs a business key |
 | 3 — Curated medical knowledge | DONE (no content yet) | Sourced EN/AR articles, editor ≠ clinical approver, immutable versions, Arabic-aware retrieval of live versions only, citations in answers and a source screen. Content must come from the clinical team |
-| 4 — Realtime voice | TODO | |
+| 4 — Realtime voice (ADR 0010) | DONE (no live provider, no device test) | Server relay with ticketed WebSocket, separate voice consent, emergency gate before every answer, barge-in, 30 s block metering with hard stop, audio-token pricing, text-only transcripts; native client in development/preview builds only; production build does not link audio or request the microphone. OpenAI Realtime adapter verified only against a local stand-in; E2E on the web harness only |
 | 5 — Lab and document AI | TODO | |
 | 6 — Health analytics | TODO | |
 | 7 — Clinician copilots | TODO | Needs care relationships (Milestone 3) |

@@ -10,12 +10,14 @@ import { api } from '@/lib/api';
 function ModelRow({ m, canManage, canApproveData }: { m: AiModelAdmin; canManage: boolean; canApproveData: boolean }) {
   const { t, locale } = useI18n();
   const qc = useQueryClient();
-  const [prices, setPrices] = useState({ input: toUsd(m.inputPriceMicros), output: toUsd(m.outputPriceMicros), cache: toUsd(m.cacheReadPriceMicros), source: m.priceSource ?? '' });
+  const voice = m.capabilities.includes('REALTIME_VOICE');
+  const initial = { input: toUsd(m.inputPriceMicros), output: toUsd(m.outputPriceMicros), cache: toUsd(m.cacheReadPriceMicros), audioIn: toUsd(m.audioInputPriceMicros), audioOut: toUsd(m.audioOutputPriceMicros), audioCache: toUsd(m.audioCacheReadPriceMicros), source: m.priceSource ?? '' };
+  const [prices, setPrices] = useState(initial);
   const [dpa, setDpa] = useState('');
   const patch = useMutation({ mutationFn: (body: Record<string, unknown>) => api.aiAdmin.updateModel(m.id, body), onSuccess: () => qc.invalidateQueries({ queryKey: AI_KEY }) });
-  const dirty = prices.input !== toUsd(m.inputPriceMicros) || prices.output !== toUsd(m.outputPriceMicros) || prices.cache !== toUsd(m.cacheReadPriceMicros) || prices.source !== (m.priceSource ?? '');
+  const dirty = (Object.keys(initial) as (keyof typeof initial)[]).some((k) => prices[k] !== initial[k]);
   const editable = canManage && m.provider !== 'SIMULATED';
-  const priceInput = (k: 'input' | 'output' | 'cache', label: string) => (
+  const priceInput = (k: 'input' | 'output' | 'cache' | 'audioIn' | 'audioOut' | 'audioCache', label: string) => (
     <input className="input" style={{ width: 90 }} aria-label={`${label} ${m.modelId}`} inputMode="decimal" disabled={!editable} value={prices[k]} onChange={(e) => setPrices((p) => ({ ...p, [k]: e.target.value }))} />
   );
   return (
@@ -29,9 +31,9 @@ function ModelRow({ m, canManage, canApproveData }: { m: AiModelAdmin; canManage
         </div>
         {m.notes ? <div className="subtle" style={{ maxWidth: 360 }}>{t('aiAdmin.notes')}: {m.notes}</div> : null}
       </td>
-      <td>{priceInput('input', t('aiAdmin.inputPrice'))}</td>
-      <td>{priceInput('output', t('aiAdmin.outputPrice'))}</td>
-      <td>{priceInput('cache', t('aiAdmin.cachePrice'))}</td>
+      <td>{priceInput('input', t('aiAdmin.inputPrice'))}{voice ? <div className="subtle">{t('aiAdmin.audioInputPrice')}<br />{priceInput('audioIn', t('aiAdmin.audioInputPrice'))}</div> : null}</td>
+      <td>{priceInput('output', t('aiAdmin.outputPrice'))}{voice ? <div className="subtle">{t('aiAdmin.audioOutputPrice')}<br />{priceInput('audioOut', t('aiAdmin.audioOutputPrice'))}</div> : null}</td>
+      <td>{priceInput('cache', t('aiAdmin.cachePrice'))}{voice ? <div className="subtle">{t('aiAdmin.audioCachePrice')}<br />{priceInput('audioCache', t('aiAdmin.audioCachePrice'))}</div> : null}</td>
       <td>
         <input className="input" aria-label={`${t('aiAdmin.priceSource')} ${m.modelId}`} disabled={!editable} value={prices.source} onChange={(e) => setPrices((p) => ({ ...p, source: e.target.value }))} />
         <div className="subtle">{m.priceVerifiedAt ? t('aiAdmin.verified', { date: formatDateTime(m.priceVerifiedAt, locale) }) : t('aiAdmin.unverified')}</div>
@@ -60,7 +62,15 @@ function ModelRow({ m, canManage, canApproveData }: { m: AiModelAdmin; canManage
         {editable ? (
           <div className="row">
             {dirty ? (
-              <button className="btn btn-sm btn-primary" disabled={patch.isPending} onClick={() => patch.mutate({ inputPriceMicros: toMicros(prices.input), outputPriceMicros: toMicros(prices.output), cacheReadPriceMicros: toMicros(prices.cache), priceSource: prices.source })}>{t('aiAdmin.save')}</button>
+              <button className="btn btn-sm btn-primary" disabled={patch.isPending} onClick={() =>
+                  patch.mutate({
+                    inputPriceMicros: toMicros(prices.input),
+                    outputPriceMicros: toMicros(prices.output),
+                    cacheReadPriceMicros: toMicros(prices.cache),
+                    ...(voice ? { audioInputPriceMicros: toMicros(prices.audioIn), audioOutputPriceMicros: toMicros(prices.audioOut), audioCacheReadPriceMicros: toMicros(prices.audioCache) } : {}),
+                    priceSource: prices.source,
+                  })
+                }>{t('aiAdmin.save')}</button>
             ) : !m.priceVerifiedAt ? (
               <button className="btn btn-sm btn-secondary" disabled={patch.isPending || m.inputPriceMicros === null || m.outputPriceMicros === null} onClick={() => patch.mutate({ verifyPrice: true })} data-testid={`ai-verify-${m.modelId}`}>{t('aiAdmin.verifyPrice')}</button>
             ) : null}

@@ -52,6 +52,10 @@ export const updateMeBody = z.object({
 });
 export type UpdateMeBody = z.infer<typeof updateMeBody>;
 
+/** Required on the account holder's own (SELF) patient profile — migration 0019. */
+export const SELF_CONTACT_FIELDS = ['GOVERNORATE', 'CITY', 'PHONE'] as const;
+export type SelfContactField = (typeof SELF_CONTACT_FIELDS)[number];
+
 export type MeResponse = {
   user: {
     id: string;
@@ -69,6 +73,11 @@ export type MeResponse = {
     activeRole: (typeof ROLES)[number] | null;
     assistantName: string | null;
     onboardingCompletedAt: string | null;
+    /**
+     * Patients: required details still missing from their own profile (governorate, city / area,
+     * mobile number). Non-empty → the app sends them back to complete onboarding.
+     */
+    missingContactFields: SelfContactField[];
   };
   mfa: { required: boolean; enrolled: boolean; enforcement: 'required' | 'warn' };
   /** Suspended / blocked accounts can only see why, appeal, or delete the account. */

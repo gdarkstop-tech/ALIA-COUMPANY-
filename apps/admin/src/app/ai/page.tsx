@@ -30,6 +30,9 @@ function Providers({ cc, canManage }: { cc: AiControlCentre; canManage: boolean 
                 <td>
                   <span className={`badge tone-${p.configured ? 'success' : 'warning'}`}>{p.configured ? t('aiAdmin.configured') : t('aiAdmin.notConfigured')}</span>
                   {!p.productionAllowed ? <div className="subtle">{t('aiAdmin.devOnly')}</div> : null}
+                  <div className="subtle" data-testid={`ai-provider-realtime-${p.code}`}>
+                    {t('aiAdmin.realtime')}: {p.realtimeAdapter ? (p.realtimeConfigured ? t('aiAdmin.configured') : t('aiAdmin.notConfigured')) : t('aiAdmin.realtimeNoAdapter')}
+                  </div>
                 </td>
                 <td className="mono">{p.envVars.length ? p.envVars.join(' + ') : '—'}</td>
                 <td>

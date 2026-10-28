@@ -56,3 +56,19 @@ export async function grantConsentsApi(ctx: Awaited<ReturnType<typeof apiSession
   const res = await ctx.post('/v1/me/consents', { data: { consents, source: 'web', locale: 'en' } });
   expect(res.ok(), await res.text()).toBeTruthy();
 }
+
+/** The account holder's own profile, with the details onboarding requires (governorate, city, mobile). */
+export async function createSelfProfile(api: Awaited<ReturnType<typeof apiSession>>, displayName: string, phone = '+201000000777') {
+  const existing = ((await (await api.get('/v1/patients')).json()) as { id: string; relationship: string }[]).find((p) => p.relationship === 'SELF');
+  let id = existing?.id;
+  if (!id) {
+    const created = await api.post('/v1/patients', {
+      data: { displayName, dateOfBirth: '1990-05-05', sex: 'FEMALE', relationship: 'SELF', consentBasis: 'SELF', consentAttested: true, consentStatementVersion: 'v1' },
+    });
+    if (!created.ok()) throw new Error(`self profile: ${await created.text()}`);
+    id = (await created.json()).id as string;
+  }
+  const updated = await api.patch(`/v1/patients/${id}`, { data: { governorate: 'CAIRO', city: 'Nasr City', phone } });
+  if (!updated.ok()) throw new Error(`self profile details: ${await updated.text()}`);
+  return id as string;
+}

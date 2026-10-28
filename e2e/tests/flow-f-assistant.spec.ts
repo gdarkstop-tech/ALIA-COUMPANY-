@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiSession, byId, DEMO_PASSWORD, shot, signInMobile } from './helpers';
+import { apiSession, byId, createSelfProfile, DEMO_PASSWORD, shot, signInMobile } from './helpers';
 
 const TESTER = 'ai.tester@demo.ghayarly.test';
 const ADMIN = 'admin.demo@demo.ghayarly.test';
@@ -52,12 +52,7 @@ test.describe('Flow F3 — AI health assistant (internal test account, simulated
     expect(approved.ok(), await approved.text()).toBeTruthy();
     // Start from "not consented", and with a profile of their own (the home screen needs one).
     await setAiConsent(false);
-    if (!(await (await tester.get('/v1/patients')).json()).length) {
-      const created = await tester.post('/v1/patients', {
-        data: { displayName: 'AI Internal Tester', dateOfBirth: '1990-05-05', sex: 'FEMALE', relationship: 'SELF', consentBasis: 'SELF', consentAttested: true, consentStatementVersion: 'v1' },
-      });
-      expect(created.ok(), await created.text()).toBeTruthy();
-    }
+    await createSelfProfile(tester, 'AI Internal Tester');
   });
 
   test.afterAll(async () => {

@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useAssistantStatus } from '@/features/assistant/hooks';
+import { useAssistantStatus, useVoiceStatus } from '@/features/assistant/hooks';
+import { voiceSupported } from '@/features/assistant/voice/audio';
 import { useActivePatient } from '@/features/patient/hooks';
 import { ProfileSwitcher, relationshipLabel } from '@/features/patient/ProfileSwitcher';
 import { MiniProviderCard } from '@/features/provider/ProviderCard';
@@ -26,9 +27,12 @@ export default function PatientHome() {
   const { data: patients, active, setActive } = useActivePatient();
   const dash = useQuery({ queryKey: ['dashboard', 'patient', active?.id], queryFn: () => api.dashboard.patient(active?.id), enabled: Boolean(active) });
   const assistant = useAssistantStatus();
+  const voice = useVoiceStatus(voiceSupported());
   // undefined while loading; null = available. Opening is allowed whenever the server could serve it after consent.
   const assistantReason = assistant.data ? assistant.data.unavailableReason : undefined;
-  const assistantOpenable = assistantReason === null || assistantReason === 'CONSENT_REQUIRED';
+  const voiceReason = voice.data ? voice.data.unavailableReason : undefined;
+  // Text chat or (in builds that ship it) voice: either is reason enough to open the assistant.
+  const assistantOpenable = assistantReason === null || assistantReason === 'CONSENT_REQUIRED' || voiceReason === null || voiceReason === 'VOICE_CONSENT_REQUIRED';
 
   const firstName = (me.data?.profile.displayName ?? '').split(' ')[0] ?? '';
   const d = dash.data;

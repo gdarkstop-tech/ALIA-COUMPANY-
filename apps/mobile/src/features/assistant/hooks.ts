@@ -9,6 +9,11 @@ export function useAssistantStatus() {
   return useQuery({ queryKey: ['ai', 'assistant'], queryFn: () => api.ai.assistant(), staleTime: 30_000 });
 }
 
+/** Voice availability (flag, provider, both consents) and the weekly voice seconds — from the server. */
+export function useVoiceStatus(enabled = true) {
+  return useQuery({ queryKey: ['ai', 'voice'], queryFn: () => api.ai.voice(), staleTime: 30_000, enabled });
+}
+
 export function useConversations(enabled: boolean) {
   return useQuery({ queryKey: ['ai', 'conversations'], queryFn: () => api.ai.conversations(), enabled });
 }

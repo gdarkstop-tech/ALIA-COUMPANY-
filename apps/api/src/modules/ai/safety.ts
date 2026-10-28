@@ -2,13 +2,16 @@
  * Deterministic safety layer around the AI assistant. These rules run in code, before and around
  * the model — the model is never the safety boundary.
  */
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { ageInYears } from '@ghayarly/shared';
 import { and, eq } from 'drizzle-orm';
 import type { Tx } from '../../db/client';
 import { patientHealthEntries, patients } from '../../db/schema';
 
 export const EMERGENCY_NUMBER = '123';
+
+/** Opaque, non-reversible per-person reference for the provider's abuse monitoring (text and voice). */
+export const endUserRefFor = (secret: string, userId: string) => createHmac('sha256', secret).update(`ai-end-user:${userId}`).digest('hex').slice(0, 32);
 
 // Red flags that must never wait for a model's answer (EN + Arabic, MSA and Egyptian forms).
 const EMERGENCY_PATTERNS: RegExp[] = [
@@ -125,8 +128,20 @@ export function citedLabels(answer: string, offered: number): string[] {
   return [...out];
 }
 
+/** Added to the assistant policy for live voice conversations (route patient.voice). */
+export const VOICE_POLICY = `VOICE CONVERSATION RULES (in addition to everything above):
+- You are speaking aloud in a live voice conversation. Answer in two to four short spoken sentences; no lists, headings, markdown, links, symbols or reference labels.
+- Speak the language the person speaks. In Arabic, use clear Modern Standard Arabic that Egyptian listeners follow easily.
+- If you are not sure what the person said, ask them to repeat instead of guessing. Never read out numbers or doses you are unsure you heard correctly.
+- You only receive the person's words; never claim to see, examine or monitor them.
+- If the person may be in danger, tell them to call ${EMERGENCY_NUMBER} now, before anything else.`;
+
 /** Identifies the policy text a model was evaluated under (approvals record it). */
 export const POLICY_VERSION = createHash('sha256').update(ASSISTANT_POLICY).digest('hex').slice(0, 16);
+export const VOICE_POLICY_VERSION = createHash('sha256').update(`${ASSISTANT_POLICY}\n\n${VOICE_POLICY}`).digest('hex').slice(0, 16);
+/** The fixed instructions for a route (text chat or live voice). */
+export const policyFor = (routeKey: string) => (routeKey === 'patient.voice' ? `${ASSISTANT_POLICY}\n\n${VOICE_POLICY}` : ASSISTANT_POLICY);
+export const policyVersionFor = (routeKey: string) => (routeKey === 'patient.voice' ? VOICE_POLICY_VERSION : POLICY_VERSION);
 
 /**
  * The minimum needed to make general information relevant: age band, sex, active allergies,

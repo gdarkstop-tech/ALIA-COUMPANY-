@@ -65,9 +65,10 @@ export default function AiEvaluationPage() {
   const cc = useQuery({ queryKey: AI_KEY, queryFn: () => api.aiAdmin.controlCentre(30), enabled: can('ai.eval.manage') });
   const [editing, setEditing] = useState<AiEvalCase | 'new' | null>(null);
   const [runModel, setRunModel] = useState('');
+  const [runRoute, setRunRoute] = useState<'patient.chat' | 'patient.voice'>('patient.chat');
   const [revokeNote, setRevokeNote] = useState<Record<string, string>>({});
   const review = useMutation({ mutationFn: (v: { id: string; decision: 'REVIEWED' | 'RETIRED' }) => api.aiAdmin.reviewCase(v.id, v.decision), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
-  const start = useMutation({ mutationFn: () => api.aiAdmin.startRun(runModel), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
+  const start = useMutation({ mutationFn: () => api.aiAdmin.startRun(runModel, runRoute), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
   const revoke = useMutation({ mutationFn: (v: { id: string; note: string }) => api.aiAdmin.revokeApproval(v.id, v.note), onSuccess: () => qc.invalidateQueries({ queryKey: EVAL_KEY }) });
   const d = ov.data;
   const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -87,9 +88,19 @@ export default function AiEvaluationPage() {
             <h2 style={{ padding: '12px 16px 0' }}>{t('aiAdmin.runs')}</h2>
             {can('ai.eval.manage') && cc.data ? (
               <div className="row" style={{ padding: '0 16px' }}>
+                <select className="input" aria-label={t('aiAdmin.route')} value={runRoute} onChange={(e) => { setRunRoute(e.target.value as typeof runRoute); setRunModel(''); }} data-testid="ai-run-route">
+                  <option value="patient.chat">patient.chat</option>
+                  <option value="patient.voice">patient.voice</option>
+                </select>
                 <select className="input" aria-label={t('aiAdmin.runModel')} value={runModel} onChange={(e) => setRunModel(e.target.value)} data-testid="ai-run-model">
                   <option value="">{t('aiAdmin.runModel')}</option>
-                  {cc.data.models.filter((m) => cc.data.providers.find((p) => p.code === m.provider)?.configured).map((m) => <option key={m.id} value={m.id}>{m.provider} · {m.modelId}</option>)}
+                  {cc.data.models
+                    .filter((m) => {
+                      const p = cc.data.providers.find((x) => x.code === m.provider);
+                      // Voice models are evaluated through their realtime adapter (text mode).
+                      return runRoute === 'patient.voice' ? m.capabilities.includes('REALTIME_VOICE') && p?.realtimeConfigured : m.capabilities.includes('CHAT') && p?.configured;
+                    })
+                    .map((m) => <option key={m.id} value={m.id}>{m.provider} · {m.modelId}</option>)}
                 </select>
                 <button className="btn btn-primary btn-sm" disabled={!runModel || start.isPending} onClick={() => start.mutate()} data-testid="ai-run-start">{t('aiAdmin.startRun')}</button>
               </div>
@@ -122,7 +133,7 @@ export default function AiEvaluationPage() {
                 {d.approvals.map((a) => (
                   <tr key={a.id}>
                     <td><span className="mono">{a.modelId}</span> <span className="subtle">{a.provider}</span></td>
-                    <td>{t('aiAdmin.approvedFor', { route: a.routeKey })}<div className="subtle">{formatDateTime(a.approvedAt, locale)} · {a.note}</div>{a.policyVersion !== d.currentPolicyVersion ? <div className="subtle">{t('aiAdmin.policyMismatch', { run: a.policyVersion, current: d.currentPolicyVersion })}</div> : null}</td>
+                    <td>{t('aiAdmin.approvedFor', { route: a.routeKey })}<div className="subtle">{formatDateTime(a.approvedAt, locale)} · {a.note}</div>{a.policyVersion !== (d.currentPolicyVersions[a.routeKey] ?? d.currentPolicyVersion) ? <div className="subtle">{t('aiAdmin.policyMismatch', { run: a.policyVersion, current: d.currentPolicyVersions[a.routeKey] ?? d.currentPolicyVersion })}</div> : null}</td>
                     <td>
                       {a.revokedAt ? <span className="subtle">{t('aiAdmin.revoked', { date: formatDateTime(a.revokedAt, locale), note: a.revokeNote ?? '' })}</span> : can('ai.clinical.review') || can('ai.config.manage') ? (
                         <div className="row">

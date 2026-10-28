@@ -147,3 +147,34 @@ describe('patient profiles & family management', () => {
     }
   });
 });
+
+describe("the account holder's own profile requires governorate, city / area and mobile number", () => {
+  it('onboarding cannot be completed without them; once saved they cannot be cleared; family profiles stay optional', async () => {
+    const p = await signUp(app, { role: 'PATIENT', name: 'Required Details' });
+    // No own profile yet: nothing reported missing, but onboarding cannot finish.
+    expect((await p.req({ method: 'GET', url: '/v1/me' })).json.profile.missingContactFields).toEqual([]);
+    expect((await p.req({ method: 'POST', url: '/v1/me/onboarding/complete' })).json.error.code).toBe('PROFILE_INCOMPLETE');
+
+    const self = await p.req({ method: 'POST', url: '/v1/patients', body: { displayName: 'Me', dateOfBirth: '1990-01-01', sex: 'MALE', relationship: 'SELF', consentBasis: 'SELF', ...consent } });
+    expect((await p.req({ method: 'GET', url: '/v1/me' })).json.profile.missingContactFields).toEqual(['GOVERNORATE', 'CITY', 'PHONE']);
+    const blocked = await p.req({ method: 'POST', url: '/v1/me/onboarding/complete' });
+    expect(blocked.status).toBe(422);
+    expect(blocked.json.error).toMatchObject({ code: 'PROFILE_INCOMPLETE', details: { missing: ['GOVERNORATE', 'CITY', 'PHONE'] } });
+
+    await p.req({ method: 'PATCH', url: `/v1/patients/${self.json.id}`, body: { governorate: 'CAIRO', city: 'Nasr City' } });
+    expect((await p.req({ method: 'POST', url: '/v1/me/onboarding/complete' })).json.error.details.missing).toEqual(['PHONE']);
+    expect((await p.req({ method: 'PATCH', url: `/v1/patients/${self.json.id}`, body: { phone: '+201012345678' } })).status).toBe(200);
+    expect((await p.req({ method: 'POST', url: '/v1/me/onboarding/complete' })).json).toEqual({ ok: true });
+    expect((await p.req({ method: 'GET', url: '/v1/me' })).json.profile.missingContactFields).toEqual([]);
+
+    for (const body of [{ phone: null }, { governorate: null }, { city: null }, { city: '   ' }]) {
+      const r = await p.req({ method: 'PATCH', url: `/v1/patients/${self.json.id}`, body });
+      expect(r.json.error?.code, JSON.stringify(body)).toBe('SELF_CONTACT_REQUIRED');
+    }
+    // Changing them is fine; a child's profile needs none of them.
+    expect((await p.req({ method: 'PATCH', url: `/v1/patients/${self.json.id}`, body: { governorate: 'GIZA', city: 'Dokki', phone: '+201112345678' } })).status).toBe(200);
+    const child = await p.req({ method: 'POST', url: '/v1/patients', body: { displayName: 'Kid', dateOfBirth: isoYearsAgo(6), sex: 'FEMALE', relationship: 'CHILD', consentBasis: 'GUARDIAN_OF_MINOR', ...consent } });
+    expect(child.status).toBe(201);
+    expect(child.json.phone).toBeNull();
+  });
+});

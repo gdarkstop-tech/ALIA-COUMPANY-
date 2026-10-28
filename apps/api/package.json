@@ -22,6 +22,7 @@
     "@fastify/cors": "11.3.1",
     "@fastify/helmet": "13.2.0",
     "@fastify/rate-limit": "11.2.1",
+    "@fastify/websocket": "11.3.1",
     "@ghayarly/shared": "workspace:*",
     "@google/genai": "2.28.0",
     "better-auth": "1.7.7",
@@ -31,11 +32,13 @@
     "ioredis": "6.0.0",
     "openai": "7.32.0",
     "pg": "8.23.1",
+    "ws": "8.21.3",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "@types/pg": "^8.15.0",
+    "@types/ws": "8.18.1",
     "pino-pretty": "^13.0.0",
     "tsx": "4.23.15",
     "typescript": "~6.0.3",

@@ -8,7 +8,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { withContext, type RequestContext } from '../../db/client';
 import { aiEvalCases, aiEvalResults, aiEvalRuns } from '../../db/schema';
-import { AiProviderError, type AiProviderCode } from '../../integrations/ai';
+import { AiProviderError, type AiProvider } from '../../integrations/ai';
 import { ASSISTANT_POLICY } from './safety';
 
 export type CheckResult = { name: string; passed: boolean; detail?: string };
@@ -53,8 +53,16 @@ export function evalTurn(prompt: string, context: string | null): string {
  * Executes a run created by app.ai_eval_start, one case at a time, as the administrator who
  * started it. Every answer is recorded (cost from the model's verified price) by the database.
  */
-export async function executeEvaluation(app: FastifyInstance, ctx: RequestContext, runId: string, provider: AiProviderCode, modelId: string, maxOutputTokens: number): Promise<void> {
-  const { db, ai } = app.services;
+export async function executeEvaluation(
+  app: FastifyInstance,
+  ctx: RequestContext,
+  runId: string,
+  complete: AiProvider['complete'],
+  modelId: string,
+  maxOutputTokens: number,
+  system: string = ASSISTANT_POLICY,
+): Promise<void> {
+  const { db } = app.services;
   try {
     const pending = await withContext(db, ctx, (tx) =>
       tx
@@ -74,9 +82,9 @@ export async function executeEvaluation(app: FastifyInstance, ctx: RequestContex
       let checks: CheckResult[] = [{ name: 'provider answered', passed: false }];
       let pass = false;
       try {
-        const r = await ai[provider].complete({
+        const r = await complete({
           model: modelId,
-          system: ASSISTANT_POLICY,
+          system,
           messages: [{ role: 'user', content: evalTurn(c.prompt, c.context) }],
           maxOutputTokens,
           effort: 'medium',

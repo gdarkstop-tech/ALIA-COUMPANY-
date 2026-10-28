@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import { REQUIRED_ACCOUNT_CONSENTS } from '@ghayarly/shared';
@@ -25,6 +26,9 @@ import { complianceRoutes } from './modules/compliance/routes';
 import { billingRoutes } from './modules/billing/routes';
 import { createStores, type Stores } from './integrations/billing';
 import { createAiProviders, type AiProviders } from './integrations/ai';
+import { createRealtimeProviders, type RealtimeProviders } from './integrations/ai/realtime';
+import { voiceRoutes, type VoiceTiming } from './modules/ai/voice';
+import { AI_VOICE_PROTOCOL } from '@ghayarly/shared';
 import { dashboardRoutes } from './modules/dashboard/routes';
 import { devRoutes } from './modules/dev/routes';
 import { meRoutes } from './modules/me/routes';
@@ -43,6 +47,10 @@ export type Services = {
   payments: PaymentGateway;
   stores: Stores;
   ai: AiProviders;
+  /** Realtime voice adapters (only providers with a realtime adapter can be CONFIGURED). */
+  realtime: RealtimeProviders;
+  /** Tests only: shorter voice timers. */
+  voiceTiming?: Partial<VoiceTiming>;
 };
 
 declare module 'fastify' {
@@ -52,7 +60,10 @@ declare module 'fastify' {
 }
 
 /** `overrides` exists for tests only (e.g. a store adapter fed with fixture payloads). */
-export async function buildServer(env: Env, overrides: { stores?: Stores; ai?: Partial<AiProviders> } = {}): Promise<FastifyInstance> {
+export async function buildServer(
+  env: Env,
+  overrides: { stores?: Stores; ai?: Partial<AiProviders>; realtime?: Partial<RealtimeProviders>; voiceTiming?: Partial<VoiceTiming> } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
       env.LOG_LEVEL === 'silent'
@@ -60,7 +71,8 @@ export async function buildServer(env: Env, overrides: { stores?: Stores; ai?: P
         : {
             level: env.LOG_LEVEL,
             // Never log credentials, cookies or authorization material.
-            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'], remove: true },
+            // The voice stream ticket travels as a WebSocket subprotocol: never logged either.
+            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["sec-websocket-protocol"]', 'res.headers["set-cookie"]'], remove: true },
             ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } } : {}),
           },
     // Trust exactly TRUST_PROXY_HOPS proxies (counted from the server), never the whole header.
@@ -77,7 +89,8 @@ export async function buildServer(env: Env, overrides: { stores?: Stores; ai?: P
   const auth = createAuth(env, pools.authPool, messaging);
   const stores = overrides.stores ?? createStores(env);
   const ai: AiProviders = { ...createAiProviders(env), ...overrides.ai };
-  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai });
+  const realtime: RealtimeProviders = { ...createRealtimeProviders(env), ...overrides.realtime };
+  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai, realtime, voiceTiming: overrides.voiceTiming });
 
   const redis = env.REDIS_URL && env.NODE_ENV !== 'test' ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false, lazyConnect: false }) : null;
   redis?.on('error', (err) => app.log.warn({ err: err.message }, 'redis unavailable — rate limiting falls back per request'));
@@ -176,11 +189,17 @@ export async function buildServer(env: Env, overrides: { stores?: Stores; ai?: P
     if (!res.rows[0]?.ok) throw new AppError(403, 'CONSENT_REQUIRED', 'Accept the current Terms of Use and Privacy Policy to continue');
   });
 
+  // WebSocket upgrades (voice relay only). Small frames; the ticket subprotocol is never echoed.
+  await app.register(websocket, {
+    options: { maxPayload: 96 * 1024, handleProtocols: (protocols) => (protocols.has(AI_VOICE_PROTOCOL) ? AI_VOICE_PROTOCOL : false) },
+  });
+
   await registerAuthRoutes(app);
   await app.register(systemRoutes);
   await app.register(meRoutes, { prefix: '/v1' });
   await app.register(accountRoutes, { prefix: '/v1' });
   await app.register(aiRoutes, { prefix: '/v1' });
+  await app.register(voiceRoutes, { prefix: '/v1' });
   await app.register(knowledgeRoutes, { prefix: '/v1' });
   await app.register(adminAiRoutes, { prefix: '/v1/admin/ai' });
   await app.register(complianceRoutes, { prefix: '/v1' });

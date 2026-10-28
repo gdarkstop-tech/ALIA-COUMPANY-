@@ -2,7 +2,8 @@ import { spacing } from '@ghayarly/tokens';
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Switch, View } from 'react-native';
-import { EMERGENCY_NUMBER, useAssistantErrorText, useAssistantPreferences, useAssistantStatus, useConversations, useCreateConversation } from '@/features/assistant/hooks';
+import { EMERGENCY_NUMBER, useAssistantErrorText, useAssistantPreferences, useAssistantStatus, useConversations, useCreateConversation, useVoiceStatus } from '@/features/assistant/hooks';
+import { voiceSupported } from '@/features/assistant/voice/audio';
 import { EmergencyNotice } from '@/features/compliance/Safety';
 import { useActivePatient } from '@/features/patient/hooks';
 import { errorKey } from '@/lib/api';
@@ -24,6 +25,9 @@ export default function AssistantHome() {
   const errorText = useAssistantErrorText();
   const { active } = useActivePatient();
   const [share, setShare] = useState(false);
+  // Voice only where this build can capture audio AND the server says it is available.
+  const voice = useVoiceStatus(voiceSupported());
+  const canTalk = voice.data?.unavailableReason === null || voice.data?.unavailableReason === 'VOICE_CONSENT_REQUIRED';
 
   if (status.isPending) return <LoadingScreen />;
   if (status.error) return <ErrorState message={t(errorKey(status.error))} onRetry={() => void status.refetch()} />;
@@ -94,6 +98,19 @@ export default function AssistantHome() {
             }
           />
           {create.error ? <Notice tone="danger" body={errorText(create.error, allowance)} /> : null}
+        </Card>
+      ) : null}
+
+      {canTalk ? (
+        <Card style={{ gap: spacing.sm }} testID="assistant-voice-card">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <Icon name="mic" color="primary" />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="callout" weight="semibold">{t('assistant.talk')}</Text>
+              <Text variant="footnote" color="textSecondary">{t('assistant.talkBody')}</Text>
+            </View>
+          </View>
+          <Button testID="assistant-talk" variant="secondary" icon="mic" label={t('assistant.talk')} onPress={() => router.push('/patient/assistant/voice' as Href)} />
         </Card>
       ) : null}
 

@@ -9,7 +9,7 @@
  */
 export const LEGAL_DOCUMENT_VERSION = '2026-10-draft';
 export const LEGAL_DOCUMENT_STATUS = 'DRAFT_PENDING_LEGAL_REVIEW' as const;
-export const LEGAL_DOC_IDS = ['privacy', 'terms', 'health-consent', 'medical-disclaimer', 'ai-assistant-consent'] as const;
+export const LEGAL_DOC_IDS = ['privacy', 'terms', 'health-consent', 'medical-disclaimer', 'ai-assistant-consent', 'ai-voice-consent'] as const;
 export type LegalDocId = (typeof LEGAL_DOC_IDS)[number];
 
 type Section = { heading: string; paragraphs: string[] };
@@ -254,6 +254,55 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
             'أسمح لتطبيق غير لي بإرسال ما أكتبه للمساعد — وإذا اخترت ذلك في محادثة ما، ملخص ملف أديره (العمر والجنس والحساسية والأمراض والأدوية المسجلة) — إلى مزوّد ذكاء اصطناعي يعالجه نيابةً عن غير لي لإنتاج الإجابة. [أسماء المزوّدين ومواقع المعالجة وشروط احتفاظهم بالبيانات — يحددها الفريق القانوني قبل الإطلاق.]',
             'محادثاتي مرئية لي وحدي ولا يستطيع الموظفون قراءتها. تُسجَّل أعداد الاستخدام والتكاليف دون محتواها. حذف حسابي يحذف محادثاتي.',
             'هذه الموافقة اختيارية ومنفصلة عن حفظ سجلاتي الصحية، ويمكنني سحبها في أي وقت من "الخصوصية والموافقات"، فيتوقف المساعد عن إرسال أي شيء.',
+          ],
+        },
+      ],
+    },
+  },
+  'ai-voice-consent': {
+    id: 'ai-voice-consent',
+    version: LEGAL_DOCUMENT_VERSION,
+    status: LEGAL_DOCUMENT_STATUS,
+    en: {
+      title: 'Talking to the assistant by voice',
+      summary: 'What happens to your voice when you speak with the assistant.',
+      sections: [
+        {
+          heading: 'How voice works',
+          paragraphs: [
+            'While a voice conversation is open, your microphone audio is streamed to Dress My Wound’s server, which passes it to an AI provider that turns it into text and speaks the answer back. The app never sends your voice directly to the provider.',
+            'Dress My Wound keeps only the written transcript of the conversation (in your conversation history, visible only to you). The audio itself is not recorded or stored by Dress My Wound. [The providers’ own retention of audio — to be confirmed by legal before launch.]',
+            'Each sentence you say is checked for signs of an emergency before the assistant may answer. If one is found, the conversation stops and you are shown how to call 123. Speech recognition can make mistakes, especially with background noise: in an emergency, call 123 yourself.',
+          ],
+        },
+        {
+          heading: 'What you agree to',
+          paragraphs: [
+            'I allow Dress My Wound to stream my voice to an AI provider that processes it on Dress My Wound’s behalf, only while I have a voice conversation open. [Provider names and processing locations — to be confirmed by legal before launch.]',
+            'Voice time counts against my plan’s weekly voice minutes; the remaining time is shown during the conversation.',
+            'This consent is optional, separate from typing to the assistant and from storing my health records. I can withdraw it at any time in Privacy & consent; voice then stops immediately.',
+          ],
+        },
+      ],
+    },
+    ar: {
+      title: 'التحدث مع المساعد بالصوت',
+      summary: 'ماذا يحدث لصوتك عند التحدث مع المساعد.',
+      sections: [
+        {
+          heading: 'كيف تعمل المحادثة الصوتية',
+          paragraphs: [
+            'أثناء فتح محادثة صوتية، يُرسَل صوت الميكروفون إلى خادم غير لي، الذي يمرّره إلى مزوّد ذكاء اصطناعي يحوّله إلى نص ثم ينطق الإجابة. لا يرسل التطبيق صوتك مباشرةً إلى المزوّد.',
+            'يحتفظ غير لي بالنص المكتوب للمحادثة فقط (في سجل محادثاتك، مرئي لك وحدك). لا يسجّل غير لي الصوت نفسه ولا يحفظه. [مدة احتفاظ المزوّدين بالصوت — يحددها الفريق القانوني قبل الإطلاق.]',
+            'تُفحَص كل جملة تقولها بحثاً عن علامات طوارئ قبل أن يُسمح للمساعد بالرد. إذا وُجدت، تتوقف المحادثة ويظهر لك كيف تتصل بالرقم ١٢٣. قد يخطئ التعرف على الكلام، خاصةً مع الضوضاء: في حالات الطوارئ اتصل بالرقم ١٢٣ بنفسك.',
+          ],
+        },
+        {
+          heading: 'ما الذي توافق عليه',
+          paragraphs: [
+            'أسمح لتطبيق غير لي بإرسال صوتي إلى مزوّد ذكاء اصطناعي يعالجه نيابةً عن غير لي، فقط أثناء فتح محادثة صوتية. [أسماء المزوّدين ومواقع المعالجة — يحددها الفريق القانوني قبل الإطلاق.]',
+            'يُحتسب وقت المحادثة الصوتية من دقائق الصوت الأسبوعية في باقتي، ويظهر الوقت المتبقي أثناء المحادثة.',
+            'هذه الموافقة اختيارية ومنفصلة عن الكتابة للمساعد وعن حفظ سجلاتي الصحية، ويمكنني سحبها في أي وقت من "الخصوصية والموافقات"، فتتوقف المحادثة الصوتية فوراً.',
           ],
         },
       ],

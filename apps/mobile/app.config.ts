@@ -66,6 +66,16 @@ const withReleaseHardening: ConfigPlugin = (cfg) =>
 
 const BRAND = { navy: '#0A1F3D', stone: '#FAF7F2', night: '#07152A' } as const;
 
+/**
+ * Realtime voice (ADR 0010) ships only in development and preview builds until it is approved for
+ * launch (ai.voice regulatory evidence, audio privacy disclosures in both stores). Production builds
+ * do not link the audio module (react-native.config.js), declare no microphone purpose string and
+ * keep RECORD_AUDIO blocked — the server-side flag is the second, independent switch.
+ */
+const VOICE = VARIANT !== 'production';
+const MIC_EN = 'Dress My Wound uses the microphone only while you have a voice conversation with the health assistant open. Your voice is not recorded or stored.';
+const MIC_AR = 'يستخدم غير لي الميكروفون فقط أثناء فتح محادثة صوتية مع المساعد الصحي. لا يُسجَّل صوتك ولا يُحفَظ.';
+
 // withReleaseHardening wraps the whole config: its mod is registered before the `plugins` below,
 // so it executes after them (Expo runs mods in reverse registration order) and has the last word.
 export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
@@ -81,8 +91,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
   icon: './assets/icon.png',
   // Localised home-screen name: English "Dress My Wound", Arabic "غير لي".
   locales: {
-    ar: { ios: { CFBundleDisplayName: v.nameAr, CFBundleName: v.nameAr }, android: { app_name: v.nameAr } },
-    en: { ios: { CFBundleDisplayName: v.nameEn, CFBundleName: v.nameEn }, android: { app_name: v.nameEn } },
+    ar: { ios: { CFBundleDisplayName: v.nameAr, CFBundleName: v.nameAr, ...(VOICE ? { NSMicrophoneUsageDescription: MIC_AR } : {}) }, android: { app_name: v.nameAr } },
+    en: { ios: { CFBundleDisplayName: v.nameEn, CFBundleName: v.nameEn, ...(VOICE ? { NSMicrophoneUsageDescription: MIC_EN } : {}) }, android: { app_name: v.nameEn } },
   },
   ios: {
     bundleIdentifier: appId,
@@ -118,6 +128,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
         ['NSPrivacyCollectedDataTypeCrashData'],
         // Store subscription transactions (originalTransactionId, plan, status), linked to the account.
         ['NSPrivacyCollectedDataTypePurchaseHistory'],
+        // Voice builds: audio is streamed to our server and the AI provider during a voice conversation.
+        ...(VOICE ? [['NSPrivacyCollectedDataTypeAudioData']] : []),
       ].map(([type]) => ({
         NSPrivacyCollectedDataType: type!,
         NSPrivacyCollectedDataTypeLinked: type !== 'NSPrivacyCollectedDataTypeCrashData',
@@ -143,7 +155,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.CAMERA',
-      'android.permission.RECORD_AUDIO',
+      // Voice builds need the microphone; production keeps it blocked until voice launches.
+      ...(VOICE ? [] : ['android.permission.RECORD_AUDIO']),
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.MANAGE_EXTERNAL_STORAGE',
@@ -190,6 +203,23 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
     // alternative-billing or external-purchase programmes are used (none apply in Egypt).
     ['expo-iap', { android: { store: 'play' } }],
     ['expo-secure-store', { faceIDPermission: false }],
+    // Voice: microphone + playback only while a conversation is open (no background audio, no
+    // foreground service, no FFmpeg — the stream is raw PCM).
+    ...(VOICE
+      ? [
+          [
+            'react-native-audio-api',
+            {
+              iosMicrophonePermission: MIC_EN,
+              iosBackgroundMode: false,
+              androidPermissions: ['android.permission.RECORD_AUDIO', 'android.permission.MODIFY_AUDIO_SETTINGS'],
+              androidForegroundService: false,
+              androidFSTypes: [],
+              disableFFmpeg: true,
+            },
+          ] as [string, Record<string, unknown>],
+        ]
+      : []),
     'expo-font',
     'expo-localization',
     [
@@ -206,6 +236,8 @@ export default ({ config }: ConfigContext): ExpoConfig => withReleaseHardening({
   extra: {
     supportsRTL: true,
     appVariant: VARIANT,
+    /** The app shows voice only when this build links the audio module (and the server allows it). */
+    voiceEnabled: VOICE,
     ...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),
   },
   experiments: { typedRoutes: false },

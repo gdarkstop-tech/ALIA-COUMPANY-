@@ -49,7 +49,8 @@ export default function Index() {
   if (role === 'PATIENT') {
     if (patients.isPending) return <Splash />;
     if (patients.error) return <ErrorState message={t(errorKey(patients.error))} onRetry={() => void patients.refetch()} />;
-    return <Redirect href={patients.data.length ? '/patient' : '/onboarding/patient'} />;
+    // Governorate, city / area and mobile number are required on their own profile (server-checked).
+    return <Redirect href={patients.data.length && !me.data.profile.missingContactFields.length ? '/patient' : '/onboarding/patient'} />;
   }
   if (role === 'DOCTOR' || role === 'NURSE') {
     if (provider.isPending) return <Splash />;

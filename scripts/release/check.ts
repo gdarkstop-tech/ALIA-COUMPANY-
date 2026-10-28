@@ -122,6 +122,19 @@ check('Android backup disabled (medical data)', cfg.android?.allowBackup === fal
 const blocked: string[] = cfg.android?.blockedPermissions ?? [];
 for (const p of ['ACCESS_BACKGROUND_LOCATION', 'READ_EXTERNAL_STORAGE', 'READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'SYSTEM_ALERT_WINDOW', 'USE_BIOMETRIC', 'com.google.android.gms.permission.AD_ID'])
   check(`Android blocks ${p}`, blocked.some((b) => b.endsWith(p)));
+// Realtime voice ships only in development / preview builds until approved for launch (ADR 0010).
+check('production: no microphone purpose string (voice not launched)', !cfg.ios?.infoPlist?.NSMicrophoneUsageDescription && !JSON.stringify(cfg.locales ?? {}).includes('NSMicrophoneUsageDescription'));
+check('production: Android blocks RECORD_AUDIO', blocked.some((b) => b.endsWith('RECORD_AUDIO')));
+check('production: voice disabled in the app build', cfg.extra?.voiceEnabled === false);
+const linked = JSON.parse(
+  execFileSync('npx', ['expo-modules-autolinking', 'react-native-config', '--json', '--platform', 'android'], {
+    cwd: join(root, 'apps/mobile'),
+    env: { ...process.env, APP_VARIANT: 'production' },
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }),
+);
+check('production: native audio-recording module not linked', !Object.keys(linked.dependencies ?? {}).includes('react-native-audio-api'));
 check('identifier is reverse-DNS', /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(cfg.ios?.bundleIdentifier ?? '') && cfg.ios?.bundleIdentifier === cfg.android?.package);
 
 // ---------------------------------------------------------------- 5. no committed signing material / credentials

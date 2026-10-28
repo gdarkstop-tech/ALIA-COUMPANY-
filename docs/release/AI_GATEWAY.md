@@ -1,12 +1,12 @@
 # DMW Medical AI — gateway status, setup and cost control
 
-**Verified on:** 2026-10-27 · Design: [ADR 0008](../adr/0008-ai-gateway.md), [ADR 0009](../adr/0009-model-registry-routing-evaluation.md)
+**Verified on:** 2026-10-28 · Design: [ADR 0008](../adr/0008-ai-gateway.md), [ADR 0009](../adr/0009-model-registry-routing-evaluation.md), [ADR 0010](../adr/0010-realtime-voice-relay.md)
 
 > **Status:** the multi-provider gateway, model registry, eligibility-based routing, evaluation
-> suite, quotas, budgets, cost metering, admin control centre and the patient text chat are
-> `CODE_READY`. **No AI provider is configured on any environment** — Anthropic, OpenAI, Gemini,
+> suite, quotas, budgets, cost metering, admin control centre, the patient text chat and realtime
+> voice (server relay) are `CODE_READY`. **No AI provider is configured on any environment** — Anthropic, OpenAI, Gemini,
 > Qwen, Grok, Kimi and MedGemma are all `NOT_CONFIGURED` — no model price is verified, no monthly
-> cap is set, no model has patient-data or clinical approval, and `ai.assistant` is OFF. **No real
+> cap is set, no model has patient-data or clinical approval, and `ai.assistant` and `ai.voice` are OFF. **No real
 > AI answer has been produced by this system.** Every run so far used scripted providers in automated
 > tests or the labelled development simulator.
 
@@ -27,10 +27,13 @@
 | Assistant preferences (reply language, detail) and assistant name, sent as validated settings after the fixed policy (they cannot change the rules) | `app.ai_preferences`; mobile Assistant settings | `ai-reports.test.ts` |
 | Deterministic emergency detection (EN + Egyptian/MSA Arabic, typographic apostrophes, diacritics) before any model call | `apps/api/src/modules/ai/safety.ts` | `ai-reports.test.ts` (23 emergency and 6 routine phrases) — **not a clinical validation** of coverage |
 | Curated medical knowledge: editors write sourced articles (EN/AR); a clinical reviewer who did not write the revision approves it into an immutable version; drafts and retired articles are never retrieved; Arabic-aware full-text retrieval; the assistant receives approved passages as labelled data and cites them as [K1]…; citations are stored and shown with their source | migration 0016; `apps/api/src/modules/knowledge/`; Admin → AI → Medical knowledge; mobile source screen | `test/knowledge.test.ts` (6), E2E F3 (citation → source) — retrieval quality is **not** clinically evaluated |
+| Realtime voice (route `patient.voice`): server-side WebSocket relay with the business key; single-use 60 s ticket sent as a subprotocol (hash stored, header redacted from logs, origin checked); separate voice consent; every transcribed turn checked for emergencies **before** the model may answer (provider VAD never answers on its own); barge-in with truncation to what was heard; seconds reserved in 30 s blocks with a hard stop; ≤ 10 min per session; settlement with audio/text/cached tokens + input transcription priced from the registry; reaper for abandoned sessions; only text transcripts stored (`channel = VOICE`) | migrations 0017–0018; `apps/api/src/modules/ai/voice.ts`; `apps/api/src/integrations/ai/realtime/` | `test/ai-voice.test.ts` (13: gates, tickets, emergency EN/AR, interruption, refusal, quota hard stop, block extension and consent withdrawal, idle, disconnect, concurrency, isolation), `test/ai-realtime-adapter.test.ts` (7: OpenAI Realtime wire format against a **local stand-in server**, usage aggregation, handshake errors, text-mode evaluation, simulator) |
+| Voice client: microphone capture and playback (native: `react-native-audio-api`, development / preview builds only; web harness: Web Audio), live transcript, remaining time, stop answer, end, emergency card, voice consent inline; voice-marked transcripts in the conversation | `apps/mobile/src/features/assistant/voice/`, `apps/mobile/src/app/patient/assistant/voice.tsx` | E2E `flow-f-voice` (**web harness only**, Chromium fake microphone fed a synthetic signal + simulator). **Not run on any iOS or Android device.** |
 | Operator smoke test with a real key: one short non-patient question, prints outcome, usage and latency | `pnpm --filter @ghayarly/api ai:smoke -- --provider <CODE> --model <id>` | Run on 2026-10-27: `NOT_CONFIGURED` for every provider (no keys) |
 
-Not built yet (later slices): realtime voice, lab/document scanning, health analytics, clinician
-copilots, product knowledge, wound and imaging research. No medical articles are seeded: the
+Not built yet (later slices): lab/document scanning, health analytics, clinician copilots, product
+knowledge, wound and imaging research. Voice gaps: no Gemini Live / xAI voice adapter (they are
+`NOT_CONFIGURED` for voice), no approved-knowledge retrieval in voice answers, no device testing. No medical articles are seeded: the
 clinical team must write (or import) and approve them, each with its real source. MedSigLIP (image/text embeddings, research use) and MedASR (English medical dictation)
 have no adapter yet.
 
@@ -96,6 +99,17 @@ have no adapter yet.
 - Intended first use: structured extraction from lab reports (later slice), only after evaluation on
   that task. It is not routed to multi-turn patient chat by default.
 
+### Realtime voice specifics
+- Uses the OpenAI key (`AI_OPENAI_API_KEY`); no extra secret. Models seeded inactive/unverified:
+  `gpt-realtime-2.1` and `gpt-realtime-2.1-mini` (text **and audio** prices from the pricing page,
+  2026-10-27) and `gpt-4o-mini-transcribe` (input transcription, needed for the emergency check and
+  the transcript). Verify all three, approve data processing, run the evaluation on route
+  `patient.voice` (text mode, voice policy), clinically approve, add candidates, enable the route.
+- Launch also needs: `ai.voice` evidence, the voice notice reviewed by legal (provider audio retention),
+  App Store / Play disclosures for audio, a production build variant that links the audio module
+  (today only development / preview builds do), device testing (echo, Bluetooth, Android audio), and
+  an Arabic (Egyptian) speech-recognition and emergency-detection evaluation on real speech.
+
 ## 3. Cost metering
 
 - Cost per request = provider-reported tokens × verified price of the model that served it (input,
@@ -104,5 +118,12 @@ have no adapter yet.
 - Refusals and failures release the allowance; emergencies never reach a model.
 - Caps are checked when a request is reserved, so requests already in flight can exceed a cap by at
   most one answer each.
+- Voice: cost = text, audio and cached tokens × the model's verified text/audio prices + input
+  transcription tokens × the transcription model's price (cost marked *estimated* while that row is
+  unverified). **Estimate, not measured** (assumes ~600 audio tokens per minute of the person
+  speaking and ~1,200 per minute of the assistant speaking — confirm against real usage):
+  `gpt-realtime-2.1-mini` ≈ US$0.02–0.05 per conversation minute; `gpt-realtime-2.1` ≈ US$0.10–0.20;
+  transcription ≈ US$0.003 per minute. Weekly allowance ceilings per person with mini: Silver 3 min ≈
+  ≤ US$0.15, Gold 20 min ≈ ≤ US$1.00, Platinum 45 min ≈ ≤ US$2.25 (about 3–4× with the full model).
 - **Missing billing data:** no verified prices, no caps, no provider invoices to reconcile against;
   Kimi, Qwen and MedGemma prices are unknown. Prices are not assumed free and are not final until verified.

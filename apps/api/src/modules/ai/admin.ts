@@ -60,7 +60,7 @@ import { notFound, unprocessable } from '../../lib/errors';
 import { contextFor, inContext, requireAnyPermission, requirePermission } from '../../lib/principal';
 import { parse } from '../../lib/validate';
 import { executeEvaluation } from './evaluation';
-import { POLICY_VERSION } from './safety';
+import { policyFor, policyVersionFor } from './safety';
 
 const iso = (v: string | null) => (v ? new Date(v).toISOString() : null);
 const uuidParam = z.object({ id: z.string().uuid() });
@@ -75,6 +75,9 @@ function modelDto(m: typeof aiModels.$inferSelect, approvals: (typeof aiModelRou
     inputPriceMicros: m.inputPriceMicros,
     outputPriceMicros: m.outputPriceMicros,
     cacheReadPriceMicros: m.cacheReadPriceMicros,
+    audioInputPriceMicros: m.audioInputPriceMicros,
+    audioOutputPriceMicros: m.audioOutputPriceMicros,
+    audioCacheReadPriceMicros: m.audioCacheReadPriceMicros,
     priceSource: m.priceSource,
     priceVerifiedAt: iso(m.priceVerifiedAt),
     active: m.active,
@@ -109,7 +112,7 @@ function caseDto(c: typeof aiEvalCases.$inferSelect, me: string): AiEvalCase {
 }
 
 export async function adminAiRoutes(app: FastifyInstance) {
-  const { ai, env } = app.services;
+  const { ai, env, realtime } = app.services;
 
   async function controlCentre(tx: Tx, days: number): Promise<AiControlCentre> {
     const models = await tx.select().from(aiModels).orderBy(asc(aiModels.provider), asc(aiModels.modelId));
@@ -139,7 +142,14 @@ export async function adminAiRoutes(app: FastifyInstance) {
     const byId = new Map(models.map((m) => [m.id, m]));
 
     return {
-      providers: AI_PROVIDERS.map((code) => ({ code, configured: ai[code].status === 'CONFIGURED', productionAllowed: code !== 'SIMULATED', envVars: PROVIDER_ENV_VARS[code] })),
+      providers: AI_PROVIDERS.map((code) => ({
+        code,
+        configured: ai[code].status === 'CONFIGURED',
+        realtimeConfigured: realtime[code].status === 'CONFIGURED',
+        realtimeAdapter: code === 'OPENAI' || code === 'SIMULATED',
+        productionAllowed: code !== 'SIMULATED',
+        envVars: PROVIDER_ENV_VARS[code],
+      })),
       models: models.map((m) => modelDto(m, approvals)),
       routes: routes.map(({ r, flag }) => ({
         key: r.key,
@@ -162,7 +172,8 @@ export async function adminAiRoutes(app: FastifyInstance) {
             const blockers: AiRouteCandidate['blockers'] = [];
             if (!c.enabled) blockers.push('DISABLED');
             if (!m.active) blockers.push('MODEL_INACTIVE');
-            if (ai[m.provider].status !== 'CONFIGURED') blockers.push('PROVIDER_NOT_CONFIGURED');
+            // Voice routes need the provider's realtime adapter, not only its text key.
+            if ((r.requiredCapability === 'REALTIME_VOICE' ? realtime : ai)[m.provider].status !== 'CONFIGURED') blockers.push('PROVIDER_NOT_CONFIGURED');
             if (!m.capabilities.includes(r.requiredCapability)) blockers.push('CAPABILITY_MISSING');
             if (r.carriesPatientData && m.provider !== 'SIMULATED' && !m.patientDataApprovedAt) blockers.push('NO_PATIENT_DATA_APPROVAL');
             if (r.requireClinicalApproval && !approvals.some((a) => a.routeKey === r.key && a.model === m.id)) blockers.push('NO_CLINICAL_APPROVAL');
@@ -210,6 +221,9 @@ export async function adminAiRoutes(app: FastifyInstance) {
           inputPriceMicros: b.inputPriceMicros,
           outputPriceMicros: b.outputPriceMicros,
           cacheReadPriceMicros: b.cacheReadPriceMicros ?? null,
+          audioInputPriceMicros: b.audioInputPriceMicros ?? null,
+          audioOutputPriceMicros: b.audioOutputPriceMicros ?? null,
+          audioCacheReadPriceMicros: b.audioCacheReadPriceMicros ?? null,
           priceSource: b.priceSource,
           capabilities: b.capabilities,
           medicalSpecialized: b.medicalSpecialized,
@@ -386,7 +400,8 @@ export async function adminAiRoutes(app: FastifyInstance) {
         runs: await Promise.all(runs.map((r) => runDto(tx, r))),
         approvals: approvals.map(({ a, provider, modelId }) => ({ id: a.id, routeKey: a.routeKey, modelRef: a.model, modelId, provider, runId: a.runId, policyVersion: a.policyVersion, note: a.note, approvedAt: iso(a.approvedAt)!, revokedAt: iso(a.revokedAt), revokeNote: a.revokeNote })),
         thresholds: t!.value,
-        currentPolicyVersion: POLICY_VERSION,
+        currentPolicyVersion: policyVersionFor('patient.chat'),
+        currentPolicyVersions: { 'patient.chat': policyVersionFor('patient.chat'), 'patient.voice': policyVersionFor('patient.voice') },
       };
     });
   });
@@ -430,15 +445,18 @@ export async function adminAiRoutes(app: FastifyInstance) {
     const started = await inContext(request, principal, async (tx) => {
       const [m] = await tx.select().from(aiModels).where(eq(aiModels.id, modelId));
       if (!m) throw notFound('Model');
-      if (ai[m.provider].status !== 'CONFIGURED') throw unprocessable('AI_PROVIDER_NOT_CONFIGURED', `${m.provider} is not configured on this server`);
       const [route] = await tx.select().from(aiRoutes).where(eq(aiRoutes.key, routeKey));
       if (!route) throw notFound('Route');
-      const r = await tx.execute<{ id: string }>(sql`select app.ai_eval_start(${modelId}::uuid, ${routeKey}, ${POLICY_VERSION}) as id`);
+      // Voice models are evaluated in text mode over the same realtime interface they serve with.
+      const voice = route.requiredCapability === 'REALTIME_VOICE';
+      const impl = voice ? { complete: realtime[m.provider].completeText.bind(realtime[m.provider]), status: realtime[m.provider].status } : ai[m.provider];
+      if (impl.status !== 'CONFIGURED') throw unprocessable('AI_PROVIDER_NOT_CONFIGURED', `${m.provider} is not configured on this server${voice ? ' for realtime voice' : ''}`);
+      const r = await tx.execute<{ id: string }>(sql`select app.ai_eval_start(${modelId}::uuid, ${routeKey}, ${policyVersionFor(routeKey)}) as id`);
       const [run] = await tx.select().from(aiEvalRuns).where(eq(aiEvalRuns.id, r.rows[0]!.id));
-      return { run: run!, provider: m.provider, model: m.modelId, maxTokens: route.maxOutputTokens };
+      return { run: run!, complete: impl.complete, model: m.modelId, maxTokens: route.maxOutputTokens };
     });
     // Runs in the background as the administrator who started it; progress is visible in the console.
-    void executeEvaluation(app, contextFor(request, principal), started.run.id, started.provider, started.model, started.maxTokens);
+    void executeEvaluation(app, contextFor(request, principal), started.run.id, started.complete, started.model, started.maxTokens, policyFor(routeKey));
     return reply.status(202).send(await inContext(request, principal, (tx) => runDto(tx, started.run)));
   });
 

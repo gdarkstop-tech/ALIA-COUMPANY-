@@ -33,6 +33,12 @@ test('Flow A — patient journey with family management and discovery', async ({
   await expect(byId(page, 'patient-onboarding')).toBeVisible();
   await byId(page, 'onb-dob').fill('19900315');
   await expect(byId(page, 'onb-dob')).toHaveValue('1990-03-15');
+  // Governorate, city / area and mobile number are required.
+  await expect(byId(page, 'onboarding-next')).toHaveAttribute('aria-disabled', 'true');
+  await byId(page, 'onb-governorate').click();
+  await byId(page, 'onb-governorate-option-CAIRO').click();
+  await byId(page, 'onb-city').fill('Nasr City');
+  await byId(page, 'onb-phone').fill('01012345678');
   // Explicit, separate health-data consent before any health information is stored.
   await expect(byId(page, 'onboarding-next')).toHaveAttribute('aria-disabled', 'true');
   await byId(page, 'health-consent').click();

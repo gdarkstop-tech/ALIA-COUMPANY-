@@ -66,6 +66,8 @@ import type {
   AiEvalRun,
   AiEvaluationOverview,
   AiPreferences,
+  AiVoiceSessionStart,
+  AiVoiceStatus,
   AiReportDetail,
   AiReportListItem,
   KnowledgeArticleAdmin,
@@ -239,6 +241,15 @@ export function createApiClient(options: ApiClientOptions) {
       preferences: () => get<AiPreferences>('/v1/ai/preferences'),
       setPreferences: (body: Partial<Pick<AiPreferences, 'replyLanguage' | 'detailLevel'>>) => put<AiPreferences>('/v1/ai/preferences', body),
       report: (messageId: string, body: { reason: string; note?: string; includeQuestion: boolean }) => post<{ id: string }>(`/v1/ai/messages/${messageId}/report`, body),
+      /** Realtime voice: availability (weekly voice seconds) and a session with a single-use stream ticket. */
+      voice: () => get<AiVoiceStatus>('/v1/ai/voice'),
+      startVoice: (body: { conversationId?: string } = {}) => post<AiVoiceSessionStart>('/v1/ai/voice/sessions', body),
+      /** WebSocket URL of a session's stream (the ticket goes in the subprotocols, never in the URL). */
+      voiceStreamUrl: (streamPath: string) => {
+        const u = new URL(streamPath, options.baseUrl);
+        u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+        return u.toString();
+      },
     },
     /** Clinically approved knowledge versions (as cited by the assistant). */
     knowledge: {

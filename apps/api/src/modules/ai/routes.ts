@@ -6,7 +6,6 @@
  *   3. Call the provider outside any database transaction (fallback model on provider failure).
  *   4. Settle with the provider's reported usage (cost from verified prices) — or release.
  */
-import { createHmac } from 'node:crypto';
 import {
   aiPreferencesBody,
   aiReportBody,
@@ -33,7 +32,7 @@ import { inContext, requirePrincipal, type Principal } from '../../lib/principal
 import { sessionKey } from '../../lib/rateLimitKey';
 import { parse } from '../../lib/validate';
 import { retrieveKnowledge, type KnowledgePassage } from '../knowledge/routes';
-import { ASSISTANT_POLICY, citedLabels, emergencyGuidance, looksLikeEmergency, patientSummary, preferenceContext, referenceContext, refusalNotice, replyLocale } from './safety';
+import { ASSISTANT_POLICY, citedLabels, emergencyGuidance, endUserRefFor, looksLikeEmergency, patientSummary, preferenceContext, referenceContext, refusalNotice, replyLocale } from './safety';
 
 const ROUTE = 'patient.chat';
 const HISTORY_MESSAGES = 20;
@@ -45,10 +44,10 @@ type Candidate = { provider: AiProviderCode; modelId: string; effort: 'low' | 'm
 type Reservation = { reservation_id: string; candidates: Candidate[]; max_output_tokens: number };
 
 /** The providers this server can call, as a PostgreSQL array literal for the router. */
-const providerArray = (codes: AiProviderCode[]) => sql`${`{${codes.join(',')}}`}::app.ai_provider[]`;
+export const providerArray = (codes: AiProviderCode[]) => sql`${`{${codes.join(',')}}`}::app.ai_provider[]`;
 
 function messageDto(m: typeof aiMessages.$inferSelect, reported = false, citations: AiCitation[] = []): AiChatMessage {
-  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], content: m.content, createdAt: iso(m.createdAt), reported, citations };
+  return { id: m.id, role: m.role as 'user' | 'assistant', kind: m.kind as AiChatMessage['kind'], channel: m.channel as AiChatMessage['channel'], content: m.content, createdAt: iso(m.createdAt), reported, citations };
 }
 
 async function citationsFor(tx: Tx, messageIds: string[]): Promise<Map<string, AiCitation[]>> {
@@ -69,15 +68,15 @@ async function citationsFor(tx: Tx, messageIds: string[]): Promise<Map<string, A
   return out;
 }
 
-async function preferences(tx: Tx, userId: string): Promise<AiPreferences> {
+export async function preferences(tx: Tx, userId: string): Promise<AiPreferences> {
   const [p] = await tx.select().from(aiPreferences).where(eq(aiPreferences.userId, userId));
   const [u] = await tx.select({ name: userProfiles.assistantName }).from(userProfiles).where(eq(userProfiles.userId, userId));
   return { replyLanguage: (p?.replyLanguage ?? 'auto') as AiPreferences['replyLanguage'], detailLevel: (p?.detailLevel ?? 'brief') as AiPreferences['detailLevel'], assistantName: u?.name ?? null };
 }
 
-async function allowance(tx: Tx): Promise<AiAllowance | null> {
+export async function allowance(tx: Tx, route = ROUTE): Promise<AiAllowance | null> {
   const r = await tx.execute<{ metric: AiAllowance['metric']; weekly_limit: number; used: number; resets_at: string; tier: AiAllowance['tier']; plan: AiAllowance['plan'] }>(
-    sql`select * from app.ai_allowance(${ROUTE})`,
+    sql`select * from app.ai_allowance(${route})`,
   );
   const a = r.rows[0];
   return a ? { metric: a.metric, weeklyLimit: a.weekly_limit, used: a.used, remaining: Math.max(0, a.weekly_limit - a.used), resetsAt: iso(a.resets_at), tier: a.tier, plan: a.plan } : null;
@@ -85,8 +84,7 @@ async function allowance(tx: Tx): Promise<AiAllowance | null> {
 
 export async function aiRoutes(app: FastifyInstance) {
   const { ai, env } = app.services;
-  /** Opaque, non-reversible per-person reference for the provider's abuse monitoring. */
-  const endUserRef = (userId: string) => createHmac('sha256', env.BETTER_AUTH_SECRET).update(`ai-end-user:${userId}`).digest('hex').slice(0, 32);
+  const endUserRef = (userId: string) => endUserRefFor(env.BETTER_AUTH_SECRET, userId);
 
   async function assistantStatus(request: FastifyRequest, principal: Principal): Promise<AiAssistantStatus> {
     return inContext(request, principal, async (tx) => {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { API_URL, apiSession, byId, grantConsentsApi, shot, signInMobile, unique } from './helpers';
+import { API_URL, apiSession, byId, createSelfProfile, grantConsentsApi, shot, signInMobile, unique } from './helpers';
 
 /**
  * Flow F — Privacy & account deletion (App Store 5.1.1(v) / Google Play account deletion):
@@ -12,11 +12,8 @@ test('Flow F — privacy center and in-app account deletion', async ({ page }) =
   const api = await apiSession(email, password, { signUp: true, name: 'Privacy Tester' });
   await grantConsentsApi(api, true);
   expect((await api.post('/v1/me/roles', { data: { role: 'PATIENT' } })).ok()).toBeTruthy();
-  const created = await api.post('/v1/patients', {
-    data: { displayName: 'Privacy Tester', dateOfBirth: '1991-02-02', sex: 'FEMALE', relationship: 'SELF', consentBasis: 'SELF', consentAttested: true, consentStatementVersion: 'v1' },
-  });
-  expect(created.ok(), await created.text()).toBeTruthy();
-  await api.post('/v1/me/onboarding/complete');
+  await createSelfProfile(api, 'Privacy Tester');
+  expect((await api.post('/v1/me/onboarding/complete')).ok()).toBeTruthy();
 
   await signInMobile(page, email, password);
   await byId(page, 'tab-me').click();

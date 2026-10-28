@@ -2,7 +2,7 @@ import { BLOOD_TYPES, GOVERNORATES, HEALTH_ENTRY_KINDS, type BloodType, type Gov
 import { radii, spacing } from '@ghayarly/tokens';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { EG_PHONE_RE, normalizeEgyptPhone } from '@/features/auth/authErrors';
@@ -68,10 +68,29 @@ export default function PatientOnboarding() {
   const [healthConsent, setHealthConsent] = useState(false);
 
   const displayName = name || me.data?.user.name || '';
+  // Existing account sent back to complete required details: finish right after step 1.
+  const completingDetails = Boolean(self && me.data?.profile.onboardingCompletedAt);
+  const contactComplete = Boolean(governorate && city.trim().length >= 2 && phone.trim());
+
+  // Prefill from the saved profile and from the verified sign-in number (never overwrite typing).
+  useEffect(() => {
+    if (self) {
+      setDob((v) => v || self.dateOfBirth);
+      setSex(self.sex);
+      setGovernorate((v) => v ?? self.governorate);
+      setCity((v) => v || self.city || '');
+      setPhone((v) => v || self.phone || '');
+    }
+  }, [self]);
+  useEffect(() => {
+    if (me.data?.user.phoneNumber && me.data.user.phoneNumberVerified) setPhone((v) => v || me.data!.user.phoneNumber!);
+  }, [me.data]);
 
   const saveStep1 = async () => {
     if (!isValidIsoDate(dob) || dob > new Date().toISOString().slice(0, 10)) return setError(t('errors.invalidDate'));
-    if (phone && !EG_PHONE_RE.test(normalizeEgyptPhone(phone))) return setError(t('errors.invalidPhone'));
+    // Governorate, city / area and mobile number are required (also enforced by the server).
+    if (!contactComplete) return setError(t('onboarding.contactRequired'));
+    if (!EG_PHONE_RE.test(normalizeEgyptPhone(phone))) return setError(t('errors.invalidPhone'));
     if (needsHealthConsent && !healthConsent) return setError(t('privacy.healthConsentRequired'));
     setBusy(true);
     setError(null);
@@ -84,9 +103,14 @@ export default function PatientOnboarding() {
         const created = await api.patients.create({ displayName: displayName.trim(), dateOfBirth: dob, sex, relationship: 'SELF', consentBasis: 'SELF', consentAttested: true, consentStatementVersion: FAMILY_CONSENT_VERSION });
         id = created.id;
       }
-      await api.patients.update(id, { governorate, city: city.trim() || null, phone: phone ? normalizeEgyptPhone(phone) : null });
+      await api.patients.update(id, { governorate, city: city.trim(), phone: normalizeEgyptPhone(phone) });
       setActivePatientId(id);
       await qc.invalidateQueries({ queryKey: ['patients'] });
+      if (completingDetails) {
+        await qc.invalidateQueries();
+        router.replace('/patient');
+        return;
+      }
       setStep(1);
     } catch (e) {
       setError(t(errorKey(e)));
@@ -157,7 +181,7 @@ export default function PatientOnboarding() {
       }
       footer={
         step === 0 ? (
-          <Button testID="onboarding-next" label={t('common.continue')} onPress={() => void saveStep1()} loading={busy} disabled={!displayName.trim() || !dob || (needsHealthConsent && !healthConsent)} />
+          <Button testID="onboarding-next" label={t('common.continue')} onPress={() => void saveStep1()} loading={busy} disabled={!displayName.trim() || !dob || !contactComplete || (needsHealthConsent && !healthConsent)} />
         ) : step === 1 ? (
           <View style={{ gap: spacing.sm }}>
             <Button testID="onboarding-next" label={t('common.continue')} onPress={() => void saveStep2()} loading={busy} />
@@ -193,9 +217,10 @@ export default function PatientOnboarding() {
               {t('onboarding.sexHint')}
             </Text>
           </View>
-          <Select label={t('onboarding.governorate')} optional value={governorate} onChange={setGovernorate} options={GOVERNORATES.map((g) => ({ value: g, label: t(`governorate.${g}`) }))} />
-          <TextField label={t('onboarding.city')} optional value={city} onChangeText={setCity} />
-          <TextField label={t('auth.phone')} optional value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+2010…" ltr />
+          {completingDetails ? <Notice tone="info" body={t('onboarding.completeDetails')} testID="onb-complete-details" /> : null}
+          <Select testID="onb-governorate" label={t('onboarding.governorate')} value={governorate} onChange={setGovernorate} options={GOVERNORATES.map((g) => ({ value: g, label: t(`governorate.${g}`) }))} />
+          <TextField testID="onb-city" label={t('onboarding.city')} value={city} onChangeText={setCity} maxLength={80} />
+          <TextField testID="onb-phone" label={t('auth.phone')} hint={t('onboarding.phoneHint')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+2010…" autoComplete="tel" ltr />
           {needsHealthConsent ? (
             <Card testID="health-consent-card" style={{ gap: spacing.sm }}>
               <Text variant="callout" weight="semibold">{t('privacy.healthConsentTitle')}</Text>

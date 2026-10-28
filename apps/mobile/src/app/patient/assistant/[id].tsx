@@ -3,7 +3,8 @@ import { radii, spacing, typography } from '@ghayarly/tokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, TextInput, View } from 'react-native';
-import { EMERGENCY_NUMBER, MAX_CHARS, useAssistantErrorText, useAssistantStatus, useConversation, useDeleteConversation, useReportAnswer, useSendMessage } from '@/features/assistant/hooks';
+import { EMERGENCY_NUMBER, MAX_CHARS, useAssistantErrorText, useAssistantStatus, useConversation, useDeleteConversation, useReportAnswer, useSendMessage, useVoiceStatus } from '@/features/assistant/hooks';
+import { voiceSupported } from '@/features/assistant/voice/audio';
 import { usePatients } from '@/features/patient/hooks';
 import { errorKey } from '@/lib/api';
 import { useI18n } from '@/providers/i18n';
@@ -19,6 +20,7 @@ function Bubble({ m, onReport }: { m: AiChatMessage; onReport?: () => void }) {
   const background = mine ? colors.primary : emergency ? colors.dangerSoft : colors.surface;
   return (
     <View testID={`assistant-message-${m.role}-${m.kind}`} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '88%', gap: spacing.xs }}>
+      {m.channel === 'VOICE' && m.kind !== 'EMERGENCY_GUIDANCE' ? <Badge tone="neutral" icon="mic" label={t('assistant.voiceBadge')} /> : null}
       {m.kind !== 'MESSAGE' ? (
         <Badge
           tone={emergency ? 'danger' : m.kind === 'SIMULATED' ? 'demo' : 'neutral'}
@@ -65,6 +67,8 @@ export default function AssistantChat() {
   const router = useRouter();
   const conversation = useConversation(id);
   const status = useAssistantStatus();
+  const voice = useVoiceStatus(voiceSupported());
+  const canTalk = voice.data?.unavailableReason === null || voice.data?.unavailableReason === 'VOICE_CONSENT_REQUIRED';
   const patients = usePatients();
   const send = useSendMessage(id ?? '');
   const remove = useDeleteConversation();
@@ -122,9 +126,16 @@ export default function AssistantChat() {
           title={c.title}
           subtitle={shared ? t('assistant.sharingProfile', { name: shared.relationship === 'SELF' ? t('family.me') : shared.displayName }) : t('assistant.subtitle')}
           right={
-            <PressableScale testID="assistant-delete" accessibilityRole="button" accessibilityLabel={t('assistant.deleteChat')} onPress={() => setConfirmDelete(true)} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="trash-2" color="danger" />
-            </PressableScale>
+            <View style={{ flexDirection: 'row' }}>
+              {canTalk ? (
+                <PressableScale testID="assistant-continue-voice" accessibilityRole="button" accessibilityLabel={t('assistant.continueByVoice')} onPress={() => router.push({ pathname: '/patient/assistant/voice', params: { conversationId: c.id } })} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="mic" />
+                </PressableScale>
+              ) : null}
+              <PressableScale testID="assistant-delete" accessibilityRole="button" accessibilityLabel={t('assistant.deleteChat')} onPress={() => setConfirmDelete(true)} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="trash-2" color="danger" />
+              </PressableScale>
+            </View>
           }
         />
       }
@@ -174,7 +185,7 @@ export default function AssistantChat() {
         ))}
         {pending ? (
           <>
-            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', content: pending, createdAt: new Date().toISOString(), reported: false, citations: [] }} />
+            <Bubble m={{ id: 'pending', role: 'user', kind: 'MESSAGE', channel: 'TEXT', content: pending, createdAt: new Date().toISOString(), reported: false, citations: [] }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} testID="assistant-thinking">
               <ActivityIndicator color={colors.primary} />
               <Text variant="footnote" color="textSecondary">{t('assistant.sending')}</Text>
