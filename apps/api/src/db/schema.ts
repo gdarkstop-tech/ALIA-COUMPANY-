@@ -63,13 +63,13 @@ export const statusReasonEnum = appSchema.enum('status_reason', [
 export const statusActionEnum = appSchema.enum('status_action', ['SUSPEND', 'BLOCK', 'REACTIVATE', 'RESTRICT_BOOKINGS', 'LIFT_BOOKING_RESTRICTION', 'APPEAL_GRANTED']);
 export const appealStatusEnum = appSchema.enum('appeal_status', ['OPEN', 'GRANTED', 'DENIED', 'WITHDRAWN']);
 export const aiProviderEnum = appSchema.enum('ai_provider', ['ANTHROPIC', 'OPENAI', 'GEMINI', 'SIMULATED', 'QWEN', 'GROK', 'KIMI', 'MEDGEMMA']);
-export const aiMetricEnum = appSchema.enum('ai_metric', ['CHAT_MESSAGES', 'ANALYSES', 'VOICE_SECONDS']);
+export const aiMetricEnum = appSchema.enum('ai_metric', ['CHAT_MESSAGES', 'ANALYSES', 'VOICE_SECONDS', 'CLINICAL_DRAFTS']);
 export const aiModelTierEnum = appSchema.enum('ai_model_tier', ['BASIC', 'ADVANCED', 'PREMIUM']);
 export const commerceEventTypeEnum = appSchema.enum('commerce_event_type', ['PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_PREVIEW', 'ORDER_PAID', 'ORDER_REFUNDED']);
 export const ledgerEntryTypeEnum = appSchema.enum('ledger_entry_type', ['VISIT_EARNING', 'PLATFORM_FEE', 'ADJUSTMENT', 'PAYOUT']);
 export const ledgerStatusEnum = appSchema.enum('ledger_status', ['PENDING', 'AVAILABLE', 'PAID_OUT']);
 export const accountKindEnum = appSchema.enum('account_kind', ['STANDARD', 'REVIEW', 'INTERNAL_TEST']);
-export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING', 'AI_VOICE_PROCESSING', 'AI_DOCUMENT_PROCESSING']);
+export const consentTypeEnum = appSchema.enum('consent_type', ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING', 'AI_VOICE_PROCESSING', 'AI_DOCUMENT_PROCESSING', 'AI_CLINICAL_DOCUMENTATION']);
 export const featureRiskEnum = appSchema.enum('feature_risk', ['LOW', 'MEDIUM', 'HIGH']);
 export const planCodeEnum = appSchema.enum('plan_code', ['SILVER', 'GOLD', 'PLATINUM']);
 export const paymentClassEnum = appSchema.enum('payment_class', ['PHYSICAL_PRODUCT', 'PHYSICAL_SERVICE', 'ELIGIBLE_PERSON_TO_PERSON_SERVICE', 'DIGITAL_SUBSCRIPTION', 'DIGITAL_FEATURE']);
@@ -671,6 +671,7 @@ export const aiEvalCases = appSchema.table('ai_eval_cases', {
   routeKey: text('route_key').notNull().default('patient.chat'),
   documentSpec: jsonb('document_spec').$type<Record<string, unknown> | null>(),
   summarySpec: jsonb('summary_spec').$type<Record<string, unknown> | null>(),
+  draftSpec: jsonb('draft_spec').$type<Record<string, unknown> | null>(),
   status: text('status').notNull().default('DRAFT'),
   version: integer('version').notNull().default(1),
   authoredByUserId: text('authored_by_user_id'),
@@ -994,4 +995,42 @@ export const healthSummaries = appSchema.table('health_summaries', {
   policyVersion: text('policy_version').notNull(),
   createdAt: ts('created_at').notNull(),
   completedAt: ts('completed_at'),
+});
+
+// Slice 7 (migration 0024): record shares and clinician drafts.
+export const careShares = appSchema.table('care_shares', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull(),
+  providerUserId: text('provider_user_id').notNull(),
+  grantedByUserId: text('granted_by_user_id').notNull(),
+  aiAllowed: boolean('ai_allowed').notNull(),
+  testData: boolean('test_data').notNull(),
+  providerType: text('provider_type').notNull(),
+  providerNameAr: text('provider_name_ar').notNull(),
+  providerNameEn: text('provider_name_en').notNull(),
+  status: text('status').notNull(),
+  expiresAt: ts('expires_at').notNull(),
+  createdAt: ts('created_at').notNull(),
+  revokedAt: ts('revoked_at'),
+});
+
+export const clinicalDrafts = appSchema.table('clinical_drafts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull(),
+  authorUserId: text('author_user_id').notNull(),
+  authorRole: text('author_role').notNull(),
+  authorNameAr: text('author_name_ar').notNull(),
+  authorNameEn: text('author_name_en').notNull(),
+  docType: text('doc_type').notNull(),
+  status: text('status').notNull(),
+  clinicianInput: text('clinician_input').notNull(),
+  context: jsonb('context').$type<Record<string, unknown>>().notNull(),
+  aiContent: jsonb('ai_content').$type<Record<string, unknown> | null>(),
+  content: jsonb('content').$type<Record<string, unknown> | null>(),
+  edited: boolean('edited').notNull(),
+  provider: aiProviderEnum('provider'),
+  modelId: text('model_id'),
+  failure: text('failure'),
+  signedAt: ts('signed_at'),
+  createdAt: ts('created_at').notNull(),
 });

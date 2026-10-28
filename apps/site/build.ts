@@ -67,13 +67,13 @@ write(
 <p><strong>In the app (fastest):</strong> Me → Privacy &amp; consent → Delete account. Confirm with your password (or sign in again if you use a phone number) and type DELETE. Deletion is immediate.</p>
 <p><strong>Without the app:</strong> email <a href="mailto:${esc(support)}">${esc(support)}</a> from the email address or include the phone number registered on the account, with the subject “Delete my account”. We verify that the request comes from the account holder before deleting, and confirm by email.</p>
 <h2>What is deleted</h2><p>Sign-in details and sessions, your own health profile and records, family profiles only you manage, your cart, and clinician profile data.</p>
-<h2>What is kept</h2><p>Profiles shared with another family member stay with them; financial records of completed clinician payouts, the security audit log and consent history are retained as required by law, without your name or contact details.</p>
+<h2>What is kept</h2><p>Profiles shared with another family member stay with them; notes a clinician signed stay in the patient’s record (unsigned drafts are deleted and record shares end); financial records of completed clinician payouts, the security audit log and consent history are retained as required by law, without your name or contact details.</p>
 <p>An App Store or Google Play subscription is billed by Apple or Google — cancel it in your store account settings; deleting the account does not cancel it.</p></section>
 <section lang="ar" dir="rtl"><h1>حذف حسابك في غير لي</h1>
 <p><strong>من داخل التطبيق (الأسرع):</strong> أنا ← الخصوصية والموافقات ← حذف الحساب. أكّد بكلمة المرور (أو سجّل الدخول مجددًا إذا كنت تستخدم رقم الهاتف) واكتب DELETE. يتم الحذف فورًا.</p>
 <p><strong>بدون التطبيق:</strong> راسلنا على <a href="mailto:${esc(support)}">${esc(support)}</a> من البريد المسجّل أو مع ذكر رقم الهاتف المسجّل، بعنوان "حذف حسابي". نتحقق من أن الطلب من صاحب الحساب قبل الحذف ونؤكد بالبريد.</p>
 <h2>ما يُحذف</h2><p>بيانات الدخول والجلسات، وملفك الصحي وسجلاتك، وملفات العائلة التي تديرها وحدك، والسلة، وبيانات ملف مقدم الرعاية.</p>
-<h2>ما يُحتفظ به</h2><p>تبقى الملفات المشتركة مع فرد آخر من العائلة معه؛ ويُحتفظ بالسجلات المالية لمستحقات مقدمي الرعاية المدفوعة وسجل التدقيق الأمني وسجل الموافقات وفق القانون، دون اسمك أو بيانات التواصل.</p>
+<h2>ما يُحتفظ به</h2><p>تبقى الملفات المشتركة مع فرد آخر من العائلة معه؛ وتبقى الملاحظات التي وقّعها مقدّم الرعاية في سجل المريض (تُحذف المسودات غير الموقّعة وتنتهي مشاركات السجلات)؛ ويُحتفظ بالسجلات المالية لمستحقات مقدمي الرعاية المدفوعة وسجل التدقيق الأمني وسجل الموافقات وفق القانون، دون اسمك أو بيانات التواصل.</p>
 <p>اشتراك App Store أو Google Play تديره Apple أو Google — ألغِه من إعدادات حسابك في المتجر؛ حذف الحساب لا يلغيه.</p></section></div>`,
   ),
 );

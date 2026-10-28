@@ -14,7 +14,7 @@ import { pointValue, TrendChart } from './TrendChart';
 const signed = (x: number) => (x > 0 ? `+${x}` : `${x}`);
 
 /** One measure: the latest MEASURED value, the chart, the CALCULATED figures, and a table view. */
-export function SeriesCard({ series, patientId }: { series: HealthSeries; patientId: string }) {
+export function SeriesCard({ series, patientId, readOnly = false }: { series: HealthSeries; patientId: string; readOnly?: boolean }) {
   const { t, locale } = useI18n();
   const { colors } = useTheme();
   const [table, setTable] = useState(false);
@@ -65,7 +65,7 @@ export function SeriesCard({ series, patientId }: { series: HealthSeries; patien
               <Text variant="footnote" color="textSecondary" style={{ flex: 1 }}>{formatDate(p.at, locale)}</Text>
               <Text variant="footnote" weight="semibold" tabular>{ltr(`${pointValue(p)} ${series.unit}`)}</Text>
               {p.provenance ? <Badge label={t(`health.provenance_${p.provenance}`)} tone={provenanceTone(p.provenance)} /> : null}
-              {series.source === 'VITAL' && p.provenance !== 'PROFESSIONALLY_VERIFIED' ? (
+              {!readOnly && series.source === 'VITAL' && p.provenance !== 'PROFESSIONALLY_VERIFIED' ? (
                 <PressableScale
                   accessibilityRole="button"
                   accessibilityLabel={t('readings.remove')}

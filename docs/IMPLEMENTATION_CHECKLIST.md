@@ -58,9 +58,12 @@ Nurse Now, pricing rules, visit verification (rotating PIN/QR + multi-signal), P
 with verified webhooks and idempotency, double-entry earnings ledger & settlement, reviews and fair
 ranking, recurring visits, backup nurse matching, document upload with signed URLs.
 
-## Milestone 3 — Continuous care — NOT STARTED
-Care teams & relationships, care plans, doctor–nurse collaboration, secure chat, vitals and
-observations, medical timeline, calendar, adult profile claiming & consent receipts, notifications.
+## Milestone 3 — Continuous care — PARTIAL
+Done: time-limited, revocable record shares with a verified clinician (read-only, limited record,
+audited, test and real data isolated; ADR 0013), patient-recorded vitals and observations (ADR 0012),
+signed clinician notes visible to the person. Not started: care teams, care plans, doctor–nurse
+collaboration, secure chat, medical timeline, calendar, adult profile claiming & consent receipts,
+notifications, clinician-verified readings.
 
 ## Milestone 4 — Commerce & monetization — PARTIAL
 Done: admin product management (products, images, variants, stock ledger, prices, discounts/promo
@@ -81,7 +84,7 @@ Midjourney are out of scope for this phase.
 | 4 — Realtime voice (ADR 0010) | DONE (no live provider, no device test) | Server relay with ticketed WebSocket, separate voice consent, emergency gate before every answer, barge-in, 30 s block metering with hard stop, audio-token pricing, text-only transcripts; native client in development/preview builds only; production build does not link audio or request the microphone. OpenAI Realtime adapter verified only against a local stand-in; E2E on the web harness only |
 | 5 — Lab and document AI (ADR 0011) | DONE (no live provider, no device test) | Documents per profile under RLS (type from bytes, single-use view links), separate document consent, transcription into strict JSON by an approved model, deterministic values / printed-range status, every row confirmed / corrected / rejected by the person before it is a record, manual entry, metering incl. paid failures (capped), evaluation on synthetic PDFs with row-level checks. Adapters verified only against stubbed HTTP; E2E on the web harness only; extraction accuracy not evaluated on real reports |
 | 6 — Health analytics (ADR 0012) | DONE (no live provider, no device test) | Readings (7 kinds, fixed units, plausibility bounds, derived provenance, entered-in-error, RLS, consent), deterministic trends from readings and confirmed lab results only (units never mixed), charts with table view and RTL time axis, grounded AI summaries (facts only, every number checked, no judgement words, rejected answers never shown and capped), Measured / Calculated / AI / Verified labels everywhere, summary evaluation. No alert thresholds yet (need clinical sign-off) |
-| 7 — Clinician copilots | TODO | Needs care relationships (Milestone 3) |
+| 7 — Clinician copilots (ADR 0013) | DONE (no live provider, no device test) | Record shares as the care-relationship primitive (7 / 30 / 90 days, separate per-share AI permission, revocable, audited, read-only limited record, test vs real data isolated); doctor and nurse documentation copilot from the clinician's own notes (clinician AI terms via per-route consent, role scope in API + DB + prompt + guard, deterministic guard against new doses / diagnoses / orders, drafts private until signed, signed notes shown to the person with an AI-assisted label), metering incl. paid rejections (capped), evaluation with the production guard. Draft quality not evaluated with a real model; no clinical evaluation |
 | 8 — Company-product knowledge | TODO | |
 | 10 — Admin cost / finance | PARTIAL | Spend, plan caps and alerts done; finance views TODO |
 | 11 — Wound and imaging research | TODO | Diagnostic features stay behind disabled flags |

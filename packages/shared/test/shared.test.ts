@@ -166,3 +166,31 @@ describe('health analytics (deterministic; AI summaries validated against the fa
     for (const [out, reason] of cases) expect(checkHealthSummary(typeof out === 'string' ? out : JSON.stringify(out), facts), JSON.stringify(out)).toMatchObject({ ok: false, reason });
   });
 });
+
+describe('clinical draft guard (the AI organises the clinician’s notes; it adds nothing)', () => {
+  const notes = 'Wound on left shin 3 cm, less redness. Continue amoxicillin 500 mg three times daily. Review in 5 days.';
+  const visit = (over: Record<string, unknown> = {}) => JSON.stringify({ subjective: 'Not documented.', objective: 'Wound on left shin, 3 cm, less redness.', assessment: 'Improving per clinician.', plan: 'Continue amoxicillin 500 mg three times daily. Review in 5 days.', checksForClinician: [], ...over });
+
+  it('accepts a draft whose doses all come from the notes or the recorded medicines', async () => {
+    const { checkClinicalDraft } = await import('../src');
+    expect(checkClinicalDraft('VISIT_NOTE', visit(), notes, []).ok).toBe(true);
+    expect(checkClinicalDraft('VISIT_NOTE', visit({ checksForClinician: ['Recorded: metformin 500mg daily.'] }), notes, ['Metformin 500 mg']).ok).toBe(true);
+    // Arabic digits and units are the same dose.
+    expect(checkClinicalDraft('VISIT_NOTE', visit({ plan: 'الاستمرار على أموكسيسيلين ٥٠٠ مجم.' }), notes, []).ok).toBe(true);
+  });
+
+  it('rejects new doses, diagnoses, orders and dose changes the clinician did not write', async () => {
+    const { checkClinicalDraft } = await import('../src');
+    expect(checkClinicalDraft('VISIT_NOTE', visit({ plan: 'Continue amoxicillin 875 mg.' }), notes, [])).toMatchObject({ ok: false, reason: 'UNGROUNDED_DOSE', detail: '875mg' });
+    expect(checkClinicalDraft('VISIT_NOTE', visit({ assessment: 'Diagnosis: cellulitis.' }), notes, [])).toMatchObject({ ok: false, reason: 'CLINICIAN_ONLY_TERM', detail: 'diagnos' });
+    expect(checkClinicalDraft('VISIT_NOTE', visit({ plan: 'Increase amoxicillin.' }), notes, [])).toMatchObject({ ok: false, reason: 'CLINICIAN_ONLY_TERM' });
+    expect(checkClinicalDraft('VISIT_NOTE', visit({ plan: 'Order a wound swab.' }), notes, [])).toMatchObject({ ok: false, reason: 'CLINICIAN_ONLY_TERM', detail: 'order' });
+    const nurse = JSON.stringify({ assessment: 'BP 168/98.', interventions: 'Advised tablets.', evaluation: 'Not documented.', escalation: 'Start amlodipine 10 mg.', checksForClinician: [] });
+    expect(checkClinicalDraft('NURSING_NOTE', nurse, 'BP 168/98 twice. Missed tablets. Informed doctor.', ['Amlodipine 5 mg'])).toMatchObject({ ok: false, reason: 'UNGROUNDED_DOSE', detail: '10mg' });
+    // A word the clinician used themselves may be repeated (documenting, not ordering).
+    const documented = JSON.stringify({ assessment: 'Takes tablets as prescribed.', interventions: 'Not documented.', evaluation: 'Not documented.', escalation: 'Doctor informed.', checksForClinician: [] });
+    expect(checkClinicalDraft('NURSING_NOTE', documented, 'Advised to take tablets as prescribed by her doctor.', []).ok).toBe(true);
+    expect(checkClinicalDraft('NURSING_NOTE', documented, 'Advised to take her tablets.', [])).toMatchObject({ ok: false, detail: 'prescri' });
+    expect(checkClinicalDraft('VISIT_NOTE', '{"plan": "x"}', notes, [])).toMatchObject({ ok: false, reason: 'INVALID_JSON' });
+  });
+});

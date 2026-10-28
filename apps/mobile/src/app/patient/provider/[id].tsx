@@ -10,6 +10,7 @@ import { api, errorKey } from '@/lib/api';
 import { formatDate, minutesToTime, money } from '@/lib/format';
 import { useI18n } from '@/providers/i18n';
 import { useTheme } from '@/providers/theme';
+import { ShareSheet } from '@/features/shares/ShareSheet';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Header, Icon, LoadingScreen, Notice, Screen, Section, Sheet, Text } from '@/ui';
 
 export default function ProviderProfile() {
@@ -18,6 +19,7 @@ export default function ProviderProfile() {
   const { colors } = useTheme();
   const router = useRouter();
   const [sheet, setSheet] = useState<null | 'book' | 'waitlist'>(null);
+  const [sharing, setSharing] = useState(false);
   const q = useQuery({ queryKey: ['provider', id], queryFn: () => api.providers.get(id) });
 
   if (q.isPending) return <Screen header={<Header back title="" large={false} />}><LoadingScreen /></Screen>;
@@ -166,6 +168,8 @@ export default function ProviderProfile() {
         </Card>
       </Section>
 
+      <Button testID="share-record" label={t('shares.shareRecord')} icon="share-2" variant="secondary" onPress={() => setSharing(true)} />
+      <ShareSheet providerUserId={p.userId} providerName={name} visible={sharing} onClose={() => setSharing(false)} />
       <Sheet visible={sheet !== null} onClose={() => setSheet(null)} title={sheet === 'book' ? t('care.bookingSoonTitle') : t('care.joinWaitlist')} testID="booking-sheet">
         <Notice tone="info" icon="calendar" body={t('care.bookingSoonBody')} />
         <Button label={t('common.close')} variant="secondary" onPress={() => setSheet(null)} />

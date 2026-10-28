@@ -14,3 +14,4 @@ export * from './accounts';
 export * from './ai';
 export * from './documents';
 export * from './analytics';
+export * from './clinical';

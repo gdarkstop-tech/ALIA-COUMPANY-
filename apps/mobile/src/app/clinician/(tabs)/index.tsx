@@ -114,11 +114,19 @@ export default function ClinicianToday() {
               <EmptyState compact icon="calendar" title={isNurse ? t('provider.visitsEmpty') : t('provider.appointmentsEmpty')} body={t('app.comingNext')} />
             </Card>
           </Section>
-          <Placeholder icon="mci:account-multiple-outline" title={t('provider.patientsTitle')} body={t('provider.patientsEmpty')} />
+          <Card onPress={() => router.push('/clinician/patients')} testID="open-shared-records" accessibilityLabel={t('copilot.dashboardCard')}>
+            <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
+              <Icon name="mci:account-multiple-outline" color="primary" />
+              <View style={{ flex: 1 }}>
+                <Text variant="callout" weight="semibold">{t('copilot.dashboardCard')}</Text>
+                <Text variant="caption" color="textSecondary">{t('copilot.dashboardBody')}</Text>
+              </View>
+              <Icon name="chevron-right" color="textTertiary" />
+            </View>
+          </Card>
           <Placeholder icon="message-circle" title={t('provider.messagesTitle')} body={t('provider.messagesEmpty')} />
           <Placeholder icon="mci:clipboard-check-outline" title={t('provider.tasksTitle')} body={t('provider.patientsEmpty')} />
           {isNurse ? <Placeholder icon="award" title={t('provider.loyaltyTitle')} body={t('provider.loyaltyEmpty')} /> : null}
-          <Placeholder icon="mci:creation-outline" title={t('home.aiTitle')} body={t('status.NOT_CONFIGURED')} />
           {!d.bookable ? <Button label={t('provider.verificationTitle')} variant="soft" icon="shield" onPress={() => router.push('/clinician/verification')} /> : null}
         </>
       ) : null}

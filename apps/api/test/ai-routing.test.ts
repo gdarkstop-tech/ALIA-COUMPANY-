@@ -107,7 +107,7 @@ describe('approval gates for real patients', () => {
     expect(approve.json.patientDataApprovedAt).not.toBeNull();
     expect((await c.req({ method: 'GET', url: '/v1/ai/assistant' })).json.unavailableReason).toBe('NOT_CONFIGURED');
     const cc = await admin.req({ method: 'GET', url: '/v1/admin/ai/control-centre' });
-    const cand = cc.json.routes[0].candidates.find((x: { tier: string }) => x.tier === 'BASIC');
+    const cand = cc.json.routes.find((r: { key: string }) => r.key === 'patient.chat').candidates.find((x: { tier: string }) => x.tier === 'BASIC');
     expect(cand.blockers).toEqual(['NO_CLINICAL_APPROVAL']);
   });
 

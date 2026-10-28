@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 // ---------------------------------------------------------------- consents
-export const CONSENT_TYPES = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING', 'AI_VOICE_PROCESSING', 'AI_DOCUMENT_PROCESSING'] as const;
+export const CONSENT_TYPES = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'HEALTH_DATA_PROCESSING', 'MARKETING_COMMUNICATIONS', 'AI_ASSISTANT_PROCESSING', 'AI_VOICE_PROCESSING', 'AI_DOCUMENT_PROCESSING', 'AI_CLINICAL_DOCUMENTATION'] as const;
 export type ConsentType = (typeof CONSENT_TYPES)[number];
 /** Consents without which an account cannot use the product (marketing is always optional). */
 export const REQUIRED_ACCOUNT_CONSENTS: readonly ConsentType[] = ['TERMS_OF_SERVICE', 'PRIVACY_POLICY'];
@@ -17,6 +17,7 @@ export const AI_ASSISTANT_CONSENT: ConsentType = 'AI_ASSISTANT_PROCESSING';
 export const AI_VOICE_CONSENT: ConsentType = 'AI_VOICE_PROCESSING';
 /** Optional, explicit consent before a medical document is sent to an AI provider to be read (migration 0020). */
 export const AI_DOCUMENT_CONSENT: ConsentType = 'AI_DOCUMENT_PROCESSING';
+export const AI_CLINICAL_CONSENT: ConsentType = 'AI_CLINICAL_DOCUMENTATION';
 export const CONSENT_SOURCES = ['ios', 'android', 'web'] as const;
 
 export const recordConsentBody = z.object({

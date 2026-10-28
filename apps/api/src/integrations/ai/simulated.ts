@@ -11,6 +11,14 @@ export function createSimulatedProvider(): AiProvider {
     async complete(req) {
       const last = req.messages[req.messages.length - 1]?.content ?? '';
       const tokens = (s: string) => Math.ceil([...s].length / 4);
+      // Clinician draft: every section labelled, nothing clinical of its own (no doses or findings).
+      if (req.jsonSchema?.name === 'clinical_draft') {
+        const ar = /in Arabic/.test(last);
+        const props = Object.entries((req.jsonSchema.schema as { properties: Record<string, { type: string }> }).properties);
+        const line = ar ? '[محاكاة — للتطوير فقط] مسودة لا تُستخدم سريريًا.' : '[SIMULATED — development only] Draft text, not for clinical use.';
+        const text = JSON.stringify(Object.fromEntries(props.map(([k, p]) => [k, k === 'checksForClinician' ? [] : p.type === 'array' ? [line] : line])));
+        return { outcome: 'ANSWERED', text, servedModel: req.model, usage: { inputTokens: tokens(req.system) + tokens(last), outputTokens: tokens(text), cacheReadTokens: 0 } };
+      }
       // Health summary: labelled points that cite the first facts it was given (no numbers of its own).
       if (req.jsonSchema?.name === 'health_summary') {
         const ids = [...last.matchAll(/^(F\d+) \[/gm)].map((m) => m[1]!).slice(0, 3);

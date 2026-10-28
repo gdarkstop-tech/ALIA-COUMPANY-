@@ -83,6 +83,12 @@ import type {
   HealthSummaryStatus,
   Observation,
   ObservationKind,
+  CareShare,
+  ClinicalDocType,
+  ClinicalDraft,
+  ClinicalDraftContent,
+  ClinicianCopilotStatus,
+  ClinicianPatient,
 } from '@ghayarly/shared';
 
 export class ApiError extends Error {
@@ -292,6 +298,23 @@ export function createApiClient(options: ApiClientOptions) {
       summaries: (patientId: string) => get<HealthSummary[]>(`/v1/patients/${patientId}/health-summaries`),
       createSummary: (patientId: string, days: 30 | 90 = 30) => post<HealthSummary>(`/v1/patients/${patientId}/health-summaries`, { days }),
       removeSummary: (id: string) => del<{ ok: true }>(`/v1/health-summaries/${id}`),
+    },
+    /** Sharing a profile's record with a verified clinician, and the notes they sign. */
+    shares: {
+      grant: (body: { patientId: string; providerUserId: string; days: 7 | 30 | 90; aiAllowed: boolean }) => post<CareShare>('/v1/care-shares', body),
+      list: (patientId: string) => get<CareShare[]>(`/v1/patients/${patientId}/care-shares`),
+      revoke: (id: string) => post<{ ok: true }>(`/v1/care-shares/${id}/revoke`),
+      notes: (patientId: string) => get<ClinicalDraft[]>(`/v1/patients/${patientId}/clinical-notes`),
+    },
+    /** Clinician side: shared records and the documentation copilot (drafts until signed). */
+    clinician: {
+      copilotStatus: () => get<ClinicianCopilotStatus>('/v1/ai/clinician-copilot'),
+      patients: () => get<ClinicianPatient[]>('/v1/clinician/patients'),
+      patient: (id: string) =>
+        get<{ patient: ClinicianPatient; entries: Pick<HealthEntry, 'id' | 'kind' | 'title' | 'provenance'>[]; analytics: HealthAnalytics; drafts: ClinicalDraft[] }>(`/v1/clinician/patients/${id}`),
+      createDraft: (patientId: string, body: { docType: ClinicalDocType; notes: string }) => post<ClinicalDraft>(`/v1/clinician/patients/${patientId}/drafts`, body),
+      draft: (id: string) => get<ClinicalDraft>(`/v1/clinician/drafts/${id}`),
+      updateDraft: (id: string, body: { action: 'SAVE' | 'SIGN' | 'DISCARD'; content?: ClinicalDraftContent }) => post<ClinicalDraft>(`/v1/clinician/drafts/${id}`, body),
     },
     /** Clinically approved knowledge versions (as cited by the assistant). */
     knowledge: {

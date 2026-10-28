@@ -168,6 +168,21 @@ export default function MyHealth() {
         </Card>
       </PressableScale>
 
+      <PressableScale testID="open-shares" accessibilityRole="button" accessibilityLabel={t('shares.healthCardTitle')} onPress={() => router.push('/patient/shares')}>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <View style={{ width: 44, height: 44, borderRadius: radii.md, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="mci:stethoscope" color="primary" />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="callout" weight="semibold">{t('shares.healthCardTitle')}</Text>
+              <Text variant="footnote" color="textSecondary">{t('shares.healthCardBody')}</Text>
+            </View>
+            <Icon name="chevron-right" color="textTertiary" />
+          </View>
+        </Card>
+      </PressableScale>
+
       <Section title={t('health.timelineTitle')}>
         <Card>
           <View style={{ gap: spacing.md }}>

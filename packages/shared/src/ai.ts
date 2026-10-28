@@ -13,7 +13,7 @@ export const AI_HOSTING = ['PROVIDER_API', 'MANAGED_ENDPOINT', 'SELF_HOSTED', 'L
 export const AI_COMPLEXITIES = ['ANY', 'SIMPLE', 'COMPLEX'] as const;
 export const AI_CANDIDATE_LANGUAGES = ['ANY', 'ar', 'en'] as const;
 export type AiProviderCode = (typeof AI_PROVIDERS)[number];
-export const AI_METRICS = ['CHAT_MESSAGES', 'ANALYSES', 'VOICE_SECONDS'] as const;
+export const AI_METRICS = ['CHAT_MESSAGES', 'ANALYSES', 'VOICE_SECONDS', 'CLINICAL_DRAFTS'] as const;
 export type AiMetric = (typeof AI_METRICS)[number];
 export const AI_MODEL_TIERS = ['BASIC', 'ADVANCED', 'PREMIUM'] as const;
 export type AiModelTier = (typeof AI_MODEL_TIERS)[number];
@@ -306,7 +306,7 @@ function isValidRegex(p: string) {
   }
 }
 /** Which assistant a case exercises (voice runs use the chat cases, spoken in text mode). */
-export const AI_EVAL_ROUTES = ['patient.chat', 'patient.document', 'patient.health_summary'] as const;
+export const AI_EVAL_ROUTES = ['patient.chat', 'patient.document', 'patient.health_summary', 'clinician.documentation'] as const;
 export type AiEvalRoute = (typeof AI_EVAL_ROUTES)[number];
 const ascii = (n: number) => z.string().trim().max(n).regex(/^[\x20-\x7e]*$/, 'ASCII only (the synthetic report renderer has no Arabic shaping)');
 /** A synthetic lab report rendered to PDF at run time (never a real record). */
@@ -358,6 +358,25 @@ export const aiSummaryEvalChecks = z
   .strict()
   .refine((c) => (c.mustNotInclude ?? []).every(isValidRegex), { message: 'Every check must be a valid regular expression' });
 export type AiSummaryEvalChecks = z.infer<typeof aiSummaryEvalChecks>;
+/** A clinician-draft case: the clinician's notes and the recorded context, as production sends them. */
+export const draftEvalSpec = z
+  .object({
+    role: z.enum(['DOCTOR', 'NURSE']),
+    docType: z.enum(['VISIT_NOTE', 'NURSING_NOTE', 'WOUND_CARE_NOTE', 'PATIENT_INSTRUCTIONS']),
+    notes: z.string().trim().min(10).max(6000),
+    medications: z.array(z.string().max(120)).max(30),
+    allergies: z.array(z.string().max(120)).max(30),
+    conditions: z.array(z.string().max(120)).max(30),
+  })
+  .strict()
+  .refine((d) => (d.role === 'DOCTOR' ? ['VISIT_NOTE', 'PATIENT_INSTRUCTIONS'] : ['NURSING_NOTE', 'WOUND_CARE_NOTE', 'PATIENT_INSTRUCTIONS']).includes(d.docType), { message: 'Document type outside this role' });
+export type DraftEvalSpec = z.infer<typeof draftEvalSpec>;
+/** Screens for a draft: the production guard (doses, clinician-only terms), language, phrases. */
+export const aiDraftEvalChecks = z
+  .object({ guarded: z.literal(true), requireLanguage: z.enum(['ar', 'en']).optional(), mustNotInclude: z.array(z.string().min(1).max(300)).max(10).optional() })
+  .strict()
+  .refine((c) => (c.mustNotInclude ?? []).every(isValidRegex), { message: 'Every check must be a valid regular expression' });
+export type AiDraftEvalChecks = z.infer<typeof aiDraftEvalChecks>;
 const aiEvalCaseFields = z.object({
   code: z.string().trim().regex(/^[A-Z0-9][A-Z0-9_-]{2,40}$/),
   category: z.enum(AI_EVAL_CATEGORIES),
@@ -366,16 +385,23 @@ const aiEvalCaseFields = z.object({
   context: z.string().trim().max(8000).nullable().optional(),
   expectedBehavior: z.string().trim().min(10).max(2000),
   routeKey: z.enum(AI_EVAL_ROUTES),
-  checks: z.union([aiEvalChecks, aiDocumentEvalChecks, aiSummaryEvalChecks]),
+  checks: z.union([aiEvalChecks, aiDocumentEvalChecks, aiSummaryEvalChecks, aiDraftEvalChecks]),
   documentSpec: syntheticLabReportSpec.nullable().optional(),
   summarySpec: summaryEvalSpec.nullable().optional(),
+  draftSpec: draftEvalSpec.nullable().optional(),
 });
-export const aiEvalCaseBody = aiEvalCaseFields.extend({ routeKey: z.enum(AI_EVAL_ROUTES).default('patient.chat'), checks: z.union([aiEvalChecks, aiDocumentEvalChecks, aiSummaryEvalChecks]).default({}) });
+export const aiEvalCaseBody = aiEvalCaseFields.extend({ routeKey: z.enum(AI_EVAL_ROUTES).default('patient.chat'), checks: z.union([aiEvalChecks, aiDocumentEvalChecks, aiSummaryEvalChecks, aiDraftEvalChecks]).default({}) });
 /** Edits: only the fields sent change (no defaults, so omitted checks are kept). */
 export const aiEvalCasePatchBody = aiEvalCaseFields.partial();
 /** A document case needs a synthetic report and document checks; a chat case neither. Returns the problem, or null. */
-export function evalCaseProblem(c: { routeKey: string; checks: unknown; documentSpec: unknown; summarySpec?: unknown }): string | null {
+export function evalCaseProblem(c: { routeKey: string; checks: unknown; documentSpec: unknown; summarySpec?: unknown; draftSpec?: unknown }): string | null {
   if (c.routeKey !== 'patient.health_summary' && c.summarySpec != null) return 'Only summary cases carry synthetic readings';
+  if (c.routeKey !== 'clinician.documentation' && c.draftSpec != null) return 'Only clinician-draft cases carry clinician notes';
+  if (c.routeKey === 'clinician.documentation') {
+    if (!draftEvalSpec.safeParse(c.draftSpec).success) return 'A clinician-draft case needs valid notes and context';
+    if (c.documentSpec != null) return 'Only document cases carry a synthetic report';
+    return aiDraftEvalChecks.safeParse(c.checks).success ? null : 'A clinician-draft case needs draft checks ({"guarded": true})';
+  }
   if (c.routeKey === 'patient.document') {
     if (!syntheticLabReportSpec.safeParse(c.documentSpec).success) return 'A document case needs a valid synthetic report';
     return aiDocumentEvalChecks.safeParse(c.checks).success ? null : 'A document case needs document checks (expectDocumentType, expectRows)';
@@ -403,9 +429,10 @@ export type AiEvalCase = {
   context: string | null;
   expectedBehavior: string;
   routeKey: AiEvalRoute;
-  checks: AiEvalChecks | AiDocumentEvalChecks | AiSummaryEvalChecks;
+  checks: AiEvalChecks | AiDocumentEvalChecks | AiSummaryEvalChecks | AiDraftEvalChecks;
   documentSpec: SyntheticLabReportSpec | null;
   summarySpec: SummaryEvalSpec | null;
+  draftSpec: DraftEvalSpec | null;
   status: 'DRAFT' | 'REVIEWED' | 'RETIRED';
   version: number;
   authoredByMe: boolean;

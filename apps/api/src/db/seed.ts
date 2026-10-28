@@ -24,6 +24,11 @@ export const DEMO_ACCOUNTS = {
   pendingNurse: { email: 'nurse.pending@demo.ghayarly.test', name: 'Hoda Samir' },
   /** INTERNAL_TEST patient: the only kind of account that may use the assistant while `ai.assistant` is off. */
   aiTester: { email: 'ai.tester@demo.ghayarly.test', name: 'AI Internal Tester' },
+  /**
+   * INTERNAL_TEST doctor with a demo directory profile: the only kind of clinician that may use the
+   * documentation copilot while `ai.clinician_copilot` is off, and only with test data.
+   */
+  clinicianTester: { email: 'clinician.tester@demo.ghayarly.test', name: 'Clinician Internal Tester' },
   /** A second staff member, so separation of duties (editor ≠ approver) can be exercised. */
   reviewer: { email: 'reviewer.demo@demo.ghayarly.test', name: 'Clinical Reviewer (demo)' },
 } as const;
@@ -147,6 +152,12 @@ export async function seed(log: (line: string) => void = console.log) {
       await client.query("update app.user_profiles set account_kind = 'INTERNAL_TEST' where user_id = $1", [ids.aiTester]);
       await grantSeedConsents(client, ids.aiTester, true);
     }
+    if (!(await client.query('select 1 from app.user_profiles where user_id = $1', [ids.clinicianTester])).rowCount) {
+      await role(ids.clinicianTester, 'DOCTOR');
+      await profile(ids.clinicianTester, 'Clinician Internal Tester', 'DOCTOR', 'en');
+      await client.query("update app.user_profiles set account_kind = 'INTERNAL_TEST' where user_id = $1", [ids.clinicianTester]);
+      await grantSeedConsents(client, ids.clinicianTester, false);
+    }
     if (!(await client.query('select 1 from app.user_profiles where user_id = $1', [ids.reviewer])).rowCount) {
       await role(ids.reviewer, 'CLINICAL_REVIEWER');
       await profile(ids.reviewer, 'Clinical Reviewer (demo)', 'CLINICAL_REVIEWER', 'en');
@@ -259,6 +270,7 @@ export async function seed(log: (line: string) => void = console.log) {
 
     await insertProvider(ids.doctor, { key: 'doctor', type: 'DOCTOR', nameAr: 'د. أحمد فتحي', nameEn: 'Dr. Ahmed Fathy', gender: 'MALE', specialty: 'GENERAL_SURGERY', subspecialty: 'Wound care & diabetic foot', years: 15, governorate: 'CAIRO', city: 'Nasr City', affiliation: 'Demo Surgical Center', feeEgp: 750, availability: 'ACCEPTING_NEW_PATIENTS', status: 'APPROVED', bioEn: 'Synthetic demo profile of a general surgeon focused on complex wounds.', bioAr: 'ملف تجريبي مُصطنع لجرّاح عام متخصص في الجروح المعقدة.' });
     await insertProvider(ids.nurse, { key: 'nurse', type: 'NURSE', nameAr: 'مريم عادل', nameEn: 'Mariam Adel', gender: 'FEMALE', years: 7, governorate: 'GIZA', city: 'Dokki', affiliation: 'Demo Home Nursing', feeEgp: 300, availability: 'AVAILABLE_TODAY', status: 'APPROVED', bioEn: 'Synthetic demo profile. Wound dressing and home visits.', bioAr: 'ملف تجريبي مُصطنع. الغيار على الجروح والزيارات المنزلية.', skills: ['Wound care', 'Vital signs', 'Diabetic care'] });
+    await insertProvider(ids.clinicianTester, { key: 'ct', type: 'DOCTOR', nameAr: 'د. مختبِر داخلي', nameEn: 'Dr. Internal Tester', gender: 'FEMALE', specialty: 'GENERAL_SURGERY', years: 10, governorate: 'CAIRO', city: 'Nasr City', affiliation: 'Internal test account', feeEgp: 500, availability: 'EXISTING_PATIENTS_ONLY', status: 'APPROVED', bioEn: 'Synthetic internal-test clinician for the documentation assistant. Not a real doctor.', bioAr: 'حساب اختبار داخلي مُصطنع لمساعد التوثيق. ليس طبيبًا حقيقيًا.' });
     await insertProvider(ids.pendingDoctor, { key: 'pd', type: 'DOCTOR', nameAr: 'د. كريم نبيل', nameEn: 'Dr. Karim Nabil', gender: 'MALE', specialty: 'GENERAL_SURGERY', years: 8, governorate: 'CAIRO', city: 'New Cairo', affiliation: 'Demo General Hospital', feeEgp: 500, availability: 'ACCEPTING_NEW_PATIENTS', status: 'SUBMITTED', bioEn: 'Synthetic demo submission awaiting review.', bioAr: 'طلب تجريبي مُصطنع في انتظار المراجعة.' });
     await insertProvider(ids.pendingNurse, { key: 'pn', type: 'NURSE', nameAr: 'هدى سمير', nameEn: 'Hoda Samir', gender: 'FEMALE', years: 4, governorate: 'CAIRO', city: 'Shubra', affiliation: 'Demo Nursing', feeEgp: 250, availability: 'SCHEDULED_ONLY', status: 'SUBMITTED', bioEn: 'Synthetic demo submission awaiting review.', bioAr: 'طلب تجريبي مُصطنع في انتظار المراجعة.' });
     for (const p of LISTED_PROVIDERS) {

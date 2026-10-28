@@ -9,7 +9,7 @@
  */
 export const LEGAL_DOCUMENT_VERSION = '2026-10-draft';
 export const LEGAL_DOCUMENT_STATUS = 'DRAFT_PENDING_LEGAL_REVIEW' as const;
-export const LEGAL_DOC_IDS = ['privacy', 'terms', 'health-consent', 'medical-disclaimer', 'ai-assistant-consent', 'ai-voice-consent', 'ai-document-consent'] as const;
+export const LEGAL_DOC_IDS = ['privacy', 'terms', 'health-consent', 'medical-disclaimer', 'ai-assistant-consent', 'ai-voice-consent', 'ai-document-consent', 'ai-clinician-terms'] as const;
 export type LegalDocId = (typeof LEGAL_DOC_IDS)[number];
 
 type Section = { heading: string; paragraphs: string[] };
@@ -387,6 +387,53 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
             'المعلومات في التطبيق يُدخلها المستخدم أو عائلته، وتُعلَّم بأنها مُبلَّغ عنها ذاتياً، وليست تشخيصاً.',
             'لا يقدم التطبيق تشخيصاً آلياً أو نصائح علاجية. لن تُتاح أي ميزة من هذا النوع إلا بعد التحقق السريري اللازم والحصول على الموافقات التنظيمية المطلوبة.',
             'في حالات الطوارئ اتصل بالرقم ١٢٣ (الإسعاف في مصر) أو توجّه إلى أقرب قسم طوارئ.',
+          ],
+        },
+      ],
+    },
+  },
+  'ai-clinician-terms': {
+    id: 'ai-clinician-terms',
+    version: LEGAL_DOCUMENT_VERSION,
+    status: LEGAL_DOCUMENT_STATUS,
+    en: {
+      title: 'AI documentation assistant — terms for clinicians',
+      summary: 'Your responsibilities when you use AI to draft clinical notes.',
+      sections: [
+        {
+          heading: 'What the assistant does',
+          paragraphs: [
+            'It organises the notes you write into a draft for your role (visit note; nursing or wound-care note; patient instructions). It is told not to add findings, diagnoses, medicines, doses, tests or orders, and the app rejects drafts that contain a dose or an order you did not write.',
+            'It only works on a record the patient shared with you and allowed AI for, while that share lasts.',
+          ],
+        },
+        {
+          heading: 'What you agree to',
+          paragraphs: [
+            'Every draft is a draft. I will read, correct and complete it before signing; once I sign it, the note is mine and the patient can see it. I remain responsible for its content and for all clinical decisions.',
+            'Nursing notes stay within nursing scope; orders and prescriptions come from the treating physician.',
+            'My notes and the shared context are sent to an AI provider that processes them on Dress My Wound’s behalf. [Provider names, processing locations and retention terms — to be confirmed by legal before launch.]',
+          ],
+        },
+      ],
+    },
+    ar: {
+      title: 'مساعد التوثيق بالذكاء الاصطناعي — شروط مقدّمي الرعاية',
+      summary: 'مسؤولياتك عند استخدام الذكاء الاصطناعي لصياغة الملاحظات السريرية.',
+      sections: [
+        {
+          heading: 'ما الذي يفعله المساعد',
+          paragraphs: [
+            'ينظّم الملاحظات التي تكتبها في مسودة تناسب دورك (ملاحظة زيارة؛ ملاحظة تمريض أو عناية بالجرح؛ تعليمات للمريض). وهو مُوجَّه بألا يضيف نتائج أو تشخيصات أو أدوية أو جرعات أو فحوصات أو أوامر، ويرفض التطبيق أي مسودة تحتوي على جرعة أو أمر لم تكتبه.',
+            'يعمل فقط على سجل شاركه المريض معك وسمح فيه باستخدام الذكاء الاصطناعي، وطوال مدة المشاركة فقط.',
+          ],
+        },
+        {
+          heading: 'ما الذي توافق عليه',
+          paragraphs: [
+            'كل مسودة هي مسودة. سأقرؤها وأصححها وأكملها قبل التوقيع؛ وبعد توقيعي تصبح الملاحظة ملاحظتي ويستطيع المريض رؤيتها. أتحمل مسؤولية محتواها وكل القرارات السريرية.',
+            'تبقى ملاحظات التمريض ضمن نطاق التمريض؛ أما الأوامر والوصفات فمن الطبيب المعالج.',
+            'تُرسَل ملاحظاتي والسياق المُشارَك إلى مزوّد ذكاء اصطناعي يعالجها نيابةً عن غير لي. [أسماء المزوّدين ومواقع المعالجة وشروط الاحتفاظ — يحددها الفريق القانوني قبل الإطلاق.]',
           ],
         },
       ],
