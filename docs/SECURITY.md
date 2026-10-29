@@ -86,6 +86,10 @@ prices flagged `is_demo`. The seed refuses to run in production or without `DEMO
 - Wound photos: encrypted object storage with signed, re-checked links is implemented (local
   encrypted adapter for development / tests); the **production storage provider is not configured**,
   and its key must come from a KMS before launch. Medical documents still live in the database.
+- The global 300/min ceiling is keyed by IP. Behind carrier-grade NAT many people share one
+  address, so busy networks could be throttled together (the E2E suite, all from one IP, meets it).
+  Decision needed before launch: key authenticated traffic by session with a looser per-IP ceiling,
+  measured against real traffic. Clients already retry throttled reads after a delay.
 - Real payment webhook verification (HMAC) — gateway reports `NOT_CONFIGURED`.
 - Care-relationship–based clinician access and consent receipts (Milestone 3).
 - Penetration test, dependency scanning in CI, backup/restore drills (Milestone 6).

@@ -1,4 +1,4 @@
-import { expect, request, test, type Page } from '@playwright/test';
+import { expect, request, test, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
 export const DEMO_PASSWORD = 'DressMyWound-Demo-2026';
@@ -19,20 +19,35 @@ export async function signInMobile(page: Page, email: string, password = DEMO_PA
   await byId(page, 'sign-in-submit').click();
 }
 
+/**
+ * The whole suite reaches the API from one IP, so it meets the real per-IP limits (5 sign-ups per
+ * minute, 300 requests per minute — kept on). Like a well-behaved client, a refused (429) call is
+ * sent again after the server's Retry-After instead of weakening the limits for tests.
+ */
+export function honourRateLimits(ctx: APIRequestContext): APIRequestContext {
+  for (const method of ['get', 'post', 'put', 'patch', 'delete', 'head', 'fetch'] as const) {
+    const send = ctx[method].bind(ctx) as (...args: unknown[]) => Promise<APIResponse>;
+    Object.assign(ctx, {
+      [method]: async (...args: unknown[]) => {
+        let res = await send(...args);
+        for (let attempt = 0; res.status() === 429 && attempt < 3; attempt++) {
+          const waitSeconds = Math.min(Number(res.headers()['x-retry-after'] ?? res.headers()['retry-after']) + 1 || 61, 65);
+          test.info().setTimeout(test.info().timeout + (waitSeconds + 10) * 1000);
+          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+          res = await send(...args);
+        }
+        return res;
+      },
+    });
+  }
+  return ctx;
+}
+
 /** Talks to the API directly (setup only) with a trusted Origin, keeping cookies per context. */
 export async function apiSession(email: string, password: string, opts: { signUp?: boolean; name?: string } = {}) {
-  const ctx = await request.newContext({ baseURL: API_URL, extraHTTPHeaders: { origin: 'http://localhost:8081' } });
+  const ctx = honourRateLimits(await request.newContext({ baseURL: API_URL, extraHTTPHeaders: { origin: 'http://localhost:8081' } }));
   const path = opts.signUp ? '/api/auth/sign-up/email' : '/api/auth/sign-in/email';
-  const send = () => ctx.post(path, { data: opts.signUp ? { email, password, name: opts.name ?? 'E2E User' } : { email, password } });
-  let res = await send();
-  // Every E2E sign-up comes from one IP and the API allows 5 per minute (a real control, kept on):
-  // wait the window out instead of weakening it for tests.
-  for (let attempt = 0; res.status() === 429 && attempt < 2; attempt++) {
-    const waitSeconds = Math.min(Number(res.headers()['x-retry-after'] ?? res.headers()['retry-after']) + 1 || 61, 65);
-    test.info().setTimeout(test.info().timeout + (waitSeconds + 10) * 1000);
-    await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-    res = await send();
-  }
+  const res = await ctx.post(path, { data: opts.signUp ? { email, password, name: opts.name ?? 'E2E User' } : { email, password } });
   expect(res.ok(), await res.text()).toBeTruthy();
   return ctx;
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { API_URL, apiSession, byId, createSelfProfile, grantConsentsApi, shot, signInMobile, unique } from './helpers';
+import { API_URL, apiSession, byId, createSelfProfile, grantConsentsApi, honourRateLimits, shot, signInMobile, unique } from './helpers';
 
 /**
  * Flow F — Privacy & account deletion (App Store 5.1.1(v) / Google Play account deletion):
@@ -50,9 +50,10 @@ test('Flow F — privacy center and in-app account deletion', async ({ page }) =
   await shot(page, 'F04-deleted-back-at-welcome');
 
   // Old credentials are gone.
-  const ctx = await (await import('@playwright/test')).request.newContext({ baseURL: API_URL, extraHTTPHeaders: { origin: 'http://localhost:8081' } });
+  const ctx = honourRateLimits(await (await import('@playwright/test')).request.newContext({ baseURL: API_URL, extraHTTPHeaders: { origin: 'http://localhost:8081' } }));
   const res = await ctx.post('/api/auth/sign-in/email', { data: { email, password } });
-  expect(res.ok()).toBeFalsy();
+  expect(res.status()).toBe(401);
+  expect((await res.json()).code).toBe('INVALID_EMAIL_OR_PASSWORD');
 });
 
 /** A deep link straight into the patient area must not skip the Terms / Privacy consent gate. */
