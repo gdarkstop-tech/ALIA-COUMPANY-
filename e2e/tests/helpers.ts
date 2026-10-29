@@ -1,4 +1,4 @@
-import { expect, request, test, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
+import { expect, request, test, type APIRequestContext, type APIResponse, type Page, type Response } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
 export const DEMO_PASSWORD = 'DressMyWound-Demo-2026';
@@ -16,14 +16,22 @@ export async function signInMobile(page: Page, email: string, password = DEMO_PA
   await page.goto('/sign-in');
   await byId(page, 'sign-in-email').fill(email);
   await byId(page, 'sign-in-password').fill(password);
-  await byId(page, 'sign-in-submit').click();
+  await submitSignIn(page, 'sign-in-submit');
 }
 
 /**
- * The whole suite reaches the API from one IP, so it meets the real per-IP limits (5 sign-ups per
- * minute, 300 requests per minute — kept on). Like a well-behaved client, a refused (429) call is
- * sent again after the server's Retry-After instead of weakening the limits for tests.
+ * The whole suite reaches the API from one IP, so it meets the real per-IP limits (5 sign-ins and
+ * 5 sign-ups per minute, 300 requests per minute — kept on). Like a well-behaved client or a
+ * patient person, a refused (429) attempt is repeated after the server's Retry-After instead of
+ * the limits being weakened for tests.
  */
+async function waitOutRateLimit(res: APIResponse | Response): Promise<void> {
+  const headers = res.headers();
+  const waitSeconds = Math.min(Number(headers['x-retry-after'] ?? headers['retry-after']) + 1 || 61, 65);
+  test.info().setTimeout(test.info().timeout + (waitSeconds + 10) * 1000);
+  await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+}
+
 export function honourRateLimits(ctx: APIRequestContext): APIRequestContext {
   for (const method of ['get', 'post', 'put', 'patch', 'delete', 'head', 'fetch'] as const) {
     const send = ctx[method].bind(ctx) as (...args: unknown[]) => Promise<APIResponse>;
@@ -31,9 +39,7 @@ export function honourRateLimits(ctx: APIRequestContext): APIRequestContext {
       [method]: async (...args: unknown[]) => {
         let res = await send(...args);
         for (let attempt = 0; res.status() === 429 && attempt < 3; attempt++) {
-          const waitSeconds = Math.min(Number(res.headers()['x-retry-after'] ?? res.headers()['retry-after']) + 1 || 61, 65);
-          test.info().setTimeout(test.info().timeout + (waitSeconds + 10) * 1000);
-          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+          await waitOutRateLimit(res);
           res = await send(...args);
         }
         return res;
@@ -41,6 +47,17 @@ export function honourRateLimits(ctx: APIRequestContext): APIRequestContext {
     });
   }
   return ctx;
+}
+
+/** Submits a sign-in form (app or console) and, if sign-in is throttled, waits and submits again. */
+export async function submitSignIn(page: Page, submitTestId: string) {
+  for (let attempt = 0; ; attempt++) {
+    const answer = page.waitForResponse((r) => r.url().includes('/sign-in/email') && r.request().method() === 'POST');
+    await byId(page, submitTestId).click();
+    const res = await answer;
+    if (res.status() !== 429 || attempt >= 2) return;
+    await waitOutRateLimit(res);
+  }
 }
 
 /** Talks to the API directly (setup only) with a trusted Origin, keeping cookies per context. */

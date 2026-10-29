@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { apiSession, createSelfProfile, DEMO_PASSWORD, shot, syntheticJpeg, WOUND_CONSENT_VERSION as V, woundCleanSlate } from './helpers';
+import { apiSession, createSelfProfile, DEMO_PASSWORD, shot, submitSignIn, syntheticJpeg, WOUND_CONSENT_VERSION as V, woundCleanSlate } from './helpers';
 
 const TESTER = 'wound.tester@demo.ghayarly.test';
 const CLINICIAN = 'clinician.tester@demo.ghayarly.test';
@@ -16,7 +16,7 @@ async function login(page: Page, email: string) {
   await page.goto('/login');
   await page.getByTestId('admin-email').fill(email);
   await page.getByTestId('admin-password').fill(DEMO_PASSWORD);
-  await page.getByTestId('admin-submit').click();
+  await submitSignIn(page, 'admin-submit');
   await expect(page.getByTestId('nav-wounds')).toBeVisible();
 }
 
@@ -34,7 +34,7 @@ async function axe(page: Page, name: string) {
  * that version only. Research: build → clinical quality review → freeze. Administrators see counts
  * only. Withdrawal closes the presentation at once.
  */
-test.describe('Flow E-W — wound registry console (internal test data only)', () => {
+test.describe.serial('Flow E-W — wound registry console (internal test data only)', () => {
   let tester: Api;
   let patientId = '';
   let caseId = '';

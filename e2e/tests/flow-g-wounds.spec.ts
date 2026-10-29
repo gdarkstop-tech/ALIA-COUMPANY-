@@ -27,7 +27,7 @@ async function choosePhoto(page: Page, hue: number) {
  * research (B) and presentations (C) off; scanning works fully; a clinician sees the case only
  * through a share that includes wounds; withdrawing A stops new photos at once.
  */
-test.describe('Flow G — Wound Scan with separate permissions (internal test account)', () => {
+test.describe.serial('Flow G — Wound Scan with separate permissions (internal test account)', () => {
   let tester: Api;
   let patientId = '';
   let caseId = '';

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_PASSWORD, shot } from './helpers';
+import { DEMO_PASSWORD, shot, submitSignIn } from './helpers';
 
 /**
  * Flow E2 — Admin catalogue: sign in → Catalogue → create a product draft → the console shows it
@@ -11,7 +11,7 @@ test('Flow E2 — admin creates a product draft that cannot be self-approved or 
   await page.goto('/login');
   await page.getByTestId('admin-email').fill('admin.demo@demo.ghayarly.test');
   await page.getByTestId('admin-password').fill(DEMO_PASSWORD);
-  await page.getByTestId('admin-submit').click();
+  await submitSignIn(page, 'admin-submit');
   await page.getByTestId('nav-catalog').click();
   await expect(page.getByTestId('catalog-table')).toBeVisible();
   await expect(page.getByTestId('catalog-tetrasol-logo').getByRole('img', { name: 'TetraSol' })).toBeVisible();

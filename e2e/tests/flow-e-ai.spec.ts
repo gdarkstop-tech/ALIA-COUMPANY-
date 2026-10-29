@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_PASSWORD, shot } from './helpers';
+import { DEMO_PASSWORD, shot, submitSignIn } from './helpers';
 
 /**
  * Flow E4 — AI control centre: providers without a backend key are reported as NOT_CONFIGURED with
@@ -11,7 +11,7 @@ test('Flow E4 — AI control centre reports unconfigured providers honestly', as
   await page.goto('/login');
   await page.getByTestId('admin-email').fill('admin.demo@demo.ghayarly.test');
   await page.getByTestId('admin-password').fill(DEMO_PASSWORD);
-  await page.getByTestId('admin-submit').click();
+  await submitSignIn(page, 'admin-submit');
   await page.getByTestId('nav-ai').click();
 
   for (const code of ['ANTHROPIC', 'OPENAI', 'GEMINI']) {

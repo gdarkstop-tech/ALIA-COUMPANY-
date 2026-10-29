@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { apiSession, DEMO_PASSWORD, grantConsentsApi, shot, unique } from './helpers';
+import { apiSession, DEMO_PASSWORD, grantConsentsApi, shot, submitSignIn, unique } from './helpers';
 
 async function createSubmission(type: 'DOCTOR' | 'NURSE', nameEn: string): Promise<{ api: APIRequestContext; userId: string }> {
   const api = await apiSession(unique(`flow-e-${type.toLowerCase()}`), 'E2e-Password-2026', { signUp: true, name: nameEn });
@@ -43,7 +43,7 @@ test('Flow E — admin reviews credentials and decides', async ({ page }) => {
   await page.getByTestId('admin-email').fill('admin.demo@demo.ghayarly.test');
   await page.getByTestId('admin-password').fill(DEMO_PASSWORD);
   await shot(page, 'E01-admin-login');
-  await page.getByTestId('admin-submit').click();
+  await submitSignIn(page, 'admin-submit');
   await expect(page.getByTestId('stat-open')).toBeVisible();
   await expect(page.getByTestId('mfa-warning')).toBeVisible(); // MFA not enrolled → visible warning (enforced in production)
   await shot(page, 'E02-admin-overview');

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiSession, approvedIndication, archiveProduct, DEMO_PASSWORD, liveProduct, shot } from './helpers';
+import { apiSession, approvedIndication, archiveProduct, DEMO_PASSWORD, liveProduct, shot, submitSignIn } from './helpers';
 
 /**
  * Flow E5 — TetraSol knowledge and the keyword engine: a keyword the admin proposed is approved by a
@@ -18,7 +18,7 @@ test('Flow E5 — a clinical reviewer approves a proposed keyword and tests the 
     await page.goto('/login');
     await page.getByTestId('admin-email').fill('reviewer.demo@demo.ghayarly.test');
     await page.getByTestId('admin-password').fill(DEMO_PASSWORD);
-    await page.getByTestId('admin-submit').click();
+    await submitSignIn(page, 'admin-submit');
     await page.getByTestId('nav-ai').click();
     await page.getByTestId('ai-tab-products').click();
     await page.getByTestId('pk-product').selectOption(product.id);

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiSession, DEMO_PASSWORD, grantConsentsApi, shot, unique } from './helpers';
+import { apiSession, DEMO_PASSWORD, grantConsentsApi, shot, submitSignIn, unique } from './helpers';
 
 /**
  * Flow E3 — Admin user management: find a patient → suspend with a reason, a message for the
@@ -16,7 +16,7 @@ test('Flow E3 — admin suspends an account; the person is signed out and can ap
   await page.goto('/login');
   await page.getByTestId('admin-email').fill('admin.demo@demo.ghayarly.test');
   await page.getByTestId('admin-password').fill(DEMO_PASSWORD);
-  await page.getByTestId('admin-submit').click();
+  await submitSignIn(page, 'admin-submit');
   await page.getByTestId('nav-users').click();
   await page.getByTestId('users-search').fill(email);
   await page.getByTestId(`open-user-${email}`).click();
