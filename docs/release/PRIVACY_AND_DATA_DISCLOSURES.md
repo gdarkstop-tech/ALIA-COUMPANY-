@@ -354,7 +354,7 @@ These are findings from reading the code; none is fixed here.
 10. **No breach-response runbook** exists in the repo (72-hour PDPC clock).
 11. **The consent ledger stores version and locale but no hash of the displayed text.** The evidence implication for Executive Regulations Article 14 is secondary (**to confirm**).
 12. **No age check at sign-up or on the `SELF` profile.** The Terms require users to be 18 or older.
-13. **Retention in database backups and logs is undefined** (hosting is TBD).
+13. **Backup retention is designed but not yet in force** (hosting is TBD). Design (ADR 0017): photo versions erased from the bucket within 30 days of deletion by a lifecycle rule; database backups (encrypted, point-in-time) kept ≤ 30 days; restore drill script tested on development data. Log retention is still undefined. The privacy notice must state the 30-day backup window once hosting is chosen.
 14. **AsyncStorage preferences are not cleared on deletion.** They are locale, theme and a profile UUID, with no health content.
 
 ---

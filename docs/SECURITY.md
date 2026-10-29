@@ -86,9 +86,10 @@ prices flagged `is_demo`. The seed refuses to run in production or without `DEMO
 ## 7. Known gaps (tracked in the implementation checklist)
 
 - Field-level encryption for selected PHI columns, KMS-managed keys, and encrypted backups.
-- Wound photos: encrypted object storage with signed, re-checked links is implemented (local
-  encrypted adapter for development / tests); the **production storage provider is not configured**,
-  and its key must come from a KMS before launch. Medical documents still live in the database.
+- Wound photos: the production S3 adapter (API-side AES-256-GCM + SSE-KMS, private bucket, no
+  presigned URLs, `storage:verify`) is implemented and tested on an S3 emulator (ADR 0017), but
+  **production storage stays `NOT_CONFIGURED`** until the company supplies the bucket, KMS key,
+  credentials and the approval reference. Medical documents still live in the database.
 - Volumetric attacks spread over many addresses need edge protection (CDN/WAF rate rules, bot
   management) in front of the API — part of the hosting decision (ADR 0016).
 - Real payment webhook verification (HMAC) — gateway reports `NOT_CONFIGURED`.

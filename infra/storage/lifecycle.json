@@ -1,0 +1,12 @@
+{
+  "Rules": [
+    {
+      "ID": "erase-noncurrent-versions-after-30-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+      "Expiration": { "ExpiredObjectDeleteMarker": true },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}

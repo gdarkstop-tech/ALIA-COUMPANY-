@@ -13,11 +13,14 @@
     "lint": "eslint src test --max-warnings=0",
     "test": "vitest run",
     "review:seed": "tsx --env-file-if-exists=.env src/db/seed-review.ts",
-    "ai:smoke": "tsx --env-file-if-exists=.env src/ops/ai-smoke.ts"
+    "ai:smoke": "tsx --env-file-if-exists=.env src/ops/ai-smoke.ts",
+    "storage:verify": "tsx --env-file-if-exists=.env src/ops/storage-cli.ts verify",
+    "storage:dev-bucket": "tsx --env-file-if-exists=.env src/ops/storage-cli.ts dev-bucket"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",
     "@apple/app-store-server-library": "3.1.0",
+    "@aws-sdk/client-s3": "3.1159.0",
     "@better-auth/expo": "1.7.7",
     "@fastify/cors": "11.3.1",
     "@fastify/helmet": "13.2.0",

@@ -67,10 +67,25 @@ const schema = z.object({
   PAYMOB_INTEGRATION_ID: z.string().optional(),
   SMS_PROVIDER_API_KEY: z.string().optional(),
   EMAIL_PROVIDER_API_KEY: z.string().optional(),
-  S3_ENDPOINT: z.string().optional(),
-  S3_BUCKET: z.string().optional(),
+  /**
+   * Private S3-compatible bucket for medical images (ADR 0017). All of endpoint, region, bucket and
+   * credentials are needed; production additionally needs OBJECT_STORAGE_KEY and an approval
+   * reference (contract / DPIA / cross-border authorisation) before the adapter is switched on.
+   */
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(2).optional(),
+  S3_BUCKET: z.string().min(3).max(63).optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Server-side encryption requested on every object: KMS (default), S3-managed keys, or the provider's own default encryption. */
+  S3_SSE: z.enum(['aws:kms', 'AES256', 'provider-default']).default('aws:kms'),
+  /** KMS key for SSE-KMS (ARN or alias). Required in production when S3_SSE=aws:kms. */
+  S3_KMS_KEY_ID: z.string().optional(),
+  /** Path-style addressing (most non-AWS S3-compatible services). */
+  S3_FORCE_PATH_STYLE: bool(false),
+  S3_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
+  /** Evidence that production photo storage is approved (contract, DPIA, PDPL / cross-border reference). */
+  OBJECT_STORAGE_APPROVAL_REF: z.string().min(3).max(200).optional(),
   /** Encryption key for stored medical images (32 bytes, base64). From the secret manager; never committed. */
   OBJECT_STORAGE_KEY: z
     .string()
@@ -134,6 +149,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (env.DATABASE_URL_OWNER) problems.push('DATABASE_URL_OWNER must not be provided to the production server process');
     if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
     if (!env.MEDIA_LINK_SECRET) problems.push('MEDIA_LINK_SECRET is required in production (signs medical image links)');
+    if (env.S3_ENDPOINT && !env.S3_ENDPOINT.startsWith('https://')) problems.push('S3_ENDPOINT must use https in production (medical images in transit)');
     for (const [name, url] of [['AI_QWEN_BASE_URL', env.AI_QWEN_BASE_URL], ['AI_GROK_BASE_URL', env.AI_GROK_BASE_URL], ['AI_KIMI_BASE_URL', env.AI_KIMI_BASE_URL], ['AI_MEDGEMMA_BASE_URL', env.AI_MEDGEMMA_BASE_URL]] as const) {
       if (url && !url.startsWith('https://')) problems.push(`${name} must use https in production (patient data in transit)`);
     }

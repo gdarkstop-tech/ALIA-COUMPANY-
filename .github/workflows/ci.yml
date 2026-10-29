@@ -36,8 +36,15 @@ jobs:
         run: PSQL="psql -h localhost -U postgres" GHAYARLY_DATABASES=ghayarly_test bash scripts/db-bootstrap.sh
       - run: pnpm typecheck
       - run: pnpm lint
+      - name: Start S3-compatible emulator for the photo storage adapter (moto, no real provider)
+        run: |
+          python3 -m pip install --quiet 'moto[server,s3,kms]==5.2.5'
+          nohup moto_server -H 127.0.0.1 -p 5055 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:5055/ >/dev/null && break; sleep 1; done
       - name: Unit, API, migration, auth and RLS tests
         run: pnpm test
+        env:
+          S3_TEST_ENDPOINT: http://127.0.0.1:5055
       - name: Verify native bundles compile (Android + iOS)
         run: pnpm --filter @ghayarly/mobile exec expo export --platform android --platform ios --output-dir ../../dist/native
         env:

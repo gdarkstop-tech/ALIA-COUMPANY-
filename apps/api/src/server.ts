@@ -36,7 +36,7 @@ import { createRealtimeProviders, type RealtimeProviders } from './integrations/
 import { voiceRoutes, type VoiceTiming } from './modules/ai/voice';
 import { AI_VOICE_PROTOCOL } from '@ghayarly/shared';
 import { dashboardRoutes } from './modules/dashboard/routes';
-import { createObjectStore, type ObjectStore } from './integrations/storage';
+import { createObjectStore, ObjectStoreError, ObjectStoreUnavailable, type ObjectStore } from './integrations/storage';
 import { mediaLinkKey } from './lib/media-links';
 import { startWoundMaintenance, woundRoutes } from './modules/wounds/routes';
 import { woundStaffRoutes } from './modules/wounds/staff';
@@ -149,6 +149,14 @@ export async function buildServer(
     }
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } });
+    }
+    // Photo storage: the cause is logged for operators, never sent to the client.
+    if (error instanceof ObjectStoreUnavailable) {
+      return reply.status(409).send({ error: { code: 'NOT_CONFIGURED', message: 'Photo storage is not configured' } });
+    }
+    if (error instanceof ObjectStoreError) {
+      request.log.error({ kind: error.kind, cause: (error.cause as Error | undefined)?.name }, 'object storage failure');
+      return reply.status(503).send({ error: { code: 'STORAGE_UNAVAILABLE', message: 'Photos are temporarily unavailable. Please try again shortly.' } });
     }
     const mapped = fromPgError(error);
     if (mapped) {

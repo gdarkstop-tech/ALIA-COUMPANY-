@@ -260,8 +260,20 @@ export async function mintMediaLink(request: FastifyRequest, principal: Principa
 }
 
 // ---------------------------------------------------------------- object purge and maintenance
-/** Deletes objects whose rows are gone (system context; never as a user). */
-export async function purgeStoredObjects(app: FastifyInstance): Promise<{ deleted: number; failed: number }> {
+const purgeInFlight = new WeakMap<FastifyInstance, Promise<{ deleted: number; failed: number }>>();
+
+/**
+ * Deletes objects whose rows are gone (system context; never as a user). Purges of one server
+ * instance run one after another: a maintenance pass started while the post-delete purge is
+ * still working waits for it, instead of skipping the rows it holds and returning early.
+ */
+export function purgeStoredObjects(app: FastifyInstance): Promise<{ deleted: number; failed: number }> {
+  const run = (purgeInFlight.get(app) ?? Promise.resolve()).catch(() => undefined).then(() => purgeOnce(app));
+  purgeInFlight.set(app, run);
+  return run;
+}
+
+async function purgeOnce(app: FastifyInstance): Promise<{ deleted: number; failed: number }> {
   const { db, env, objects } = app.services;
   if (objects.status === 'NOT_CONFIGURED') return { deleted: 0, failed: 0 };
   const sys = { userId: null, demoMode: env.DEMO_MODE };
