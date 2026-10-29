@@ -53,7 +53,10 @@ database's rules, not the only enforcer of them.**
   all sessions. Sessions 7 days, refreshed daily; device list with revocation.
 - Rate limits (Better Auth, stored in PostgreSQL): sign-in 5/min/IP (configurable; production ≤ 10),
   sign-up 5/min, OTP send 3/min, OTP verify 5/min, password reset 3/5 min, TOTP 5/min with lockout.
-  Fastify adds a global 300/min/IP ceiling (Redis-backed when `REDIS_URL` is set).
+  General API limits (ADR 0016, Redis counters shared by all instances, `REDIS_URL` required in
+  production): 600/min per signed-in **account**, 300/min per anonymous IP, a 6 000/min per-IP
+  ceiling checked before any session lookup, per-route limits on AI/uploads/exports, and 200
+  uploads per account per day. Every refusal is `429 RATE_LIMITED` with `Retry-After`.
 - **MFA:** TOTP for doctors, nurses and all staff. `MFA_ENFORCEMENT=required` (mandatory in
   production) blocks staff endpoints without 2FA; development runs in `warn` mode with visible
   banners. Clinician-side enforcement on patient-data endpoints arrives with care teams (M3).
@@ -86,10 +89,8 @@ prices flagged `is_demo`. The seed refuses to run in production or without `DEMO
 - Wound photos: encrypted object storage with signed, re-checked links is implemented (local
   encrypted adapter for development / tests); the **production storage provider is not configured**,
   and its key must come from a KMS before launch. Medical documents still live in the database.
-- The global 300/min ceiling is keyed by IP. Behind carrier-grade NAT many people share one
-  address, so busy networks could be throttled together (the E2E suite, all from one IP, meets it).
-  Decision needed before launch: key authenticated traffic by session with a looser per-IP ceiling,
-  measured against real traffic. Clients already retry throttled reads after a delay.
+- Volumetric attacks spread over many addresses need edge protection (CDN/WAF rate rules, bot
+  management) in front of the API — part of the hosting decision (ADR 0016).
 - Real payment webhook verification (HMAC) — gateway reports `NOT_CONFIGURED`.
 - Care-relationship–based clinician access and consent receipts (Milestone 3).
 - Penetration test, dependency scanning in CI, backup/restore drills (Milestone 6).

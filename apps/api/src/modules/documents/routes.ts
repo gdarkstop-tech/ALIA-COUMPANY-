@@ -32,6 +32,7 @@ import { inspectDocument } from '../../lib/documents';
 import { AppError, notFound, unprocessable } from '../../lib/errors';
 import { inContext, requirePrincipal, requireRole, type Principal } from '../../lib/principal';
 import { sessionKey } from '../../lib/rateLimitKey';
+import { consumeAllowance, DAY_MS } from '../../lib/rate-limits';
 import { parse } from '../../lib/validate';
 import { allowance, preferences, providerArray } from '../ai/routes';
 import { endUserRefFor } from '../ai/safety';
@@ -170,6 +171,7 @@ export async function documentRoutes(app: FastifyInstance) {
     // The type comes from the bytes; a declared type that disagrees is refused.
     if (!inspected || inspected.type !== b.contentType) throw unprocessable('DOCUMENT_TYPE_INVALID', 'Upload a PDF, JPEG, PNG or WebP file');
     if (bytes.length > 10 * 1024 * 1024) throw unprocessable('DOCUMENT_TOO_LARGE', 'Files are limited to 10 MB');
+    await consumeAllowance(app, reply, `uploads:u:${principal.userId}`, app.services.rateLimits.uploadsPerAccountPerDay, DAY_MS);
     const detail = await inContext(request, principal, async (tx) => {
       const [d] = await tx
         .insert(medicalDocuments)

@@ -16,6 +16,7 @@ import { createMessaging, type Messaging } from './integrations/messaging';
 import { createPaymentGateway, type PaymentGateway } from './integrations/payments';
 import { AppError, fromPgError } from './lib/errors';
 import { serializeRequest } from './lib/logging';
+import { createWindowCounter, globalLimiterOptions, rateLimitPolicy, registerIpCeiling, type RateLimitPolicy, type WindowCounter } from './lib/rate-limits';
 import { getPrincipal, inContext, registerPrincipal } from './lib/principal';
 import { adminRoutes } from './modules/admin/routes';
 import { adminCatalogRoutes } from './modules/catalog/admin';
@@ -64,6 +65,9 @@ export type Services = {
   mediaKey: Buffer;
   /** Tests only: shorter voice timers. */
   voiceTiming?: Partial<VoiceTiming>;
+  /** Shared fixed-window counters (Redis when configured) for allowances such as daily uploads. */
+  counters: WindowCounter;
+  rateLimits: RateLimitPolicy;
 };
 
 declare module 'fastify' {
@@ -106,10 +110,11 @@ export async function buildServer(
   const ai: AiProviders = { ...createAiProviders(env), ...overrides.ai };
   const realtime: RealtimeProviders = { ...createRealtimeProviders(env), ...overrides.realtime };
   const objects = overrides.objects ?? createObjectStore(env);
-  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai, realtime, objects, mediaKey: mediaLinkKey(env), voiceTiming: overrides.voiceTiming });
-
   const redis = env.REDIS_URL && env.NODE_ENV !== 'test' ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false, lazyConnect: false }) : null;
-  redis?.on('error', (err) => app.log.warn({ err: err.message }, 'redis unavailable — rate limiting falls back per request'));
+  redis?.on('error', (err) => app.log.warn({ err: err.message }, 'redis unavailable — rate-limit counters fall back to this instance'));
+  const counters = createWindowCounter(redis);
+  const rateLimits = rateLimitPolicy(env);
+  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai, realtime, objects, mediaKey: mediaLinkKey(env), voiceTiming: overrides.voiceTiming, counters, rateLimits });
 
   app.addHook('onClose', async () => {
     await Promise.allSettled([pools.appPool.end(), pools.authPool.end(), redis?.quit()]);
@@ -122,11 +127,16 @@ export async function buildServer(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['content-type', 'authorization', 'x-request-id', 'expo-origin', 'cookie'],
+    // Browser clients read Retry-After to wait exactly as long as the server asks.
+    exposedHeaders: ['retry-after', 'x-retry-after', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset'],
     maxAge: 600,
   });
+  // Rate limits (ADR 0016): the per-IP ceiling runs first, before any session lookup; then the
+  // global limiter counts signed-in traffic per account and anonymous traffic per IP.
+  registerIpCeiling(app, counters, rateLimits.ipCeilingPerMinute);
   await app.register(rateLimit, {
     global: true,
-    max: env.NODE_ENV === 'test' ? 10_000 : 300,
+    ...globalLimiterOptions(rateLimits),
     timeWindow: '1 minute',
     ...(redis ? { redis, nameSpace: 'ghayarly-rl:', skipOnError: true } : {}),
     // Thrown and rendered by the error handler below, which reads `statusCode` and `code`.

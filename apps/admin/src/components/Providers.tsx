@@ -2,7 +2,7 @@
 import { createTranslator, direction, type Locale, type TranslationKey, type TranslationParams } from '@ghayarly/i18n';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ApiError } from '@/lib/api';
+import { ApiError, throttleDelayMs } from '@/lib/api';
 
 type I18n = { locale: Locale; t: (k: TranslationKey, p?: TranslationParams) => string; setLocale: (l: Locale) => void };
 const I18nCtx = createContext<I18n | null>(null);
@@ -12,7 +12,14 @@ export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { retry: (n, e) => !(e instanceof ApiError && e.status < 500 && e.status > 0) && n < 2, refetchOnWindowFocus: false } },
+        defaultOptions: {
+          queries: {
+            // Throttled reads wait for the server's Retry-After; writes are never replayed.
+            retry: (n, e) => (e instanceof ApiError && e.status === 429 ? n < 3 : !(e instanceof ApiError && e.status < 500 && e.status > 0) && n < 2),
+            retryDelay: (n, e) => (e instanceof ApiError && e.status === 429 ? throttleDelayMs(e, n) : Math.min(1_000 * 2 ** n, 30_000)),
+            refetchOnWindowFocus: false,
+          },
+        },
       }),
   );
   const [locale, setLocaleState] = useState<Locale>('en');

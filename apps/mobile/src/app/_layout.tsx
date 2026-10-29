@@ -15,7 +15,7 @@ import { Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ApiError } from '@/lib/api';
+import { ApiError, throttleDelayMs } from '@/lib/api';
 import { installGlobalErrorHandler, reportError } from '@/lib/errorReporting';
 import { I18nProvider } from '@/providers/i18n';
 import { PreferencesProvider, usePreferences } from '@/providers/preferences';
@@ -78,10 +78,11 @@ export default function RootLayout() {
       mutationCache: new MutationCache({ onError }),
       defaultOptions: {
         queries: {
-          // A throttle (429) passes within the one-minute window: reads wait and retry (5, 10, 20, 30 s)
-          // instead of showing an error. Other client errors are final; server / network errors retry twice.
+          // A throttle (429) passes: reads wait for the server's Retry-After (with jitter) and retry
+          // instead of showing an error. Writes are never replayed automatically. Other client
+          // errors are final; server / network errors retry twice.
           retry: (count, error) => (error instanceof ApiError && error.status === 429 ? count < 4 : !(error instanceof ApiError && error.status > 0 && error.status < 500) && count < 2),
-          retryDelay: (count, error) => (error instanceof ApiError && error.status === 429 ? Math.min(5_000 * 2 ** count, 30_000) : Math.min(1_000 * 2 ** count, 30_000)),
+          retryDelay: (count, error) => (error instanceof ApiError && error.status === 429 ? throttleDelayMs(error, count) : Math.min(1_000 * 2 ** count, 30_000)),
           staleTime: 15_000,
         },
       },

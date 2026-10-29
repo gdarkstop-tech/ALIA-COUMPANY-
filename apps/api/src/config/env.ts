@@ -47,6 +47,18 @@ const schema = z.object({
   /** Sign-in attempts per minute per IP. Defaults to 5 (production); development may raise it for E2E runs. */
   AUTH_SIGNIN_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).optional(),
 
+  /**
+   * General API limits (ADR 0016). Signed-in traffic is counted per account, so many people behind
+   * one carrier-grade NAT address do not throttle each other; anonymous traffic per IP; and a
+   * looser per-IP ceiling over all traffic stops one address flooding with many accounts. Tests
+   * default to values that never trigger unless a test lowers them.
+   */
+  RATE_LIMIT_ACCOUNT_PER_MIN: z.coerce.number().int().min(1).max(100_000).optional(),
+  RATE_LIMIT_ANON_IP_PER_MIN: z.coerce.number().int().min(1).max(100_000).optional(),
+  RATE_LIMIT_IP_CEILING_PER_MIN: z.coerce.number().int().min(1).max(1_000_000).optional(),
+  /** Photo and document uploads per account per 24 hours (storage-cost and abuse cap). */
+  UPLOADS_PER_ACCOUNT_PER_DAY: z.coerce.number().int().min(1).max(10_000).optional(),
+
   DEMO_MODE: bool(false),
   DEV_TOOLS_ENABLED: bool(false),
 
@@ -118,6 +130,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (env.MFA_ENFORCEMENT !== 'required') problems.push('MFA_ENFORCEMENT must be "required" in production');
     if (!env.AUTH_REQUIRE_EMAIL_VERIFICATION) problems.push('AUTH_REQUIRE_EMAIL_VERIFICATION must be true in production');
     if (env.AUTH_SIGNIN_RATE_LIMIT && env.AUTH_SIGNIN_RATE_LIMIT > 10) problems.push('AUTH_SIGNIN_RATE_LIMIT must be ≤ 10 in production');
+    if (!env.REDIS_URL) problems.push('REDIS_URL is required in production (rate-limit counters shared by every API instance)');
     if (env.DATABASE_URL_OWNER) problems.push('DATABASE_URL_OWNER must not be provided to the production server process');
     if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
     if (!env.MEDIA_LINK_SECRET) problems.push('MEDIA_LINK_SECRET is required in production (signs medical image links)');

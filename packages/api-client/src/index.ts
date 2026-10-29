@@ -114,6 +114,8 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly details?: unknown,
+    /** Seconds the server asked the client to wait (Retry-After on 429 / 503), when it said so. */
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -121,6 +123,24 @@ export class ApiError extends Error {
   get isNetwork() {
     return this.status === 0;
   }
+}
+
+/**
+ * How long to wait before repeating a throttled READ: the server's Retry-After plus up to 25 %
+ * jitter (so many phones behind one network do not all come back in the same second), never
+ * more than a minute. Only for reads — a refused write is shown to the person, never replayed.
+ */
+export function throttleDelayMs(error: unknown, attempt: number): number {
+  const asked = error instanceof ApiError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : Math.min(5_000 * 2 ** attempt, 30_000);
+  return Math.min(asked + Math.random() * asked * 0.25, 60_000);
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? undefined : Math.max(0, Math.ceil((at - Date.now()) / 1000));
 }
 
 export type ApiClientOptions = {
@@ -188,7 +208,8 @@ export function createApiClient(options: ApiClientOptions) {
     const json = text ? safeJson(text) : null;
     if (!res.ok) {
       const e = (json as { error?: { code?: string; message?: string; details?: unknown } } | null)?.error;
-      throw new ApiError(res.status, e?.code ?? `HTTP_${res.status}`, e?.message ?? res.statusText, e?.details);
+      const retryAfter = res.status === 429 || res.status === 503 ? parseRetryAfter(res.headers.get('retry-after')) : undefined;
+      throw new ApiError(res.status, e?.code ?? `HTTP_${res.status}`, e?.message ?? res.statusText, e?.details, retryAfter);
     }
     return json as T;
   }

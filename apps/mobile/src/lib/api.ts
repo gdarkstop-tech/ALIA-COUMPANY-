@@ -1,4 +1,4 @@
-import { ApiError, createApiClient } from '@ghayarly/api-client';
+import { ApiError, createApiClient, throttleDelayMs } from '@ghayarly/api-client';
 import { Platform } from 'react-native';
 import { authClient } from './auth-client';
 import { API_URL } from './config';
@@ -16,7 +16,7 @@ export const api = createApiClient({
   },
 });
 
-export { ApiError };
+export { ApiError, throttleDelayMs };
 
 export function errorKey(err: unknown):
   | 'errors.network'

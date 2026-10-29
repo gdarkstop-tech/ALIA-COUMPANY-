@@ -42,6 +42,7 @@ import { signMediaLink, verifyMediaLink, type MediaKind, type MediaVariant } fro
 import { AppError, notFound, unprocessable } from '../../lib/errors';
 import { enforceMfa, inContext, requirePrincipal, requireRole, type Principal } from '../../lib/principal';
 import { sessionKey } from '../../lib/rateLimitKey';
+import { consumeAllowance, DAY_MS } from '../../lib/rate-limits';
 import { parse } from '../../lib/validate';
 import { processWoundImage, WoundImageError } from '../../lib/wound-images';
 
@@ -435,6 +436,7 @@ export async function woundRoutes(app: FastifyInstance) {
       throw e;
     }
     if (p.contentType !== b.contentType) throw unprocessable('IMAGE_TYPE_INVALID', 'The file is not the declared type');
+    await consumeAllowance(app, reply, `uploads:u:${principal.userId}`, app.services.rateLimits.uploadsPerAccountPerDay, DAY_MS);
     const imageId = randomUUID();
     const capturedAt = p.cameraTakenAt ?? b.capturedAt ?? null;
     const source = p.cameraTakenAt ? 'CAMERA' : b.capturedAt ? 'DEVICE' : 'UPLOAD';

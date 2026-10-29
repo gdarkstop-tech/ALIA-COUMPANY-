@@ -100,8 +100,11 @@ describe('system status', () => {
     // No provider keys in the test environment: only the development simulator is available, and
     // medical-image storage is the encrypted local development adapter (refused in production).
     expect(JSON.parse(res.body).integrations).toMatchObject({ payments: 'NOT_CONFIGURED', ai: 'DEV_ADAPTER', storage: 'DEV_ADAPTER' });
-    const prod = loadEnv({ ...process.env, NODE_ENV: 'production', DEMO_MODE: 'false', DEV_TOOLS_ENABLED: 'false', MFA_ENFORCEMENT: 'required', AUTH_REQUIRE_EMAIL_VERIFICATION: 'true', DATABASE_URL_OWNER: '', BETTER_AUTH_SECRET: 'prod-like-secret-0123456789abcdefghijklmnopqrstuvwxyz', MEDIA_LINK_SECRET: 'prod-like-media-secret-0123456789abcdef' });
+    const prodBase = { ...process.env, NODE_ENV: 'production', DEMO_MODE: 'false', DEV_TOOLS_ENABLED: 'false', MFA_ENFORCEMENT: 'required', AUTH_REQUIRE_EMAIL_VERIFICATION: 'true', DATABASE_URL_OWNER: '', BETTER_AUTH_SECRET: 'prod-like-secret-0123456789abcdefghijklmnopqrstuvwxyz', REDIS_URL: 'redis://redis.internal:6379' };
+    const prod = loadEnv({ ...prodBase, MEDIA_LINK_SECRET: 'prod-like-media-secret-0123456789abcdef' });
     expect(createObjectStore(prod).status).toBe('NOT_CONFIGURED');
-    expect(() => loadEnv({ ...process.env, NODE_ENV: 'production', DEMO_MODE: 'false', DEV_TOOLS_ENABLED: 'false', MFA_ENFORCEMENT: 'required', AUTH_REQUIRE_EMAIL_VERIFICATION: 'true', DATABASE_URL_OWNER: '', BETTER_AUTH_SECRET: 'prod-like-secret-0123456789abcdefghijklmnopqrstuvwxyz' })).toThrow(/MEDIA_LINK_SECRET is required/);
+    expect(() => loadEnv(prodBase)).toThrow(/MEDIA_LINK_SECRET is required/);
+    // Rate-limit counters must be shared by every instance (ADR 0016).
+    expect(() => loadEnv({ ...prodBase, MEDIA_LINK_SECRET: 'prod-like-media-secret-0123456789abcdef', REDIS_URL: '' })).toThrow(/REDIS_URL is required in production/);
   });
 });
