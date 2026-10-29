@@ -31,6 +31,15 @@ export const DEMO_ACCOUNTS = {
   clinicianTester: { email: 'clinician.tester@demo.ghayarly.test', name: 'Clinician Internal Tester' },
   /** A second staff member, so separation of duties (editor ≠ approver) can be exercised. */
   reviewer: { email: 'reviewer.demo@demo.ghayarly.test', name: 'Clinical Reviewer (demo)' },
+  /**
+   * Wound Intelligence Registry, pre-launch (ADR 0015): every wound flag stays OFF, so only these
+   * INTERNAL_TEST accounts can exercise it — on test data only, never on real patients' wounds.
+   */
+  woundTester: { email: 'wound.tester@demo.ghayarly.test', name: 'Wound Internal Tester' },
+  woundPresenter: { email: 'wound.presenter@demo.ghayarly.test', name: 'Presentation Preparer (internal test)' },
+  woundApprover: { email: 'wound.approver@demo.ghayarly.test', name: 'Presentation Second Approver (internal test)' },
+  woundResearcher: { email: 'wound.researcher@demo.ghayarly.test', name: 'Wound Researcher (internal test)' },
+  woundReviewer: { email: 'wound.reviewer@demo.ghayarly.test', name: 'Wound Clinical Reviewer (internal test)' },
 } as const;
 
 const CENTROIDS: Record<string, [number, number]> = {
@@ -163,6 +172,18 @@ export async function seed(log: (line: string) => void = console.log) {
       await profile(ids.reviewer, 'Clinical Reviewer (demo)', 'CLINICAL_REVIEWER', 'en');
       await grantSeedConsents(client, ids.reviewer, false);
     }
+    // Wound-registry internal testers. Staff roles are granted by the demo admin (never by oneself).
+    const woundTesters: [keyof typeof DEMO_ACCOUNTS, string][] = [
+      ['woundTester', 'PATIENT'], ['woundPresenter', 'PRESENTATION_APPROVER'], ['woundApprover', 'PRESENTATION_APPROVER'],
+      ['woundResearcher', 'WOUND_RESEARCHER'], ['woundReviewer', 'CLINICAL_REVIEWER'],
+    ];
+    for (const [key, r] of woundTesters) {
+      if ((await client.query('select 1 from app.user_profiles where user_id = $1', [ids[key]])).rowCount) continue;
+      await client.query('insert into app.user_roles (user_id, role, granted_by_user_id) values ($1, $2, $3) on conflict do nothing', [ids[key], r, r === 'PATIENT' ? ids[key] : ids.admin]);
+      await profile(ids[key], DEMO_ACCOUNTS[key].name, r, 'en');
+      await client.query("update app.user_profiles set account_kind = 'INTERNAL_TEST' where user_id = $1", [ids[key]]);
+      await grantSeedConsents(client, ids[key], r === 'PATIENT');
+    }
 
     const already = await client.query('select 1 from app.user_profiles where user_id = $1', [ids.patient]);
     if (already.rowCount) {
@@ -187,7 +208,8 @@ export async function seed(log: (line: string) => void = console.log) {
     await profile(ids.pendingNurse, 'هدى سمير', 'NURSE');
 
     // ---------------------------------------------------------------- consents (synthetic accounts accepted the draft documents)
-    for (const userId of Object.values(ids)) if (userId !== ids.aiTester && userId !== ids.reviewer) await grantSeedConsents(client, userId, userId === ids.patient);
+    const ownConsents = new Set([ids.aiTester, ids.reviewer, ids.woundTester, ids.woundPresenter, ids.woundApprover, ids.woundResearcher, ids.woundReviewer]);
+    for (const userId of Object.values(ids)) if (!ownConsents.has(userId)) await grantSeedConsents(client, userId, userId === ids.patient);
 
     // ---------------------------------------------------------------- patient & family
     const createPatient = async (p: { name: string; dob: string; sex: string; rel: string; level: string; basis: string; blood?: string; gov?: string; city?: string; self?: boolean }) => {

@@ -746,3 +746,233 @@ describe('account deletion and AI', () => {
     expect(status.json.storage).toBe('DEV_ADAPTER');
   });
 });
+
+/*
+ * Regression: each permission is enforced on its own, withdrawal stops future use at once (already
+ * issued links included), and no role sees photos outside its duty.
+ */
+describe('consent enforcement and unauthorized access (regression)', () => {
+  const checklist = { noFace: true, noIdentifyingMarks: true, noJewelleryOrTattoos: true, noBackgroundDetails: true, noNamesDatesOrNumbers: true, outcomeClinicianConfirmed: true, noEfficacyClaims: true };
+  const preparedBody = (images: { imageId: string; day: number }[]) => ({
+    title: 'Pressure-area wound — follow-up',
+    summaryEn: 'A wound followed with regular dressing changes; the clinician-confirmed outcome is shown.',
+    summaryAr: 'جرح تمت متابعته مع تغيير الضماد بانتظام؛ النتيجة كما أكدها المختص.',
+    audience: 'INTERNAL_TRAINING',
+    organization: 'ALIA_GROUP',
+    scopeNote: 'Internal nurse training sessions only',
+    validUntil: new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10),
+    images: images.map((i) => ({ imageId: i.imageId, captionEn: `Day ${i.day}`, captionAr: `اليوم ${i.day}` })),
+  });
+  /** A case taken through the whole presentation workflow to APPROVED. */
+  async function approvedPresentation(nurse: Client, a: Client, b: Client) {
+    const p = await consentingCase(nurse, { research: null, presentation: true, outcome: 'IMPROVING' });
+    const imgs = (await a.req({ method: 'GET', url: `/v1/admin/wounds/cases/${p.caseId}/images` })).json;
+    const nom = (await a.req({ method: 'POST', url: '/v1/admin/wounds/presentations', body: { caseId: p.caseId } })).json;
+    const prep = await a.req({ method: 'POST', url: `/v1/admin/wounds/presentations/${nom.id}/prepare`, body: preparedBody(imgs) });
+    expect(prep.status, JSON.stringify(prep.json)).toBe(200);
+    expect((await p.c.req({ method: 'POST', url: `/v1/wound-presentations/${nom.id}/decision`, body: { decision: 'APPROVE', requestHash: prep.json.requestHash } })).status).toBe(200);
+    expect((await b.req({ method: 'POST', url: `/v1/admin/wounds/presentations/${nom.id}/approve`, body: { checklist } })).status).toBe(200);
+    return { ...p, presentationId: nom.id as string, imageIds: imgs.map((i: { imageId: string }) => i.imageId) as string[] };
+  }
+  const exportPdf = (c: Client, id: string) =>
+    app.inject({ method: 'POST', url: `/v1/admin/wounds/presentations/${id}/export`, headers: { origin: 'http://localhost:8081', cookie: c.cookie, 'content-type': 'application/json' }, payload: JSON.stringify({ format: 'PDF' }) });
+
+  it('A only: a person who refuses research and presentations uses the whole Wound Scan, and their case never reaches research or presentations', async () => {
+    const nurse = await clinician('NURSE');
+    const p = await consentingCase(nurse, { research: null, outcome: 'IMPROVING', name: 'Nadia Refuses' });
+    expect((await withdraw(p.c, p.patientId, 'RESEARCH')).status).toBe(200);
+    expect((await withdraw(p.c, p.patientId, 'PRESENTATION')).status).toBe(200);
+    const perms = (await p.c.req({ method: 'GET', url: `/v1/patients/${p.patientId}/wound-permissions` })).json;
+    expect(perms.consents.map((x: { purpose: string; active: boolean }) => [x.purpose, x.active])).toEqual([['SCAN', true], ['RESEARCH', false], ['PRESENTATION', false]]);
+    // Scan, timeline, notes, own photos: all available.
+    expect((await upload(p.c, p.caseId)).status).toBe(201);
+    expect((await p.c.req({ method: 'POST', url: `/v1/wounds/${p.caseId}/observations`, body: { observedOn: new Date().toISOString().slice(0, 10), painScore: 2, note: 'Less pain today' } })).status).toBe(201);
+    const detail = (await p.c.req({ method: 'GET', url: `/v1/wounds/${p.caseId}` })).json;
+    expect(detail.images).toHaveLength(3);
+    expect(detail.ai).toEqual({ status: 'DISABLED', reason: 'NOT_VALIDATED' });
+    expect((await fetchMedia((await p.c.req({ method: 'POST', url: `/v1/wound-images/${detail.images[0].id}/link`, body: {} })).json.url)).status).toBe(200);
+    // Never a research item nor a presentation candidate.
+    await flag('wound.research', true);
+    await flag('wound.presentations', true);
+    try {
+      const researcher = await staff('WOUND_RESEARCHER');
+      const ds = (await researcher.req({ method: 'POST', url: '/v1/admin/wounds/datasets', body: { name: 'Refusal check', purpose: 'HEALING_TRAJECTORIES', recipient: 'DMW_CLINICAL_RESEARCH' } })).json;
+      await researcher.req({ method: 'POST', url: `/v1/admin/wounds/datasets/${ds.id}/build` });
+      const linked = (await owner.query('select l.case_id from app.wound_research_links l join app.wound_research_items i on i.id = l.item_id where i.dataset_id = $1', [ds.id])).rows.map((r) => r.case_id);
+      expect(linked).not.toContain(p.caseId);
+      const approver = await staff('PRESENTATION_APPROVER');
+      expect((await approver.req({ method: 'GET', url: '/v1/admin/wounds/presentation-candidates' })).json.map((x: { caseId: string }) => x.caseId)).not.toContain(p.caseId);
+      expect((await approver.req({ method: 'GET', url: `/v1/admin/wounds/cases/${p.caseId}/images` })).status).toBe(404);
+      expect((await approver.req({ method: 'POST', url: '/v1/admin/wounds/presentations', body: { caseId: p.caseId } })).status).not.toBe(201);
+      expect((await approver.req({ method: 'POST', url: `/v1/admin/wounds/presentation-images/${detail.images[0].id}/link` })).status).toBe(404);
+    } finally {
+      await flag('wound.research', false);
+      await flag('wound.presentations', false);
+    }
+  });
+
+  it('research only for the organisations and purposes the person named', async () => {
+    const nurse = await clinician('NURSE');
+    const dmwOnly = await consentingCase(nurse, { research: ['HEALING_TRAJECTORIES'] });
+    await flag('wound.research', true);
+    try {
+      const researcher = await staff('WOUND_RESEARCHER');
+      for (const [purpose, recipient] of [['HEALING_TRAJECTORIES', 'TETRASOL'], ['AI_IMPROVEMENT', 'DMW_CLINICAL_RESEARCH']]) {
+        const ds = (await researcher.req({ method: 'POST', url: '/v1/admin/wounds/datasets', body: { name: `${purpose} for ${recipient}`, purpose, recipient } })).json;
+        await researcher.req({ method: 'POST', url: `/v1/admin/wounds/datasets/${ds.id}/build` });
+        const linked = (await owner.query('select l.case_id from app.wound_research_links l join app.wound_research_items i on i.id = l.item_id where i.dataset_id = $1', [ds.id])).rows.map((r) => r.case_id);
+        expect(linked, `${purpose} → ${recipient}`).not.toContain(dmwOnly.caseId);
+      }
+    } finally {
+      await flag('wound.research', false);
+    }
+  });
+
+  it('withdrawing presentations after approval: approved case closed, issued links dead, no export, scope hidden', async () => {
+    const nurse = await clinician('NURSE');
+    const a = await staff('PRESENTATION_APPROVER');
+    const b = await staff('PRESENTATION_APPROVER');
+    await flag('wound.presentations', true);
+    await flag('wound.presentation_export', true);
+    try {
+      const p = await approvedPresentation(nurse, a, b);
+      const view = (await b.req({ method: 'GET', url: `/v1/admin/wounds/presentations/${p.presentationId}` })).json;
+      expect(view).toMatchObject({ status: 'APPROVED', permitted: { audiences: ['INTERNAL_TRAINING'], organizations: ['ALIA_GROUP'] } });
+      const issued = (await b.req({ method: 'POST', url: `/v1/admin/wounds/presentation-images/${p.imageIds[0]}/link` })).json.url;
+      expect((await fetchMedia(issued)).status).toBe(200);
+      expect((await exportPdf(b, p.presentationId)).statusCode).toBe(200);
+
+      expect((await withdraw(p.c, p.patientId, 'PRESENTATION')).status).toBe(200);
+      const after = (await b.req({ method: 'GET', url: `/v1/admin/wounds/presentations/${p.presentationId}` })).json;
+      expect(after).toMatchObject({ status: 'WITHDRAWN', closedReason: 'PERMISSION_WITHDRAWN', permitted: null });
+      expect((await fetchMedia(issued)).status).toBe(403);
+      expect((await b.req({ method: 'POST', url: `/v1/admin/wounds/presentation-images/${p.imageIds[0]}/link` })).status).toBe(404);
+      const refused = await exportPdf(b, p.presentationId);
+      expect(refused.statusCode).not.toBe(200);
+      expect(JSON.parse(refused.payload).error.code).toBe('PRESENTATION_NOT_APPROVED');
+      // The person keeps their own photos.
+      expect((await p.c.req({ method: 'GET', url: `/v1/wounds/${p.caseId}` })).json.images).toHaveLength(2);
+    } finally {
+      await flag('wound.presentations', false);
+      await flag('wound.presentation_export', false);
+    }
+  });
+
+  it('withdrawing scanning (A) withdraws research and presentations with it and stops every secondary use', async () => {
+    const nurse = await clinician('NURSE');
+    const a = await staff('PRESENTATION_APPROVER');
+    const b = await staff('PRESENTATION_APPROVER');
+    await flag('wound.presentations', true);
+    await flag('wound.research', true);
+    try {
+      const p = await approvedPresentation(nurse, a, b);
+      expect((await research(p.c, p.patientId)).status).toBe(200);
+      const researcher = await staff('WOUND_RESEARCHER');
+      const ds = (await researcher.req({ method: 'POST', url: '/v1/admin/wounds/datasets', body: { name: 'Cascade check', purpose: 'HEALING_TRAJECTORIES', recipient: 'DMW_CLINICAL_RESEARCH' } })).json;
+      await researcher.req({ method: 'POST', url: `/v1/admin/wounds/datasets/${ds.id}/build` });
+      const item = (await owner.query('select i.id from app.wound_research_items i join app.wound_research_links l on l.item_id = i.id where l.case_id = $1 and i.dataset_id = $2', [p.caseId, ds.id])).rows[0]?.id;
+      expect(item).toBeTruthy();
+
+      expect((await withdraw(p.c, p.patientId, 'SCAN')).status).toBe(200);
+      expect((await b.req({ method: 'GET', url: `/v1/admin/wounds/presentations/${p.presentationId}` })).json.status).toBe('WITHDRAWN');
+      // A draft item is deleted outright (a frozen one is kept as WITHDRAWN with its content destroyed).
+      expect((await owner.query("select count(*)::int as n from app.wound_research_items where id = $1 and status = 'INCLUDED'", [item])).rows[0].n).toBe(0);
+      expect((await owner.query('select count(*)::int as n from app.wound_research_links where case_id = $1', [p.caseId])).rows[0].n).toBe(0);
+      expect((await upload(p.c, p.caseId)).json.error.code).toBe('WOUND_SCAN_CONSENT_REQUIRED');
+      // Granting again needs A first, then each optional permission afresh (nothing comes back by itself).
+      expect((await scan(p.c, p.patientId)).status).toBe(200);
+      const perms = (await p.c.req({ method: 'GET', url: `/v1/patients/${p.patientId}/wound-permissions` })).json;
+      expect(perms.consents.map((x: { purpose: string; active: boolean }) => [x.purpose, x.active])).toEqual([['SCAN', true], ['RESEARCH', false], ['PRESENTATION', false]]);
+    } finally {
+      await flag('wound.presentations', false);
+      await flag('wound.research', false);
+    }
+  });
+
+  it('role separation: every wound duty is refused to every other role', async () => {
+    const nurse = await clinician('NURSE');
+    const a = await staff('PRESENTATION_APPROVER');
+    const b = await staff('PRESENTATION_APPROVER');
+    await flag('wound.presentations', true);
+    await flag('wound.research', true);
+    try {
+      const p = await approvedPresentation(nurse, a, b);
+      const researcher = await staff('WOUND_RESEARCHER');
+      const reviewer = await staff('CLINICAL_REVIEWER');
+      const admin = await staff('ADMIN');
+      const ds = (await researcher.req({ method: 'POST', url: '/v1/admin/wounds/datasets', body: { name: 'Role check', purpose: 'HEALING_TRAJECTORIES', recipient: 'DMW_CLINICAL_RESEARCH' } })).json;
+      await researcher.req({ method: 'POST', url: `/v1/admin/wounds/datasets/${ds.id}/build` });
+      const researchImage = (await owner.query('select ri.id from app.wound_research_images ri join app.wound_research_items i on i.id = ri.item_id where i.dataset_id = $1 limit 1', [ds.id])).rows[0]?.id as string | undefined;
+
+      const presentationCalls = [
+        { method: 'GET', url: '/v1/admin/wounds/presentation-candidates' },
+        { method: 'GET', url: '/v1/admin/wounds/presentations' },
+        { method: 'GET', url: `/v1/admin/wounds/presentations/${p.presentationId}` },
+        { method: 'GET', url: `/v1/admin/wounds/cases/${p.caseId}/images` },
+        { method: 'POST', url: `/v1/admin/wounds/presentation-images/${p.imageIds[0]}/link` },
+        { method: 'POST', url: `/v1/admin/wounds/presentations/${p.presentationId}/reject`, body: { reason: 'not allowed' } },
+      ] as const;
+      const researchCalls = [
+        { method: 'GET', url: `/v1/admin/wounds/datasets/${ds.id}` },
+        { method: 'POST', url: `/v1/admin/wounds/datasets/${ds.id}/build` },
+        { method: 'GET', url: '/v1/admin/wounds/product-outcomes' },
+        ...(researchImage ? [{ method: 'POST', url: `/v1/admin/wounds/research-images/${researchImage}/link` } as const] : []),
+      ] as const;
+      for (const who of [researcher, reviewer, admin, nurse, p.c]) for (const call of presentationCalls) expect((await who.req(call)).status, `${call.method} ${call.url}`).toBe(403);
+      for (const who of [a, admin, nurse, p.c]) for (const call of researchCalls) expect((await who.req(call)).status, `${call.method} ${call.url}`).toBe(403);
+      // No role reaches the vault through the person's own routes.
+      for (const who of [a, researcher, reviewer, admin]) expect((await who.req({ method: 'POST', url: `/v1/wound-images/${p.imageIds[0]}/link`, body: {} })).status).toBe(404);
+      // The registry overview is counts only, for every reader.
+      for (const who of [a, researcher, admin]) {
+        const o = await who.req({ method: 'GET', url: '/v1/admin/wounds/overview' });
+        expect(o.status).toBe(200);
+        for (const id of [p.caseId, p.patientId, ...p.imageIds]) expect(JSON.stringify(o.json)).not.toContain(id);
+      }
+      expect((await p.c.req({ method: 'GET', url: '/v1/admin/wounds/overview' })).status).toBe(403);
+      // The approved case's photos are reachable only by presentation staff, and only as derivatives.
+      expect((await a.req({ method: 'POST', url: `/v1/admin/wounds/presentation-images/${p.imageIds[0]}/link` })).status).toBe(200);
+    } finally {
+      await flag('wound.presentations', false);
+      await flag('wound.research', false);
+    }
+  });
+
+  it('bulk extraction is throttled: exports are rate-limited with an explicit RATE_LIMITED code', async () => {
+    const researcher = await staff('WOUND_RESEARCHER');
+    const id = '00000000-0000-4000-8000-000000000000';
+    const codes: number[] = [];
+    for (let i = 0; i < 4; i++) codes.push((await researcher.req({ method: 'POST', url: `/v1/admin/wounds/datasets/${id}/export` })).status);
+    expect(codes.slice(0, 3).every((c) => c !== 429)).toBe(true);
+    const limited = await researcher.req({ method: 'POST', url: `/v1/admin/wounds/datasets/${id}/export` });
+    expect(limited.status).toBe(429);
+    expect(limited.json.error.code).toBe('RATE_LIMITED');
+  });
+
+  it('test and real data never meet: real staff do not see test presentations, test staff not real ones', async () => {
+    const nurse = await clinician('NURSE');
+    const real = await staff('PRESENTATION_APPROVER');
+    const tester = await staff('PRESENTATION_APPROVER', { internal: true });
+    const t = await patient({ internal: true, name: 'Test Person' });
+    await scan(t.c, t.patientId);
+    await presentation(t.c, t.patientId);
+    const cs = (await newCase(t.c, t.patientId, { bodySite: 'FOOT_SOLE' })).json;
+    for (const d of [9, 3]) await upload(t.c, cs.id, testJpeg(800, 600), { capturedAt: new Date(Date.now() - d * 86_400_000).toISOString() });
+    await owner.query("update app.wound_cases set clinical_category = 'DIABETIC_FOOT', clinically_reviewed_at = now(), outcome = 'IMPROVING', outcome_on = current_date, outcome_at = now() where id = $1", [cs.id]);
+    const realCase = await consentingCase(nurse, { research: null, presentation: true, outcome: 'HEALED' });
+    // Flags OFF: the internal-test approver works on test data only; the real approver gets nothing.
+    const testCandidates = (await tester.req({ method: 'GET', url: '/v1/admin/wounds/presentation-candidates' })).json.map((x: { caseId: string }) => x.caseId);
+    expect(testCandidates).toContain(cs.id);
+    expect(testCandidates).not.toContain(realCase.caseId);
+    const nom = await tester.req({ method: 'POST', url: '/v1/admin/wounds/presentations', body: { caseId: cs.id } });
+    expect(nom.status, JSON.stringify(nom.json)).toBe(201);
+    expect((await real.req({ method: 'GET', url: `/v1/admin/wounds/presentations/${nom.json.id}` })).status).toBe(404);
+    await flag('wound.presentations', true);
+    try {
+      expect((await real.req({ method: 'GET', url: `/v1/admin/wounds/presentations/${nom.json.id}` })).status).toBe(404);
+      expect((await real.req({ method: 'GET', url: '/v1/admin/wounds/presentations' })).json.map((x: { id: string }) => x.id)).not.toContain(nom.json.id);
+      expect((await tester.req({ method: 'GET', url: '/v1/admin/wounds/presentation-candidates' })).json.map((x: { caseId: string }) => x.caseId)).not.toContain(realCase.caseId);
+    } finally {
+      await flag('wound.presentations', false);
+    }
+  });
+});

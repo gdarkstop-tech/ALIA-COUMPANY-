@@ -78,7 +78,10 @@ export default function RootLayout() {
       mutationCache: new MutationCache({ onError }),
       defaultOptions: {
         queries: {
-          retry: (count, error) => !(error instanceof ApiError && error.status > 0 && error.status < 500) && count < 2,
+          // A throttle (429) passes within the one-minute window: reads wait and retry (5, 10, 20, 30 s)
+          // instead of showing an error. Other client errors are final; server / network errors retry twice.
+          retry: (count, error) => (error instanceof ApiError && error.status === 429 ? count < 4 : !(error instanceof ApiError && error.status > 0 && error.status < 500) && count < 2),
+          retryDelay: (count, error) => (error instanceof ApiError && error.status === 429 ? Math.min(5_000 * 2 ** count, 30_000) : Math.min(1_000 * 2 ** count, 30_000)),
           staleTime: 15_000,
         },
       },

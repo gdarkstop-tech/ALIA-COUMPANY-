@@ -3,10 +3,10 @@ import type { WoundResearchItem } from '@ghayarly/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ErrorNotice, useCan } from '@/components/ai';
+import { useCan } from '@/components/ai';
 import { useI18n } from '@/components/Providers';
 import { Shell } from '@/components/Shell';
-import { downloadPost, MediaImg, WOUND_KEY, WoundTabs } from '@/components/wounds';
+import { MediaImg, WOUND_KEY, WoundError, WoundTabs, downloadPost } from '@/components/wounds';
 import { api } from '@/lib/api';
 
 function Item({ item, datasetDraft, canReview }: { item: WoundResearchItem; datasetDraft: boolean; canReview: boolean }) {
@@ -46,7 +46,7 @@ function Item({ item, datasetDraft, canReview }: { item: WoundResearchItem; data
           <button className="btn btn-sm btn-secondary" data-testid="research-reject" disabled={review.isPending} onClick={() => review.mutate('REJECTED')}>{t('woundAdmin.reject')}</button>
         </div>
       ) : null}
-      <ErrorNotice error={review.error} />
+      <WoundError error={review.error} />
     </div>
   );
 }
@@ -72,7 +72,7 @@ export default function DatasetDetail() {
   return (
     <Shell title={d ? `${d.name} · ${t('woundAdmin.version', { version: d.version })}` : t('woundAdmin.title')}>
       <WoundTabs />
-      <ErrorNotice error={q.error} />
+      <WoundError error={q.error} />
       {d ? (
         <div className="stack" data-testid="wound-dataset-detail">
           <section className="card stack">
@@ -104,7 +104,7 @@ export default function DatasetDetail() {
               <div><button className="btn btn-sm btn-ghost" data-testid="dataset-retire" onClick={() => window.confirm(t('woundAdmin.retireConfirm')) && retire.mutate()}>{t('woundAdmin.retire')}</button></div>
             ) : null}
             <div className="subtle">{t('woundAdmin.exportDisabled')}</div>
-            <ErrorNotice error={build.error ?? freeze.error ?? version.error ?? retire.error ?? exp.error} />
+            <WoundError error={build.error ?? freeze.error ?? version.error ?? retire.error ?? exp.error} />
           </section>
           {q.data!.items.map((it) => <Item key={it.id} item={it} datasetDraft={d.status === 'DRAFT'} canReview={can('wound.research.review')} />)}
         </div>

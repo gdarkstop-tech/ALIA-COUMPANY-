@@ -324,7 +324,8 @@ export type WoundCaseDetail = WoundCase & {
   measurements: WoundMeasurementPoint[];
   /** AI analysis of wound photos is not validated: always DISABLED (server-side flag ai.wound_assessment). */
   ai: { status: 'DISABLED'; reason: 'NOT_VALIDATED' };
-  access: { canEdit: boolean; canDelete: boolean; asClinician: boolean };
+  /** canAdd: may add photos, notes and treatments — needs the scanning permission (A) active now. */
+  access: { canEdit: boolean; canAdd: boolean; scanActive: boolean; canDelete: boolean; asClinician: boolean };
 };
 export type WoundMediaLink = { url: string; expiresAt: string };
 export type WoundPresentationView = {
@@ -347,6 +348,8 @@ export type WoundPresentationView = {
   closedReason: string | null;
   /** Staff only. */
   preparedByMe?: boolean;
+  /** Staff only: the audiences and organisations the person's active permission (C) covers; null once withdrawn. */
+  permitted?: { audiences: WoundPresentationAudience[]; organizations: WoundPresentationOrganization[] } | null;
   nominatedByMe?: boolean;
   exports?: { id: string; format: 'PDF' | 'IMAGE_PACKAGE'; exportedAt: string; byMe: boolean }[];
 };

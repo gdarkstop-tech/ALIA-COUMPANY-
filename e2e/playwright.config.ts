@@ -25,7 +25,7 @@ export default defineConfig({
     launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
   },
   projects: [
-    { name: 'mobile-web', testMatch: /flow-[a-df].*\.spec\.ts|rtl.*\.spec\.ts|a11y.*\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium', baseURL: MOBILE_WEB, locale: 'en-US' } },
+    { name: 'mobile-web', testMatch: /flow-[a-dfg].*\.spec\.ts|rtl.*\.spec\.ts|a11y.*\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium', baseURL: MOBILE_WEB, locale: 'en-US' } },
     // Draft listing screenshots (skipped unless STORE_SHOTS=1); per-test viewport/locale.
     { name: 'store-screenshots', testMatch: /store-screenshots\.spec\.ts/, use: { browserName: 'chromium', baseURL: MOBILE_WEB } },
     { name: 'admin', testMatch: /flow-e.*\.spec\.ts/, use: { ...devices['Desktop Chrome'], baseURL: ADMIN_WEB, locale: 'en-US' } },

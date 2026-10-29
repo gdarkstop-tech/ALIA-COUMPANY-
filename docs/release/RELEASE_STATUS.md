@@ -23,13 +23,14 @@
 
 | Check | Result | How |
 |---|---|---|
-| Unit + API tests | **215 passed** (api 159 · tokens 43 contrast · shared 9 · i18n 4) | `pnpm test` against PostgreSQL 16 with RLS |
+| Unit + API tests | **390 passed** on 2026-10-29 (api 318 · tokens 49 · shared 19 · i18n 4) | `pnpm check` (typecheck + lint + test) against PostgreSQL 16 with RLS |
+| Wound registry tests | 26 + 11, included above | `apps/api/test/wounds.test.ts` (A/B/C permissions, vault, family / clinicians / strangers / administrators, research, presentations, withdrawal, deletion, storage lifecycle, role separation, test / real isolation, rate-limited exports), `wound-media.test.ts` (metadata removal, encryption, signed links, export writers) |
 | Admin catalogue + user management tests | included above | `apps/api/test/catalog.test.ts`, `accounts.test.ts` (separation of duties, publish gates, stock ledger, suspensions/blocks, appeals, care continuity) |
 | AI gateway tests | 13 + 8 adapter tests, included above | `apps/api/test/ai.test.ts` (flags, consent, quotas under concurrency, budget, emergencies, refusals, fallback, privacy, audit), `ai-adapters.test.ts` (real Anthropic/OpenAI adapters against a stubbed HTTP layer — **not** the live APIs) |
 | Compliance tests | 11 passed | `apps/api/test/compliance.test.ts` (health-data consent enforced in DB, flags, review-account isolation, account deletion) |
 | Billing tests | 10 passed | `apps/api/test/billing.test.ts` (payment rails, store state mapping, fail-closed when unconfigured, account binding, refunds, no client writes) |
-| Typecheck / lint | 8/8 workspaces, 0 lint warnings | `pnpm typecheck`, `pnpm lint` |
-| Release checks | **66 passed, 0 failed**, 8 submission blockers | `pnpm release:check` (brand spelling, metadata limits, icons, production native config, no keys committed incl. AI keys). Blockers = placeholders in listings and legal texts (`--submission` fails), now including the AI notice's provider names. |
+| Typecheck / lint | 8/8 workspaces, 0 lint warnings (2026-10-29) | `pnpm typecheck`, `pnpm lint` |
+| Release checks | **82 passed, 0 failed**, 14 submission blockers (2026-10-29) | `pnpm release:check` (brand spelling, metadata limits, icons, production native config, no keys committed incl. AI keys). Blockers = placeholders in listings and legal texts (`--submission` fails), now including the AI notice's provider names. |
 | Expo project health | 21/21 | `npx expo-doctor` (after the 57.0.29 patch updates) |
 | End-to-end (web harness) | **22 passed** (projects `mobile-web` + `admin`; store-screenshot capture not run) | `npx playwright test --project=mobile-web --project=admin` after `pnpm db:reset` (2026-10-27): flows A–F incl. F3 AI assistant (simulator) and restricted account, admin E–E4 (verification, catalogue, users, AI control centre), Arabic RTL, accessibility 9 |
 | Accessibility (web harness) | 6/6 | `e2e/tests/a11y.spec.ts`: axe-core WCAG 2.2 A/AA (no serious/critical), no overflow at 320/390 px, targets ≥ 44 px, EN + AR |
@@ -82,6 +83,7 @@ Needs **macOS or EAS cloud** plus an **Apple Developer Program organisation acco
 | Admin user management (search, suspend, block, reactivate, booking restriction, history, appeals) | CODE_READY | API tests + E2E E3 and F (restricted account) | Legal review of the reasons/appeals texts; staff MFA enrolment in production |
 | Digital subscriptions (StoreKit 2 / Play Billing, server-verified entitlements) | CODE_READY, **flag OFF** | billing tests | `NEEDS_ACCOUNT_ACTION` (products, keys, webhooks) + business decision (below) |
 | Physical checkout (Paymob) | not configured (simulated) | E2E D | `NEEDS_ACCOUNT_ACTION` (gateway contract) |
+| Wound Intelligence Registry (A/B/C permissions, photo vault, timeline, clinician review, research registry, presentation library, outcomes analytics; ADR 0015) | CODE_READY, **every wound flag OFF**; production photo storage `NOT_CONFIGURED`; research and presentation exports OFF; no AI on wound photos; photos only in development / preview builds | `wounds.test.ts` (26) + `wound-media.test.ts` (11); E2E `flow-g-wounds` (3) and `flow-e-wounds` (6) with axe checks — internal-test accounts, test data only | `NEEDS_LEGAL_APPROVAL` (A/B/C and presentation wording, `2026-10-draft`); `NEEDS_ACCOUNT_ACTION` (storage provider, region, contract); `NEEDS_REGULATORY_EVIDENCE` (DPIA, PDPL licence / cross-border, ethics approvals, data-sharing agreements); store disclosures for photos (PRIVACY §1.35–1.39); `DEVICE_TESTED` (camera / picker on iOS and Android) |
 | Review accounts (isolated, synthetic data) | CODE_READY | compliance tests | Create in each environment with `review:seed` |
 | Store listing text EN/AR | drafted, limits checked | release check | Not `STORE_METADATA_READY`: support URL/email, privacy URL, final screenshots, legal entity |
 | Store screenshots | drafts only (web harness, on demand) | — | Native captures from real builds |
@@ -101,6 +103,8 @@ Needs **macOS or EAS cloud** plus an **Apple Developer Program organisation acco
 **Official assets (`NEEDS_OFFICIAL_ASSETS`)**: Alia Group and TetraSol logos (vector), official colour specifications and usage rules, the original Dress My Wound vector files and sign-off of the app icon set rendered from the traced artwork.
 
 **Legal (`NEEDS_LEGAL_APPROVAL`)**: legal entity name, privacy contact, hosting provider and region, retention periods, dispute-resolution clause (all marked `[to be confirmed]` in `packages/shared/src/legal.ts`); approval of the privacy policy, terms, health-data consent and medical disclaimer in Arabic and English.
+
+**Wound registry (before any wound flag is switched on, ADR 0015)**: legal approval of the A/B/C and presentation wording; photo storage provider, region and contract (then `ObjectStore` configuration); DPIA; ethics approval reference per research dataset; data-sharing agreements before research export; legal and medical-affairs approval before presentation export; clinical validation before similar cases. `ai.wound_assessment` stays off.
 
 **Regulatory (`NEEDS_REGULATORY_EVIDENCE`)**: Egypt PDPL (Law 151/2020 and Executive Regulations): licence for processing sensitive health data, DPO, and a cross-border transfer permit if hosting is outside Egypt. Ministry of Health licensing for home visits and remote consultations. EDA position on any AI or diagnostic feature (software as a medical device). Health-advertising approval for TetraSol promotion. App Store approval is **not** authorisation to provide regulated healthcare services.
 

@@ -16,7 +16,9 @@ import {
   researchDatasetBody,
   researchFreezeBody,
   researchReviewBody,
+  type WoundPresentationAudience,
   type WoundPresentationCandidate,
+  type WoundPresentationOrganization,
   type WoundPresentationView,
   type WoundProductOutcomeRow,
   type WoundRegistryOverview,
@@ -91,10 +93,18 @@ async function staffPresentationViews(tx: Tx, rows: (typeof woundPresentationCas
   const exports = rows.length
     ? await tx.select().from(woundPresentationExports).where(inArray(woundPresentationExports.presentationId, rows.map((r) => r.id))).orderBy(desc(woundPresentationExports.exportedAt))
     : [];
+  // The scope the person currently allows (C); null when the permission is no longer active.
+  const scopes = rows.length
+    ? (await tx.execute<{ id: string; scope: { audiences?: WoundPresentationAudience[]; organizations?: WoundPresentationOrganization[] } | null }>(
+        sql`select pc.id, app.wound_consent_scope(pc.patient_id, 'PRESENTATION') as scope from app.wound_presentation_cases pc where pc.id = any(${pgArray(rows.map((r) => r.id))}::uuid[])`,
+      )).rows
+    : [];
   return views.map((v) => {
     const r = rows.find((x) => x.id === v.id)!;
+    const scope = scopes.find((x) => x.id === v.id)?.scope;
     return {
       ...v,
+      permitted: scope ? { audiences: scope.audiences ?? [], organizations: scope.organizations ?? [] } : null,
       preparedByMe: r.preparedByUserId === userId,
       nominatedByMe: r.nominatedByUserId === userId,
       exports: exports.filter((e) => e.presentationId === v.id).map((e) => ({ id: e.id, format: e.format as 'PDF' | 'IMAGE_PACKAGE', exportedAt: e.exportedAt, byMe: e.exportedByUserId === userId })),

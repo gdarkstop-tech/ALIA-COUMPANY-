@@ -30,7 +30,8 @@ export function Sheet({ visible, onClose, title, children, testID }: { visible: 
           paddingBottom: Math.max(insets.bottom, spacing.lg),
         }}
       >
-        <View style={{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center' }}>
+        {/* flexShrink lets the content scroll inside the 85 % cap instead of overflowing past the screen. */}
+        <View style={{ width: '100%', maxWidth: layout.maxContentWidth, alignSelf: 'center', flexShrink: 1 }}>
           <View style={{ alignItems: 'center', paddingTop: spacing.sm }}>
             <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong }} />
           </View>
@@ -42,7 +43,7 @@ export function Sheet({ visible, onClose, title, children, testID }: { visible: 
               </Pressable>
             </View>
           ) : null}
-          <ScrollView contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
             {children}
           </ScrollView>
         </View>

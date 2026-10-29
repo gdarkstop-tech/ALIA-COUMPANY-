@@ -129,7 +129,8 @@ export async function buildServer(
     max: env.NODE_ENV === 'test' ? 10_000 : 300,
     timeWindow: '1 minute',
     ...(redis ? { redis, nameSpace: 'ghayarly-rl:', skipOnError: true } : {}),
-    errorResponseBuilder: () => ({ statusCode: 429, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }),
+    // Thrown and rendered by the error handler below, which reads `statusCode` and `code`.
+    errorResponseBuilder: () => Object.assign(new Error('Too many requests'), { statusCode: 429, code: 'RATE_LIMITED' }),
   });
 
   app.setErrorHandler((error, request, reply) => {

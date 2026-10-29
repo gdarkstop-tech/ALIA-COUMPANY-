@@ -145,6 +145,8 @@ export async function caseDetail(tx: Tx, id: string, userId: string): Promise<Wo
   const [c] = await tx.select().from(woundCases).where(eq(woundCases.id, id));
   if (!c) throw notFound('Wound');
   const access = await accessTo(tx, c.patientId);
+  // New entries need the scanning permission (A) to be active now; reading and deleting do not.
+  const scanActive = (await tx.execute<{ a: boolean }>(sql`select app.wound_consent_active(${c.patientId}::uuid, 'SCAN') as a`)).rows[0]!.a;
   const imgs = await tx.select().from(woundImages).where(eq(woundImages.caseId, id)).orderBy(asc(woundImages.capturedAt));
   const obs = await tx.select().from(woundObservations).where(eq(woundObservations.caseId, id)).orderBy(asc(woundObservations.observedOn), asc(woundObservations.createdAt));
   const trs = await tx.select().from(woundTreatments).where(eq(woundTreatments.caseId, id)).orderBy(asc(woundTreatments.startedOn));
@@ -218,7 +220,7 @@ export async function caseDetail(tx: Tx, id: string, userId: string): Promise<Wo
         provenance: o.provenance,
       })),
     ai: { status: 'DISABLED', reason: 'NOT_VALIDATED' },
-    access: { canEdit: access.edit || access.care, canDelete: access.admin, asClinician: access.care && !access.view },
+    access: { canEdit: access.edit || access.care, canAdd: (access.edit || access.care) && scanActive, scanActive, canDelete: access.admin, asClinician: access.care && !access.view },
   };
 }
 

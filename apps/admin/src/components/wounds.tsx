@@ -3,6 +3,7 @@ import { hasPermission, type Permission, type WoundMediaLink } from '@ghayarly/s
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { ApiError } from '@/lib/api';
 import { useI18n } from './Providers';
 import { useMe } from './Shell';
 
@@ -59,6 +60,13 @@ export async function downloadPost(path: string, body: unknown, filename: string
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
+export function presentationTone(status: string): 'success' | 'danger' | 'warning' | 'info' | 'neutral' {
+  if (status === 'APPROVED') return 'success';
+  if (status === 'PATIENT_APPROVED') return 'warning';
+  if (status === 'REJECTED' || status === 'PATIENT_DECLINED' || status === 'WITHDRAWN') return 'neutral';
+  return 'info';
+}
+
 export function Counts({ data }: { data: Record<string, number> }) {
   const { t } = useI18n();
   const entries = Object.entries(data);
@@ -68,6 +76,26 @@ export function Counts({ data }: { data: Record<string, number> }) {
       {entries.map(([k, n]) => (
         <span key={k} className="badge tone-neutral" data-testid={`wound-count-${k}`}>{`${k} · ${n}`}</span>
       ))}
+    </div>
+  );
+}
+
+/** Registry refusals the console explains in words (everything else shows the server message). */
+const EXPLAINED = [
+  'PRESENTATION_TEXT_IDENTIFIES', 'PRESENTATION_CLAIM_NOT_ALLOWED', 'PRESENTATION_AUDIENCE_NOT_PERMITTED', 'PRESENTATION_NOT_ELIGIBLE', 'PRESENTATION_CHANGED',
+  'PRESENTATION_NOT_APPROVED', 'PRESENTATION_EXPIRED', 'SECOND_APPROVER_REQUIRED', 'DEIDENTIFICATION_CHECKLIST_INCOMPLETE', 'VALIDITY_INVALID',
+  'DATASET_REVIEW_INCOMPLETE', 'FEATURE_DISABLED', 'RATE_LIMITED',
+] as const;
+
+export function WoundError({ error }: { error: unknown }) {
+  const { t } = useI18n();
+  if (!error) return null;
+  const code = error instanceof ApiError ? error.code : error instanceof Error ? error.message : String(error);
+  const explained = (EXPLAINED as readonly string[]).includes(code) ? (code as (typeof EXPLAINED)[number]) : null;
+  const text = explained ? t(`woundAdmin.error_${explained}`) : error instanceof Error ? error.message : String(error);
+  return (
+    <div className="notice danger" role="alert" data-testid="wound-error" data-code={code}>
+      {text}
     </div>
   );
 }

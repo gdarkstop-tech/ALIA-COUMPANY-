@@ -221,7 +221,9 @@ export function WoundCaseView({ wound }: { wound: WoundCaseDetail }) {
   });
   const endTreatment = useMutation({ mutationFn: (id: string) => api.wounds.updateTreatment(id, { endedOn: new Date().toISOString().slice(0, 10) }), onSuccess: () => invalidate() });
   const removeObservation = useMutation({ mutationFn: (id: string) => api.wounds.removeObservation(id), onSuccess: () => invalidate() });
-  const canAdd = wound.access.canEdit && wound.status === 'OPEN';
+  // Adding needs the scanning permission (A) active now; viewing and deleting never do.
+  const canAdd = wound.access.canAdd && wound.status === 'OPEN';
+  const scanOff = !wound.access.scanActive && wound.access.canEdit && wound.status === 'OPEN';
 
   return (
     <>
@@ -256,6 +258,12 @@ export function WoundCaseView({ wound }: { wound: WoundCaseDetail }) {
 
       <PlanStrip plan={wound.plan} />
 
+      {scanOff ? (
+        <Notice tone="info" testID="wound-scan-off" title={t('wounds.scanOffTitle')} body={clinician ? t('wounds.scanOffClinician') : t('wounds.scanOffBody')}>
+          {!clinician ? <Button testID="wound-scan-off-open" label={t('wounds.scanOffAction')} variant="secondary" size="sm" fullWidth={false} onPress={() => router.push('/patient/wounds/permissions')} /> : null}
+        </Notice>
+      ) : null}
+
       {canAdd ? (
         woundPhotosAvailable() ? (
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -279,11 +287,14 @@ export function WoundCaseView({ wound }: { wound: WoundCaseDetail }) {
       <Section title={t('wounds.photos', { count: wound.images.length })} testID="wound-photos">
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
           {wound.images.map((i) => (
-            <PressableScale key={i.id} testID={`wound-photo-day-${i.day}`} accessibilityRole="button" accessibilityLabel={t('wounds.photoDay', { day: i.day })} onPress={() => setPhoto(i)} style={{ width: '31%', gap: 4 }}>
-              <WoundPhoto imageId={i.id} label={t('wounds.photoDay', { day: i.day })} aspect={1} />
-              <Text variant="caption" weight="semibold">{t('wounds.photoDay', { day: i.day })}</Text>
-              <Text variant="caption" color="textTertiary">{formatDate(i.capturedAt, locale)}</Text>
-            </PressableScale>
+            // The width sits on a plain wrapper: PressableScale styles its inner view, not the pressable.
+            <View key={i.id} style={{ width: '31%' }}>
+              <PressableScale testID={`wound-photo-day-${i.day}`} accessibilityRole="button" accessibilityLabel={t('wounds.photoDay', { day: i.day })} onPress={() => setPhoto(i)} style={{ gap: 4 }}>
+                <WoundPhoto imageId={i.id} label={t('wounds.photoDay', { day: i.day })} aspect={1} />
+                <Text variant="caption" weight="semibold">{t('wounds.photoDay', { day: i.day })}</Text>
+                <Text variant="caption" color="textTertiary">{formatDate(i.capturedAt, locale)}</Text>
+              </PressableScale>
+            </View>
           ))}
         </View>
       </Section>

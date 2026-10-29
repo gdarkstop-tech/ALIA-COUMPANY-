@@ -29,14 +29,17 @@ h3 { font-size: 16px; font-weight: 600; }
 .dmw-subtitle::before, .dmw-subtitle::after { content: ""; flex: 1 1 10px; min-width: 10px; height: 1px; background: currentColor; opacity: 0.45; }
 .dmw-subtitle:lang(ar) { letter-spacing: 0; text-transform: none; font-size: 12px; }
 /* Sidebar: too narrow for one line — two balanced lines, no rules. */
-.sidebar .dmw-subtitle { display: block; color: inherit; opacity: 0.72; text-wrap: balance; }
+.sidebar .dmw-subtitle { display: block; color: color-mix(in srgb, var(--color-text-inverse) 72%, var(--color-surface-inverse)); text-wrap: balance; }
 .sidebar .dmw-subtitle::before, .sidebar .dmw-subtitle::after { content: none; }
 .login-brand { display: flex; justify-content: center; padding: 4px 0 8px; }
 .login-brand .dmw-subtitle { font-size: 10px; letter-spacing: 0.1em; white-space: nowrap; }
-.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; color: inherit; opacity: 0.78; font-weight: 500; }
-.nav-item:hover { opacity: 1; background: rgba(255,255,255,0.06); text-decoration: none; }
-.nav-item.active { opacity: 1; background: rgba(114,196,188,0.16); color: #AADDD8; }
-.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; font-size: 13px; opacity: 0.85; }
+/* Softened text is an opaque blend (not opacity), so contrast stays measurable and exact. */
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; color: color-mix(in srgb, var(--color-text-inverse) 78%, var(--color-surface-inverse)); font-weight: 500; }
+.nav-item:hover { color: var(--color-text-inverse); background: rgba(255,255,255,0.06); text-decoration: none; }
+.nav-item.active { background: rgba(114,196,188,0.16); color: #AADDD8; }
+/* Dark scheme: the sidebar is pale, so the active item needs a deep teal to stay readable. */
+@media (prefers-color-scheme: dark) { .nav-item:hover { background: rgba(10,31,61,0.06); } .nav-item.active { background: rgba(15,94,87,0.12); color: #0F5E57; } }
+.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: color-mix(in srgb, var(--color-text-inverse) 85%, var(--color-surface-inverse)); }
 .main { padding: 28px 40px 64px; max-width: 1200px; width: 100%; min-width: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .stack { display: flex; flex-direction: column; gap: 16px; }

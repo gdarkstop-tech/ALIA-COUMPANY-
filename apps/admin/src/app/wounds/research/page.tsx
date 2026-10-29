@@ -3,10 +3,10 @@ import { WOUND_CATEGORIES, WOUND_RESEARCH_PURPOSES, WOUND_RESEARCH_RECIPIENTS } 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
-import { ErrorNotice, useCan } from '@/components/ai';
+import { useCan } from '@/components/ai';
 import { useI18n } from '@/components/Providers';
 import { formatDateTime, Shell } from '@/components/Shell';
-import { WOUND_KEY, WoundTabs } from '@/components/wounds';
+import { WOUND_KEY, WoundError, WoundTabs } from '@/components/wounds';
 import { api } from '@/lib/api';
 
 /** Consented, de-identified research datasets (researchers build; clinical reviewers check quality). */
@@ -33,7 +33,7 @@ export default function ResearchDatasets() {
     <Shell title={t('woundAdmin.title')}>
       <WoundTabs />
       <div className="notice info" style={{ marginBottom: 16 }}>{t('woundAdmin.pseudonymNote')}</div>
-      <ErrorNotice error={q.error} />
+      <WoundError error={q.error} />
       <section className="card tight" data-testid="wound-datasets">
         <h2 style={{ padding: '12px 16px 0' }}>{t('woundAdmin.datasets')}</h2>
         <table className="table">
@@ -79,7 +79,7 @@ export default function ResearchDatasets() {
             </div>
           </div>
           <div className="field"><label>{t('woundAdmin.minImages')}</label><input className="input" type="number" min={1} max={30} value={minImages} onChange={(e) => setMinImages(Number(e.target.value) || 1)} /></div>
-          <ErrorNotice error={create.error} />
+          <WoundError error={create.error} />
           <div><button className="btn btn-primary" data-testid="dataset-create" disabled={name.trim().length < 3 || create.isPending} onClick={() => create.mutate()}>{t('woundAdmin.create')}</button></div>
         </section>
       ) : null}

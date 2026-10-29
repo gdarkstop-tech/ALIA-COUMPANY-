@@ -2,10 +2,9 @@
 import type { WoundRegistryOverview } from '@ghayarly/shared';
 import { formatNumber } from '@ghayarly/i18n';
 import { useQuery } from '@tanstack/react-query';
-import { ErrorNotice } from '@/components/ai';
 import { useI18n } from '@/components/Providers';
 import { Shell } from '@/components/Shell';
-import { Counts, WOUND_KEY, WoundTabs } from '@/components/wounds';
+import { Counts, WOUND_KEY, WoundError, WoundTabs } from '@/components/wounds';
 import { api } from '@/lib/api';
 
 function Stat({ label, value, testId }: { label: string; value: string | number; testId?: string }) {
@@ -27,7 +26,7 @@ export default function WoundRegistry() {
     <Shell title={t('woundAdmin.title')}>
       <WoundTabs />
       <div className="notice info" style={{ marginBottom: 16 }} data-testid="wound-counts-only">{t('woundAdmin.countsOnly')}</div>
-      <ErrorNotice error={q.error} />
+      <WoundError error={q.error} />
       {o ? (
         <div className="stack" data-testid="wound-overview">
           {o.testData ? <div className="notice demo">{t('woundAdmin.testScope')}</div> : null}

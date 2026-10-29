@@ -108,3 +108,33 @@ export async function archiveProduct(admin: Api, productId: string) {
   await admin.post(`/v1/admin/catalog/products/${productId}/publication`, { data: { status: 'UNPUBLISHED' } });
   await admin.post(`/v1/admin/catalog/products/${productId}/publication`, { data: { status: 'ARCHIVED' } });
 }
+
+export const WOUND_CONSENT_VERSION = '2026-10-draft';
+/** Wound registry: no wound permission, no wound data, no active share (idempotent; test data only). */
+export async function woundCleanSlate(api: Api, patientId: string) {
+  for (const purpose of ['SCAN', 'RESEARCH', 'PRESENTATION']) {
+    const r = await api.post(`/v1/patients/${patientId}/wound-permissions`, { data: { purpose, action: 'WITHDRAW', version: WOUND_CONSENT_VERSION } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+  }
+  expect((await api.post(`/v1/patients/${patientId}/wounds/delete-all`, { data: {} })).ok()).toBeTruthy();
+  for (const s of (await (await api.get(`/v1/patients/${patientId}/care-shares`)).json()) as { id: string; status: string }[]) {
+    if (s.status === 'ACTIVE') await api.post(`/v1/care-shares/${s.id}/revoke`, { data: {} });
+  }
+}
+
+/** A synthetic photo drawn in the browser (a colour pattern — never a real wound or person). */
+export async function syntheticJpeg(page: Page, hue: number): Promise<Buffer> {
+  const dataUrl = await page.evaluate((h) => {
+    const c = document.createElement('canvas');
+    c.width = 800;
+    c.height = 600;
+    const g = c.getContext('2d')!;
+    for (let y = 0; y < 600; y += 20)
+      for (let x = 0; x < 800; x += 20) {
+        g.fillStyle = `hsl(${(h + x / 8 + y / 6) % 360}, 45%, ${35 + ((x + y) / 20) % 30}%)`;
+        g.fillRect(x, y, 20, 20);
+      }
+    return c.toDataURL('image/jpeg', 0.9);
+  }, hue);
+  return Buffer.from(dataUrl.split(',')[1]!, 'base64');
+}
