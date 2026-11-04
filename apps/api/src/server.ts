@@ -40,6 +40,7 @@ import { createObjectStore, ObjectStoreError, ObjectStoreUnavailable, type Objec
 import { mediaLinkKey } from './lib/media-links';
 import { startWoundMaintenance, woundRoutes } from './modules/wounds/routes';
 import { woundStaffRoutes } from './modules/wounds/staff';
+import { financeRoutes } from './modules/finance/routes';
 import { devRoutes } from './modules/dev/routes';
 import { meRoutes } from './modules/me/routes';
 import { patientRoutes } from './modules/patients/routes';
@@ -250,6 +251,7 @@ export async function buildServer(
   await app.register(dashboardRoutes, { prefix: '/v1' });
   await app.register(woundRoutes, { prefix: '/v1' });
   await app.register(woundStaffRoutes, { prefix: '/v1/admin/wounds' });
+  await app.register(financeRoutes, { prefix: '/v1/admin/finance' });
   if (env.NODE_ENV !== 'test') startWoundMaintenance(app);
   await app.register(adminRoutes, { prefix: '/v1/admin' });
   await app.register(adminCatalogRoutes, { prefix: '/v1/admin/catalog' });

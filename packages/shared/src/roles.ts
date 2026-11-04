@@ -75,6 +75,10 @@ export const PERMISSIONS = [
   'wound.research.access',
   /** Prepare and approve presentation cases (a second approver signs each case). */
   'wound.presentation.manage',
+  /** Finance Center: AI costs, budgets, verified revenue sources (aggregates; no health content). */
+  'finance.read',
+  /** Record provider invoices for cost reconciliation. Moves no money. */
+  'finance.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -106,6 +110,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'ai.data.approve',
     'knowledge.manage',
     'wound.registry.read',
+    'finance.read',
+    'finance.manage',
   ],
   // Clinical reviewers approve medical product text and AI models for medical routes; commerce
   // managers can edit product text but never approve it.
