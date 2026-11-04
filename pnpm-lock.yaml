@@ -88,7 +88,7 @@ importers:
         specifier: 3.1.0
         version: 3.1.0
       '@aws-sdk/client-s3':
-        specifier: ^3.1159.0
+        specifier: 3.1159.0
         version: 3.1159.0
       '@better-auth/expo':
         specifier: 1.7.7
