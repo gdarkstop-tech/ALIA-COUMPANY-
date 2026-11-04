@@ -57,6 +57,8 @@ import type {
   MyAccountStatus,
   AiAssistantStatus,
   AiControlCentre,
+  AiFinanceOverview,
+  RecordProviderInvoiceBody,
   AiConversation,
   AiConversationDetail,
   AiModelAdmin,
@@ -433,6 +435,10 @@ export function createApiClient(options: ApiClientOptions) {
       preview: (q: string) => get<ProductDiscoveryMatch[]>('/v1/admin/product-knowledge/preview', { q }),
     },
     /** AI control centre: configuration only — provider keys never leave the backend. */
+    finance: {
+      overview: (days = 30) => get<AiFinanceOverview>('/v1/admin/finance/overview', { days }),
+      recordInvoice: (body: RecordProviderInvoiceBody) => post<{ id: string }>('/v1/admin/finance/provider-invoices', body),
+    },
     aiAdmin: {
       controlCentre: (days = 30) => get<AiControlCentre>('/v1/admin/ai/control-centre', { days }),
       createModel: (body: Record<string, unknown>) => post<AiModelAdmin>('/v1/admin/ai/models', body),

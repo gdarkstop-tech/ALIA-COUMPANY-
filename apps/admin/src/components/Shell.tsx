@@ -9,7 +9,7 @@ import { authClient } from '@/lib/auth-client';
 import { DmwWordmark } from './brand';
 import { useI18n } from './Providers';
 
-type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav' | 'aiAdmin.nav' | 'woundAdmin.nav';
+type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav' | 'aiAdmin.nav' | 'woundAdmin.nav' | 'finance.nav';
 // `permissions`: shown when the account holds ANY of them (the API and the database enforce each action).
 const NAV: { href: string; key: NavKey; icon: string; permissions?: Permission[] }[] = [
   { href: '/', key: 'admin.overview', icon: '◎', permissions: ['provider.verification.review'] },
@@ -19,6 +19,7 @@ const NAV: { href: string; key: NavKey; icon: string; permissions?: Permission[]
   { href: '/audit', key: 'admin.audit', icon: '≡', permissions: ['audit.read'] },
   // Counts for registry readers; photos only through the research and presentation duties (ADR 0015).
   { href: '/wounds', key: 'woundAdmin.nav', icon: '✚', permissions: ['wound.registry.read', 'wound.research.access', 'wound.research.review', 'wound.presentation.manage'] },
+  { href: '/finance', key: 'finance.nav', icon: '◈', permissions: ['finance.read'] },
   { href: '/ai', key: 'aiAdmin.nav', icon: '✦', permissions: ['ai.config.manage', 'ai.usage.read', 'ai.eval.manage', 'ai.clinical.review', 'ai.safety.review', 'knowledge.manage', 'catalog.tetrasol.manage'] },
   // ADMIN-only (the API and the database both enforce the ADMIN role).
   { href: '/features', key: 'admin.features', icon: '⚑', permissions: ['users.roles.grant'] },

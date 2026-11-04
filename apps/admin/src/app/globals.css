@@ -20,7 +20,8 @@ h3 { font-size: 16px; font-weight: 600; }
 .mono { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
 
 .shell { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
-.sidebar { background: var(--color-surface-inverse); color: var(--color-text-inverse); padding: 24px 16px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; height: 100vh; }
+/* Fixed to the viewport height: on short screens its content scrolls inside the panel (never spills onto the page). */
+.sidebar { background: var(--color-surface-inverse); color: var(--color-text-inverse); padding: 24px 16px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
 .brand { display: flex; justify-content: center; padding: 4px 4px 24px; }
 /* Official Dress My Wound wordmark (components/brand.tsx). The subtitle is admin-only live text. */
 .dmw-lockup { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; }
