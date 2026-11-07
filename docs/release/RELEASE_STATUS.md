@@ -58,11 +58,21 @@
 
 The checks are automated in `scripts/release/verify-android.sh` and run in CI (`.github/workflows/ci.yml`, job `android-native`). An earlier local APK from 2026-10-14 had a launch-crash bug and extra biometric permissions. It is superseded and must not be used.
 
+**Latest local build round (2026-10-29, `scripts/release/build-android-local.sh`, all debug-signed, not uploadable):**
+
+| Variant | Artifact | Result |
+|---|---|---|
+| production | APK (107 MB, 4 ABIs) + AAB | `verify-android.sh` OK: targetSdk 36, allow-listed permissions only, 44/44 64-bit libraries 16 KB-aligned |
+| preview (Beta, `com.aliagroup.dressmywound.staging`) | APK (68 MB, arm64-v8a + armeabi-v7a) | OK with `VARIANT=preview`: adds CAMERA, RECORD_AUDIO, MODIFY_AUDIO_SETTINGS (wound photos, realtime voice); 24/24 aligned |
+| development client (`…dressmywound.dev`) | debug APK (arm64-v8a + x86_64) | builds |
+
+They point at an unroutable placeholder API: for device tests rebuild with a staging `EXPO_PUBLIC_API_URL` ([device test guide](DEVICE_TEST_GUIDE.md)).
+
 **Not done on Android:** no emulator (no KVM in the build environment) and no physical device, so install, launch, TalkBack, RTL rendering, keyboard insets, predictive back and Play Billing are untested.
 
 ## iOS — `CODE_READY` (configuration only)
 
-Verified from the generated native project: display name `Dress My Wound` / `غير لي` (ar.lproj), iPhone only, deployment target 16.4, `ITSAppUsesNonExemptEncryption = false`, ATS with no arbitrary loads, no local-network/Bonjour/Face ID strings in store variants, and a privacy manifest with required-reason APIs and collected data types (no tracking).
+Re-generated and inspected 2026-11-07 for `production` (no camera / photo / microphone purpose strings, privacy manifest present) and `preview` (Beta: camera, photo-library and microphone strings present); the iOS JavaScript bundle compiles (`expo export --platform ios`). No EAS project, Expo token or Apple account is configured, so nothing was compiled, signed or sent to TestFlight. Verified from the generated native project: display name `Dress My Wound` / `غير لي` (ar.lproj), iPhone only, deployment target 16.4, `ITSAppUsesNonExemptEncryption = false`, ATS with no arbitrary loads, no local-network/Bonjour/Face ID strings in store variants, and a privacy manifest with required-reason APIs and collected data types (no tracking).
 
 Needs **macOS or EAS cloud** plus an **Apple Developer Program organisation account** for: compiling, signing (distribution certificate and provisioning profiles via EAS), TestFlight, StoreKit sandbox testing, VoiceOver testing and App Store Connect setup. EAS images are pinned to `sdk-57` (Xcode 26.6), which meets Apple's Xcode 26 / iOS 26 SDK upload rule. Plan the move to the iOS 27 SDK before April 2027 (see the Apple checklist).
 
@@ -127,4 +137,4 @@ cd android && ./gradlew assembleRelease bundleRelease && bash ../../../scripts/r
 
 ## Related documents
 
-[Apple App Store checklist](APPLE_APP_STORE_CHECKLIST.md) · [Google Play checklist](GOOGLE_PLAY_CHECKLIST.md) · [Privacy and data disclosures](PRIVACY_AND_DATA_DISCLOSURES.md) · [Payment compliance](PAYMENT_COMPLIANCE.md) · [Healthcare review](HEALTHCARE_REVIEW.md) · [Brand identity](BRAND_IDENTITY.md) · [Signing and secrets](SIGNING_AND_SECRETS.md) · [AI gateway](AI_GATEWAY.md) · [Requirements evidence](evidence/STORE_REQUIREMENTS_EVIDENCE.md)
+[Device test guide and acceptance checklist](DEVICE_TEST_GUIDE.md) · [Apple App Store checklist](APPLE_APP_STORE_CHECKLIST.md) · [Google Play checklist](GOOGLE_PLAY_CHECKLIST.md) · [Privacy and data disclosures](PRIVACY_AND_DATA_DISCLOSURES.md) · [Payment compliance](PAYMENT_COMPLIANCE.md) · [Healthcare review](HEALTHCARE_REVIEW.md) · [Brand identity](BRAND_IDENTITY.md) · [Signing and secrets](SIGNING_AND_SECRETS.md) · [AI gateway](AI_GATEWAY.md) · [Requirements evidence](evidence/STORE_REQUIREMENTS_EVIDENCE.md)
