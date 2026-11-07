@@ -1,6 +1,4 @@
-import type { IntegrationStatus } from '@ghayarly/shared';
 import type { Env } from '../config/env';
-import { IntegrationNotConfiguredError } from './errors';
 
 export type OutboundMessage = {
   channel: 'email' | 'sms';
@@ -39,38 +37,12 @@ export class DevOutbox {
   }
 }
 
-export interface MessageSender {
-  readonly status: IntegrationStatus;
-  send(msg: OutboundMessage): Promise<void>;
-}
+export type Messaging = { outbox: DevOutbox | null };
 
-class DevOutboxSender implements MessageSender {
-  readonly status = 'DEV_ADAPTER' as const;
-  constructor(
-    private readonly outbox: DevOutbox,
-    private readonly log: (line: string) => void,
-  ) {}
-  async send(msg: OutboundMessage) {
-    this.outbox.push(msg);
-    this.log(`[dev-outbox] ${msg.channel} → ${msg.to} (${msg.purpose}): ${msg.subject ? `${msg.subject} — ` : ''}${msg.body}`);
-  }
-}
-
-class NotConfiguredSender implements MessageSender {
-  readonly status = 'NOT_CONFIGURED' as const;
-  constructor(private readonly name: string) {}
-  async send(): Promise<void> {
-    throw new IntegrationNotConfiguredError(this.name);
-  }
-}
-
-export type Messaging = { email: MessageSender; sms: MessageSender; outbox: DevOutbox | null };
-
-export function createMessaging(env: Env, log: (line: string) => void): Messaging {
-  const outbox = env.DEV_TOOLS_ENABLED ? new DevOutbox() : null;
-  // Real providers are intentionally not wired yet: with credentials present but no adapter
-  // implemented we still report NOT_CONFIGURED rather than pretend delivery works.
-  const email: MessageSender = outbox ? new DevOutboxSender(outbox, log) : new NotConfiguredSender('email');
-  const sms: MessageSender = outbox ? new DevOutboxSender(outbox, log) : new NotConfiguredSender('sms');
-  return { email, sms, outbox };
+/**
+ * The developer outbox exists only when DEV_TOOLS_ENABLED (refused in production). Real delivery
+ * lives in `src/notifications` (ADR 0020).
+ */
+export function createMessaging(env: Env): Messaging {
+  return { outbox: env.DEV_TOOLS_ENABLED && env.NODE_ENV !== 'production' ? new DevOutbox() : null };
 }

@@ -98,7 +98,7 @@ describe('authentication', () => {
       payload: JSON.stringify({ phoneNumber: phone }),
     });
     expect(send.statusCode).toBe(200);
-    const outbox = app.services.messaging.outbox!.list({ to: phone, purpose: 'phone-otp' });
+    const outbox = app.services.messaging.outbox!.list({ to: phone, purpose: 'auth.phone_otp' });
     expect(outbox.length).toBe(1);
     const code = outbox[0]!.body.match(/\b(\d{6})\b/)![1]!;
 
@@ -129,7 +129,7 @@ describe('authentication', () => {
       app.inject({ method: 'POST', url, headers: { origin: ORIGIN, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, payload: JSON.stringify(body) });
     const otp = async (phone: string) => {
       expect((await post('/api/auth/phone-number/send-otp', { phoneNumber: phone })).statusCode).toBe(200);
-      const msgs = app.services.messaging.outbox!.list({ to: phone, purpose: 'phone-otp' });
+      const msgs = app.services.messaging.outbox!.list({ to: phone, purpose: 'auth.phone_otp' });
       return msgs[msgs.length - 1]!.body.match(/\b(\d{6})\b/)![1]!;
     };
     const randomPhone = () => `+2011${Math.floor(10000000 + Math.random() * 89999999)}`;
@@ -193,8 +193,8 @@ describe('authentication', () => {
       payload: JSON.stringify({ email, redirectTo: 'dressmywound://reset-password' }),
     });
     expect(req.statusCode).toBe(200);
-    const mail = app.services.messaging.outbox!.list({ to: email, purpose: 'password-reset' })[0]!;
-    const token = mail.body.match(/code: ([A-Za-z0-9_-]+)/)![1]!;
+    const mail = app.services.messaging.outbox!.list({ to: email, purpose: 'auth.password_reset' })[0]!;
+    const token = mail.body.match(/reset-password\/([A-Za-z0-9_-]+)/)![1]!;
     const reset = await app.inject({
       method: 'POST',
       url: '/api/auth/reset-password',

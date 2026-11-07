@@ -16,7 +16,6 @@
 import pg from 'pg';
 import { createAuth } from '../auth/auth';
 import { loadEnv } from '../config/env';
-import { createMessaging } from '../integrations/messaging';
 import { createPools } from './client';
 import { grantSeedConsents } from './seed';
 
@@ -40,7 +39,8 @@ export async function seedReviewAccounts(log: (line: string) => void = console.l
 
   const pools = createPools(env);
   const owner = new pg.Pool({ connectionString: ownerUrl });
-  const auth = createAuth(env, pools.authPool, createMessaging(env, () => undefined));
+  // Review accounts are created directly: no message is ever sent from here.
+  const auth = createAuth(env, pools.authPool, { sendSecret: async () => undefined });
   const ctx = await auth.$context;
   try {
     const ids: Record<string, string> = {};

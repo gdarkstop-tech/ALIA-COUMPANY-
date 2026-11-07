@@ -79,6 +79,16 @@ export const PERMISSIONS = [
   'finance.read',
   /** Record provider invoices for cost reconciliation. Moves no money. */
   'finance.manage',
+  /** Operations center: appointments, schedules, home visits, notification deliveries, incidents (no clinical records). */
+  'ops.read',
+  /** Operational actions: retry a delivery, cancel or escalate on someone's behalf (audited). */
+  'ops.manage',
+  /** TetraSol order fulfilment (picking, shipping, delivery, cancellations). */
+  'orders.manage',
+  /** Payment states and reconciliation. */
+  'payments.read',
+  /** Approve and issue refunds through the payment provider. */
+  'payments.refund',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -112,6 +122,11 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'wound.registry.read',
     'finance.read',
     'finance.manage',
+    'ops.read',
+    'ops.manage',
+    'orders.manage',
+    'payments.read',
+    'payments.refund',
   ],
   // Clinical reviewers approve medical product text and AI models for medical routes; commerce
   // managers can edit product text but never approve it.
@@ -127,7 +142,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   SUPPORT: ['users.read', 'provider.verification.review'],
   TRUST_AND_SAFETY: ['audit.read', 'safety.reports.read', 'users.read', 'users.status.manage', 'users.appeals.decide', 'ai.safety.review'],
-  COMMERCE_MANAGER: ['catalog.tetrasol.manage'],
+  // Commerce staff fulfil orders and see payment states — never appointments or clinical records.
+  COMMERCE_MANAGER: ['catalog.tetrasol.manage', 'orders.manage', 'payments.read'],
   // Wound registry duties are separate from administration: research staff see de-identified copies
   // only; presentation approvers see one eligible case at a time. Neither sees the vault.
   WOUND_RESEARCHER: ['wound.registry.read', 'wound.research.access'],

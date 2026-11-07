@@ -13,6 +13,8 @@ import { registerAuthRoutes } from './auth/routes';
 import { webOrigins, type Env } from './config/env';
 import { assertRlsEffective, createDb, createPools, type Db, type Pools } from './db/client';
 import { createMessaging, type Messaging } from './integrations/messaging';
+import { createDeliveryProviders, type DeliveryProviders } from './notifications/providers';
+import { Notifier } from './notifications/service';
 import { createPaymentGateway, type PaymentGateway } from './integrations/payments';
 import { AppError, fromPgError } from './lib/errors';
 import { serializeRequest } from './lib/logging';
@@ -41,6 +43,7 @@ import { mediaLinkKey } from './lib/media-links';
 import { startWoundMaintenance, woundRoutes } from './modules/wounds/routes';
 import { woundStaffRoutes } from './modules/wounds/staff';
 import { financeRoutes } from './modules/finance/routes';
+import { notificationRoutes, startNotificationWorker } from './notifications/routes';
 import { devRoutes } from './modules/dev/routes';
 import { meRoutes } from './modules/me/routes';
 import { patientRoutes } from './modules/patients/routes';
@@ -55,6 +58,8 @@ export type Services = {
   pools: Pools;
   auth: Auth;
   messaging: Messaging;
+  /** E-mail / SMS delivery (ADR 0020). */
+  notifier: Notifier;
   payments: PaymentGateway;
   stores: Stores;
   ai: AiProviders;
@@ -80,7 +85,7 @@ declare module 'fastify' {
 /** `overrides` exists for tests only (e.g. a store adapter fed with fixture payloads). */
 export async function buildServer(
   env: Env,
-  overrides: { stores?: Stores; ai?: Partial<AiProviders>; realtime?: Partial<RealtimeProviders>; voiceTiming?: Partial<VoiceTiming>; objects?: ObjectStore } = {},
+  overrides: { stores?: Stores; ai?: Partial<AiProviders>; realtime?: Partial<RealtimeProviders>; voiceTiming?: Partial<VoiceTiming>; objects?: ObjectStore; delivery?: DeliveryProviders } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
@@ -104,9 +109,10 @@ export async function buildServer(
   const pools = createPools(env);
   await assertRlsEffective(pools.appPool);
   const db = createDb(pools.appPool);
-  const messaging = createMessaging(env, (line) => app.log.info(line));
+  const messaging = createMessaging(env);
+  const notifier = new Notifier(db, overrides.delivery ?? createDeliveryProviders(env, messaging.outbox, (line) => app.log.info(line)), app.log);
   const payments = createPaymentGateway(env);
-  const auth = createAuth(env, pools.authPool, messaging);
+  const auth = createAuth(env, pools.authPool, notifier);
   const stores = overrides.stores ?? createStores(env);
   const ai: AiProviders = { ...createAiProviders(env), ...overrides.ai };
   const realtime: RealtimeProviders = { ...createRealtimeProviders(env), ...overrides.realtime };
@@ -115,7 +121,7 @@ export async function buildServer(
   redis?.on('error', (err) => app.log.warn({ err: err.message }, 'redis unavailable — rate-limit counters fall back to this instance'));
   const counters = createWindowCounter(redis);
   const rateLimits = rateLimitPolicy(env);
-  app.decorate('services', { env, db, pools, auth, messaging, payments, stores, ai, realtime, objects, mediaKey: mediaLinkKey(env), voiceTiming: overrides.voiceTiming, counters, rateLimits });
+  app.decorate('services', { env, db, pools, auth, messaging, notifier, payments, stores, ai, realtime, objects, mediaKey: mediaLinkKey(env), voiceTiming: overrides.voiceTiming, counters, rateLimits });
 
   app.addHook('onClose', async () => {
     await Promise.allSettled([pools.appPool.end(), pools.authPool.end(), redis?.quit()]);
@@ -252,7 +258,9 @@ export async function buildServer(
   await app.register(woundRoutes, { prefix: '/v1' });
   await app.register(woundStaffRoutes, { prefix: '/v1/admin/wounds' });
   await app.register(financeRoutes, { prefix: '/v1/admin/finance' });
+  await app.register(notificationRoutes, { prefix: '/v1' });
   if (env.NODE_ENV !== 'test') startWoundMaintenance(app);
+  if (env.NODE_ENV !== 'test') startNotificationWorker(app);
   await app.register(adminRoutes, { prefix: '/v1/admin' });
   await app.register(adminCatalogRoutes, { prefix: '/v1/admin/catalog' });
   if (env.DEV_TOOLS_ENABLED && env.NODE_ENV !== 'production') await app.register(devRoutes, { prefix: '/dev' });

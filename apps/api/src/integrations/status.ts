@@ -1,7 +1,6 @@
 import type { SystemStatus } from '@ghayarly/shared';
 import type { Env } from '../config/env';
 import type { AiProviders } from './ai';
-import type { Messaging } from './messaging';
 import type { PaymentGateway } from './payments';
 import type { ObjectStore } from './storage';
 
@@ -11,11 +10,11 @@ function aiStatus(ai: AiProviders): SystemStatus['integrations']['ai'] {
   return ai.SIMULATED.status === 'CONFIGURED' ? 'DEV_ADAPTER' : 'NOT_CONFIGURED';
 }
 
-export function integrationStatus(env: Env, messaging: Messaging, payments: PaymentGateway, ai: AiProviders, objects?: ObjectStore): SystemStatus['integrations'] {
+export function integrationStatus(env: Env, delivery: { email: SystemStatus['integrations']['email']; sms: SystemStatus['integrations']['sms'] }, payments: PaymentGateway, ai: AiProviders, objects?: ObjectStore): SystemStatus['integrations'] {
   return {
     payments: payments.status,
-    sms: messaging.sms.status,
-    email: messaging.email.status,
+    sms: delivery.sms,
+    email: delivery.email,
     // Medical-image storage: the encrypted local adapter is development-only (DEV_ADAPTER).
     storage: objects?.status ?? 'NOT_CONFIGURED',
     ai: aiStatus(ai),

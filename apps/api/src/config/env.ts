@@ -65,8 +65,28 @@ const schema = z.object({
   PAYMOB_API_KEY: z.string().optional(),
   PAYMOB_HMAC_SECRET: z.string().optional(),
   PAYMOB_INTEGRATION_ID: z.string().optional(),
-  SMS_PROVIDER_API_KEY: z.string().optional(),
-  EMAIL_PROVIDER_API_KEY: z.string().optional(),
+  /**
+   * E-mail and SMS delivery (ADR 0020). A provider is used only when its credentials AND sender
+   * identity are set. EMAIL_SMTP_URL: smtps://user:pass@host:465 (or smtp:// with STARTTLS, which is
+   * required in production). SMS_PROVIDERS is the explicit failover order, e.g. "twilio,vonage".
+   */
+  EMAIL_SMTP_URL: z.string().regex(/^smtps?:\/\//, 'EMAIL_SMTP_URL must start with smtp:// or smtps://').optional(),
+  EMAIL_SMTP_FALLBACK_URL: z.string().regex(/^smtps?:\/\//, 'EMAIL_SMTP_FALLBACK_URL must start with smtp:// or smtps://').optional(),
+  /** Verified sender, e.g. "Dress My Wound <no-reply@example.com>". */
+  EMAIL_FROM: z.string().min(5).max(200).optional(),
+  SMS_PROVIDERS: z.string().regex(/^(twilio|vonage)?(,(twilio|vonage))*$/, 'SMS_PROVIDERS lists twilio and/or vonage').default(''),
+  /** ISO countries SMS may be sent to (abuse / toll-fraud protection). */
+  SMS_ALLOWED_COUNTRIES: z.string().regex(/^[A-Z]{2}(,[A-Z]{2})*$/).default('EG'),
+  TWILIO_ACCOUNT_SID: z.string().regex(/^AC[0-9a-f]{32}$/i, 'TWILIO_ACCOUNT_SID starts with AC').optional(),
+  TWILIO_AUTH_TOKEN: z.string().min(16).optional(),
+  /** Registered sender ID or number, or a Messaging Service SID. */
+  TWILIO_FROM: z.string().min(2).max(20).optional(),
+  TWILIO_MESSAGING_SERVICE_SID: z.string().regex(/^MG[0-9a-f]{32}$/i).optional(),
+  VONAGE_API_KEY: z.string().min(4).optional(),
+  VONAGE_API_SECRET: z.string().min(8).optional(),
+  VONAGE_FROM: z.string().min(2).max(15).optional(),
+  /** Secret path segment of the Vonage delivery-receipt URL (Vonage does not sign receipts). */
+  VONAGE_WEBHOOK_TOKEN: z.string().regex(/^[A-Za-z0-9_-]{24,64}$/).optional(),
   /**
    * Private S3-compatible bucket for medical images (ADR 0017). All of endpoint, region, bucket and
    * credentials are needed; production additionally needs OBJECT_STORAGE_KEY and an approval
@@ -150,6 +170,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
     if (!env.MEDIA_LINK_SECRET) problems.push('MEDIA_LINK_SECRET is required in production (signs medical image links)');
     if (env.S3_ENDPOINT && !env.S3_ENDPOINT.startsWith('https://')) problems.push('S3_ENDPOINT must use https in production (medical images in transit)');
+    if (env.SMS_PROVIDERS.includes('vonage') && env.VONAGE_API_KEY && !env.VONAGE_WEBHOOK_TOKEN) problems.push('VONAGE_WEBHOOK_TOKEN is required in production (delivery receipts are otherwise unauthenticated)');
+    if (env.VONAGE_WEBHOOK_TOKEN && `${env.API_PUBLIC_URL.replace(/\/$/, '')}/v1/webhooks/vonage/dlr/${env.VONAGE_WEBHOOK_TOKEN}`.length > 100) problems.push('The Vonage receipt URL must be ≤ 100 characters (shorten VONAGE_WEBHOOK_TOKEN)');
     for (const [name, url] of [['AI_QWEN_BASE_URL', env.AI_QWEN_BASE_URL], ['AI_GROK_BASE_URL', env.AI_GROK_BASE_URL], ['AI_KIMI_BASE_URL', env.AI_KIMI_BASE_URL], ['AI_MEDGEMMA_BASE_URL', env.AI_MEDGEMMA_BASE_URL]] as const) {
       if (url && !url.startsWith('https://')) problems.push(`${name} must use https in production (patient data in transit)`);
     }

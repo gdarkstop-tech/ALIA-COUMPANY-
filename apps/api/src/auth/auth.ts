@@ -3,18 +3,33 @@ import { betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { phoneNumber, twoFactor } from 'better-auth/plugins';
 import type { Pool } from 'pg';
-import { BRAND_NAME_AR, BRAND_NAME_EN, PHONE_ONLY_EMAIL_DOMAIN } from '@ghayarly/shared';
+import { BRAND_NAME_EN, PHONE_ONLY_EMAIL_DOMAIN } from '@ghayarly/shared';
 import { webOrigins, type Env } from '../config/env';
-import type { Messaging } from '../integrations/messaging';
+import { normalizePhone } from '../notifications/phone';
+import { NotificationRateLimited, NotificationUnavailable, type Notifier } from '../notifications/service';
 
-const EGYPT_MOBILE = /^\+201[0125]\d{8}$/;
 export { PHONE_ONLY_EMAIL_DOMAIN };
+
+/** What the auth flows need from the notification service (sign-in codes and links only). */
+export type SecretSender = Pick<Notifier, 'sendSecret'>;
+
+/** Delivery problems become clean API answers; the code or link is never part of an error. */
+async function sendOrRefuse(send: () => Promise<void>) {
+  try {
+    await send();
+  } catch (e) {
+    if (e instanceof NotificationRateLimited) throw APIError.from('TOO_MANY_REQUESTS', { code: 'TOO_MANY_MESSAGES', message: 'Too many codes were sent to this destination. Try again later.' });
+    if (e instanceof NotificationUnavailable) throw APIError.from('SERVICE_UNAVAILABLE', { code: 'DELIVERY_NOT_CONFIGURED', message: 'Messages cannot be sent right now.' });
+    throw APIError.from('SERVICE_UNAVAILABLE', { code: 'DELIVERY_FAILED', message: 'The message could not be delivered. Try again shortly.' });
+  }
+}
 
 /**
  * Better Auth instance. It talks to PostgreSQL through `authPool`, a dedicated role that can
  * only reach the `auth` schema — the domain API role cannot read password hashes or tokens.
  */
-export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
+export function createAuth(env: Env, authPool: Pool, notifier: SecretSender) {
+  const smsCountries = env.SMS_ALLOWED_COUNTRIES.split(',');
   const isProd = env.NODE_ENV === 'production';
   const signInLimit = env.AUTH_SIGNIN_RATE_LIMIT ?? 5;
   return betterAuth({
@@ -31,14 +46,10 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
       requireEmailVerification: env.AUTH_REQUIRE_EMAIL_VERIFICATION,
       resetPasswordTokenExpiresIn: 60 * 30,
       revokeSessionsOnPasswordReset: true,
-      sendResetPassword: async ({ user, url, token }) => {
-        await messaging.email.send({
-          channel: 'email',
-          to: user.email,
-          subject: `Reset your ${BRAND_NAME_EN} password | إعادة تعيين كلمة مرور ${BRAND_NAME_AR}`,
-          body: `Use this link to reset your password: ${url} (code: ${token}). It expires in 30 minutes.`,
-          purpose: 'password-reset',
-        });
+      sendResetPassword: async ({ user, url }) => {
+        // Phone-only accounts have no mailbox: they reset through a phone code instead.
+        if (user.email.endsWith(`@${PHONE_ONLY_EMAIL_DOMAIN}`)) return;
+        await sendOrRefuse(() => notifier.sendSecret({ channel: 'EMAIL', to: user.email, userId: user.id, purpose: 'auth.password_reset', vars: { url } }));
       },
     },
     emailVerification: {
@@ -47,13 +58,7 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
       expiresIn: 60 * 60 * 24,
       sendVerificationEmail: async ({ user, url }) => {
         if (user.email.endsWith(`@${PHONE_ONLY_EMAIL_DOMAIN}`)) return;
-        await messaging.email.send({
-          channel: 'email',
-          to: user.email,
-          subject: `Confirm your email for ${BRAND_NAME_EN} | تأكيد بريدك في ${BRAND_NAME_AR}`,
-          body: `Confirm your email address: ${url}`,
-          purpose: 'email-verification',
-        });
+        await sendOrRefuse(() => notifier.sendSecret({ channel: 'EMAIL', to: user.email, userId: user.id, purpose: 'auth.email_verification', vars: { url } }));
       },
     },
     session: {
@@ -115,9 +120,13 @@ export function createAuth(env: Env, authPool: Pool, messaging: Messaging) {
         otpLength: 6,
         expiresIn: 300,
         allowedAttempts: 5,
-        phoneNumberValidator: (value) => EGYPT_MOBILE.test(value),
+        // E.164 mobile numbers in the countries SMS may be sent to (Egypt by default).
+        phoneNumberValidator: (value) => {
+          const p = normalizePhone(value, { allowedCountries: smsCountries });
+          return p.ok && p.e164 === value;
+        },
         sendOTP: async ({ phoneNumber: to, code }) => {
-          await messaging.sms.send({ channel: 'sms', to, body: `${BRAND_NAME_AR}: رمز التحقق ${code} — صالح لمدة ٥ دقائق.\n${BRAND_NAME_EN}: your code is ${code}. It expires in 5 minutes.`, purpose: 'phone-otp' });
+          await sendOrRefuse(() => notifier.sendSecret({ channel: 'SMS', to, purpose: 'auth.phone_otp', vars: { code } }));
         },
         signUpOnVerification: {
           getTempEmail: (phone) => `${phone.replace('+', '')}@${PHONE_ONLY_EMAIL_DOMAIN}`,

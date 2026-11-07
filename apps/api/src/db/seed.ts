@@ -11,7 +11,6 @@
 import pg from 'pg';
 import { createAuth } from '../auth/auth';
 import { loadEnv } from '../config/env';
-import { createMessaging } from '../integrations/messaging';
 import { createPools } from './client';
 
 export const DEMO_PASSWORD = 'DressMyWound-Demo-2026';
@@ -120,7 +119,8 @@ export async function seed(log: (line: string) => void = console.log) {
 
   const pools = createPools(env);
   const owner = new pg.Pool({ connectionString: env.DATABASE_URL_OWNER });
-  const auth = createAuth(env, pools.authPool, createMessaging(env, () => undefined));
+  // The seed creates demo accounts only: no message is ever sent from here.
+  const auth = createAuth(env, pools.authPool, { sendSecret: async () => undefined });
 
   const ensureUser = async (email: string, name: string, password: string | null): Promise<string> => {
     const existing = await owner.query<{ id: string }>('select id from auth."user" where email = $1', [email]);
