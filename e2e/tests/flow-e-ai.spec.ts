@@ -55,3 +55,30 @@ test('Flow E4 — AI control centre reports unconfigured providers honestly', as
   await expect(page.getByTestId('ai-reports')).toBeVisible();
   await shot(page, 'E24-ai-safety');
 });
+
+/**
+ * Flow E4b — provider kill switch: the development simulator can be disabled only with a reason;
+ * it then shows as DISABLED and the AI assistant has no model for anyone; re-enabling restores it.
+ * (The simulator stands in for a real provider here: no real provider is configured in development.)
+ */
+test('Flow E4b — a provider is disabled with a reason and re-enabled', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByTestId('admin-email').fill('admin.demo@demo.ghayarly.test');
+  await page.getByTestId('admin-password').fill(DEMO_PASSWORD);
+  await submitSignIn(page, 'admin-submit');
+  await page.getByTestId('nav-ai').click();
+  await expect(page.getByTestId('ai-provider-state-SIMULATED')).toHaveAttribute('data-state', 'CONFIGURED');
+  await expect(page.getByTestId('ai-provider-state-ANTHROPIC')).toHaveAttribute('data-state', 'NOT_CONFIGURED');
+  await page.getByTestId('ai-provider-disable-SIMULATED').click();
+  await page.getByTestId('ai-provider-disable-reason-SIMULATED').fill('E2E kill-switch drill');
+  try {
+    await page.getByTestId('ai-provider-disable-confirm-SIMULATED').click();
+    await expect(page.getByTestId('ai-provider-state-SIMULATED')).toHaveAttribute('data-state', 'DISABLED');
+    await expect(page.getByTestId('ai-provider-SIMULATED')).toContainText('E2E kill-switch drill');
+    await shot(page, 'E25-ai-provider-disabled');
+  } finally {
+    // Always restore the simulator for the other flows.
+    await page.getByTestId('ai-provider-enable-SIMULATED').click();
+  }
+  await expect(page.getByTestId('ai-provider-state-SIMULATED')).toHaveAttribute('data-state', 'CONFIGURED');
+});

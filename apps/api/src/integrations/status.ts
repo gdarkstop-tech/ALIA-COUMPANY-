@@ -5,9 +5,9 @@ import type { Messaging } from './messaging';
 import type { PaymentGateway } from './payments';
 import type { ObjectStore } from './storage';
 
-/** A real provider key configured → CONFIGURED; only the development simulator → DEV_ADAPTER. */
+/** Any real provider key configured → CONFIGURED; only the development simulator → DEV_ADAPTER. */
 function aiStatus(ai: AiProviders): SystemStatus['integrations']['ai'] {
-  if (ai.ANTHROPIC.status === 'CONFIGURED' || ai.OPENAI.status === 'CONFIGURED' || ai.GEMINI.status === 'CONFIGURED') return 'CONFIGURED';
+  if ((Object.keys(ai) as (keyof AiProviders)[]).some((code) => code !== 'SIMULATED' && ai[code].status === 'CONFIGURED')) return 'CONFIGURED';
   return ai.SIMULATED.status === 'CONFIGURED' ? 'DEV_ADAPTER' : 'NOT_CONFIGURED';
 }
 

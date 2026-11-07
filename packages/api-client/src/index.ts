@@ -462,6 +462,7 @@ export function createApiClient(options: ApiClientOptions) {
       reports: (status = 'ACTIVE') => get<AiReportListItem[]>('/v1/admin/ai/reports', { status }),
       report: (id: string) => get<AiReportDetail>(`/v1/admin/ai/reports/${id}`),
       transitionReport: (id: string, body: { status: string; resolution?: string; note?: string }) => post<{ ok: true }>(`/v1/admin/ai/reports/${id}/transition`, body),
+      providerControl: (code: string, body: { enabled: boolean; reason?: string }) => put<AiControlCentre>(`/v1/admin/ai/providers/${code}/control`, body),
       healthCheck: (code: string, modelId: string) => post<{ provider: string; configured: boolean; ok: boolean; detail: string; checkedAt: string; environment: string }>(`/v1/admin/ai/providers/${code}/health-check`, { modelId }),
     },
     dashboard: {

@@ -30,6 +30,8 @@ import {
   type AiMetric,
   type AiModelAdmin,
   type AiProviderCode,
+  type AiProviderState,
+  type AiProviderStatus,
   type AiReportDetail,
   type AiReportListItem,
   type AiRouteCandidate,
@@ -56,7 +58,7 @@ import {
   billingPlans,
   featureFlags,
 } from '../../db/schema';
-import { ATTACHMENT_SUPPORT, PROVIDER_ENV_VARS } from '../../integrations/ai';
+import { ATTACHMENT_SUPPORT, PROVIDER_ENV_VARS, providerKeyFingerprints } from '../../integrations/ai';
 import { audit } from '../../lib/audit';
 import { notFound, unprocessable } from '../../lib/errors';
 import { contextFor, inContext, requireAnyPermission, requirePermission } from '../../lib/principal';
@@ -117,8 +119,19 @@ function caseDto(c: typeof aiEvalCases.$inferSelect, me: string): AiEvalCase {
   };
 }
 
+/** The five provider states, derived the same way everywhere (ADR 0019). */
+export function providerState(p: { code: AiProviderCode; configured: boolean; enabled: boolean; lastCheck: AiProviderStatus['lastCheck'] }): AiProviderState {
+  if (!p.configured) return 'NOT_CONFIGURED';
+  if (!p.enabled) return 'DISABLED';
+  // The development simulator is never "verified": it is not a provider.
+  if (p.code === 'SIMULATED' || !p.lastCheck || !p.lastCheck.currentKey) return 'CONFIGURED';
+  if (Date.now() - Date.parse(p.lastCheck.checkedAt) > 30 * 86_400_000) return 'CONFIGURED';
+  return p.lastCheck.ok ? 'VERIFIED' : 'ERROR';
+}
+
 export async function adminAiRoutes(app: FastifyInstance) {
   const { ai, env, realtime } = app.services;
+  const fingerprints = providerKeyFingerprints(env);
 
   async function controlCentre(tx: Tx, days: number): Promise<AiControlCentre> {
     const models = await tx.select().from(aiModels).orderBy(asc(aiModels.provider), asc(aiModels.modelId));
@@ -146,16 +159,29 @@ export async function adminAiRoutes(app: FastifyInstance) {
     const users = await tx.execute<{ n: number }>(sql`select count(distinct user_id)::int as n from app.ai_usage where reserved_at >= now() - make_interval(days => ${days})`);
     const limits = (rows: { metric: AiMetric; weeklyLimit: number }[]) => Object.fromEntries(rows.map((q) => [q.metric, q.weeklyLimit])) as Record<AiMetric, number>;
     const byId = new Map(models.map((m) => [m.id, m]));
+    const controls = (await tx.execute<{ provider: AiProviderCode; enabled: boolean; reason: string | null }>(sql`select provider::text as provider, enabled, reason from app.ai_provider_controls`)).rows;
+    const checks = (
+      await tx.execute<{ provider: AiProviderCode; model_id: string; ok: boolean; detail: string; key_fingerprint: string | null; checked_at: string }>(sql`
+        select distinct on (provider) provider::text as provider, model_id, ok, detail, key_fingerprint, checked_at::text from app.ai_provider_checks order by provider, checked_at desc`)
+    ).rows;
 
     return {
-      providers: AI_PROVIDERS.map((code) => ({
+      providers: AI_PROVIDERS.map((code) => {
+        const control = controls.find((c) => c.provider === code);
+        const check = checks.find((c) => c.provider === code);
+        const lastCheck = check ? { ok: check.ok, modelId: check.model_id, detail: check.detail, checkedAt: new Date(check.checked_at).toISOString(), currentKey: check.key_fingerprint === fingerprints[code] } : null;
+        return {
         code,
+        state: providerState({ code, configured: ai[code].status === 'CONFIGURED', enabled: control?.enabled ?? true, lastCheck }),
+        disabledReason: control && !control.enabled ? control.reason : null,
+        lastCheck,
         configured: ai[code].status === 'CONFIGURED',
         realtimeConfigured: realtime[code].status === 'CONFIGURED',
         realtimeAdapter: code === 'OPENAI' || code === 'SIMULATED',
         productionAllowed: code !== 'SIMULATED',
         envVars: PROVIDER_ENV_VARS[code],
-      })),
+        };
+      }),
       models: models.map((m) => modelDto(m, approvals)),
       routes: routes.map(({ r, flag }) => ({
         key: r.key,
@@ -349,10 +375,28 @@ export async function adminAiRoutes(app: FastifyInstance) {
     const { code } = parse(z.object({ code: z.enum(AI_PROVIDERS) }), request.params);
     const { modelId } = parse(z.object({ modelId: z.string().regex(/^[A-Za-z0-9._:/-]{2,100}$/) }), request.body);
     const result = await ai[code].healthCheck(modelId);
-    await inContext(request, principal, (tx) =>
-      audit(tx, { actorUserId: principal.userId, action: 'ai.provider.health_checked', entityType: 'ai_provider', entityId: code, requestId: request.id, metadata: { modelId, ok: result.ok, detail: result.detail } }),
-    );
-    return { provider: code, configured: ai[code].status === 'CONFIGURED', ...result, environment: env.NODE_ENV };
+    const detail = result.detail.slice(0, 200);
+    await inContext(request, principal, async (tx) => {
+      // Only a configured provider leaves a check on record (an unconfigured one has nothing to verify).
+      if (ai[code].status === 'CONFIGURED') {
+        await tx.execute(sql`insert into app.ai_provider_checks (provider, model_id, ok, detail, key_fingerprint, environment, checked_by_user_id)
+          values (${code}::app.ai_provider, ${modelId}, ${result.ok}, ${detail}, ${fingerprints[code]}, ${env.NODE_ENV}, ${principal.userId})`);
+      }
+      await audit(tx, { actorUserId: principal.userId, action: 'ai.provider.health_checked', entityType: 'ai_provider', entityId: code, requestId: request.id, metadata: { modelId, ok: result.ok, detail } });
+    });
+    return { provider: code, configured: ai[code].status === 'CONFIGURED', ...result, detail, environment: env.NODE_ENV };
+  });
+
+  /** Kill switch: a disabled provider is never offered by the database router (ADR 0019). */
+  app.put('/providers/:code/control', async (request) => {
+    const principal = await requirePermission(request, 'ai.config.manage');
+    const { code } = parse(z.object({ code: z.enum(AI_PROVIDERS) }), request.params);
+    const b = parse(z.object({ enabled: z.boolean(), reason: z.string().trim().min(3).max(300).optional() }).refine((v) => v.enabled || v.reason, { message: 'A reason is required to disable a provider', path: ['reason'] }), request.body);
+    return inContext(request, principal, async (tx) => {
+      await tx.execute(sql`update app.ai_provider_controls set enabled = ${b.enabled}, reason = ${b.enabled ? null : b.reason!}, updated_by_user_id = ${principal.userId}, updated_at = now() where provider = ${code}::app.ai_provider`);
+      await audit(tx, { actorUserId: principal.userId, action: b.enabled ? 'ai.provider.enabled' : 'ai.provider.disabled', entityType: 'ai_provider', entityId: code, requestId: request.id, metadata: { reason: b.reason ?? null } });
+      return controlCentre(tx, 30);
+    });
   });
 
   // ---------------------------------------------------------------- evaluation suite
@@ -485,6 +529,8 @@ export async function adminAiRoutes(app: FastifyInstance) {
       const voice = route.requiredCapability === 'REALTIME_VOICE';
       const impl = voice ? { complete: realtime[m.provider].completeText.bind(realtime[m.provider]), status: realtime[m.provider].status } : ai[m.provider];
       if (impl.status !== 'CONFIGURED') throw unprocessable('AI_PROVIDER_NOT_CONFIGURED', `${m.provider} is not configured on this server${voice ? ' for realtime voice' : ''}`);
+      const usable = (await tx.execute<{ ok: boolean }>(sql`select ${m.provider}::app.ai_provider = any(app.ai_usable_providers(array[${m.provider}]::app.ai_provider[])) as ok`)).rows[0]!.ok;
+      if (!usable) throw unprocessable('AI_PROVIDER_DISABLED', `${m.provider} is disabled by an administrator`);
       const r = await tx.execute<{ id: string }>(sql`select app.ai_eval_start(${modelId}::uuid, ${routeKey}, ${policyVersionFor(routeKey)}) as id`);
       const [run] = await tx.select().from(aiEvalRuns).where(eq(aiEvalRuns.id, r.rows[0]!.id));
       return { run: run!, complete: impl.complete, model: m.modelId, maxTokens: route.maxOutputTokens };

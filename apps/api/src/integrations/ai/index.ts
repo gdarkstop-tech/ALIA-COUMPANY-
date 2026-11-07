@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import type { Env } from '../../config/env';
 import { createAnthropicProvider } from './anthropic';
 import { createChatCompletionsProvider, KIMI_BASE_URL } from './chat-completions';
@@ -34,6 +35,25 @@ export function createAiProviders(env: Env): AiProviders {
     MEDGEMMA: createChatCompletionsProvider({ code: 'MEDGEMMA', label: 'MedGemma endpoint', apiKey: env.AI_MEDGEMMA_API_KEY, baseURL: env.AI_MEDGEMMA_BASE_URL, timeoutMs: timeout }),
     // Never available in production, whatever the database says.
     SIMULATED: env.NODE_ENV !== 'production' && env.DEV_TOOLS_ENABLED ? createSimulatedProvider() : notConfigured('SIMULATED'),
+  };
+}
+
+/**
+ * A short fingerprint of the key and endpoint each provider uses (12 hex of an HMAC keyed with a
+ * server secret), so a verification is tied to the key it was made with and a rotated key shows
+ * as unverified again. It never reveals the key and cannot be used to confirm a guessed key offline.
+ */
+export function providerKeyFingerprints(env: Env): Record<AiProviderCode, string | null> {
+  const fp = (key: string | undefined, endpoint?: string) => (key ? createHmac('sha256', env.BETTER_AUTH_SECRET).update(`dmw-ai-key|${key}|${endpoint ?? ''}`).digest('hex').slice(0, 12) : null);
+  return {
+    ANTHROPIC: fp(env.AI_ANTHROPIC_API_KEY),
+    OPENAI: fp(env.AI_OPENAI_API_KEY),
+    GEMINI: fp(env.AI_GEMINI_API_KEY),
+    QWEN: fp(env.AI_QWEN_API_KEY, env.AI_QWEN_BASE_URL),
+    GROK: fp(env.AI_GROK_API_KEY, env.AI_GROK_BASE_URL),
+    KIMI: fp(env.AI_KIMI_API_KEY, env.AI_KIMI_BASE_URL),
+    MEDGEMMA: fp(env.AI_MEDGEMMA_API_KEY ?? env.AI_MEDGEMMA_BASE_URL, env.AI_MEDGEMMA_BASE_URL),
+    SIMULATED: null,
   };
 }
 

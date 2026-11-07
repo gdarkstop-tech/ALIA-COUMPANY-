@@ -116,8 +116,20 @@ export type AiVoiceServerEvent =
   | { type: 'error'; code: string };
 
 // ---------------------------------------------------------------- AI control centre (admin)
+/**
+ * NOT_CONFIGURED — no business key in this environment; CONFIGURED — key set, not verified (or the
+ * key changed since the last check, or that check is older than 30 days); VERIFIED / ERROR — the
+ * latest console check with the current key succeeded / failed; DISABLED — switched off by an
+ * administrator (the router never offers it).
+ */
+export const AI_PROVIDER_STATES = ['NOT_CONFIGURED', 'CONFIGURED', 'VERIFIED', 'DISABLED', 'ERROR'] as const;
+export type AiProviderState = (typeof AI_PROVIDER_STATES)[number];
+
 export type AiProviderStatus = {
   code: AiProviderCode;
+  state: AiProviderState;
+  disabledReason: string | null;
+  lastCheck: { ok: boolean; modelId: string; detail: string; checkedAt: string; currentKey: boolean } | null;
   configured: boolean;
   /** Realtime voice: an adapter exists for this provider and its key is set. */
   realtimeConfigured: boolean;

@@ -1,5 +1,5 @@
 'use client';
-import { AI_METRICS, type AiControlCentre, type AiMetric } from '@ghayarly/shared';
+import { AI_METRICS, type AiControlCentre, type AiMetric, type AiProviderState } from '@ghayarly/shared';
 import { formatNumber } from '@ghayarly/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -9,18 +9,33 @@ import { useI18n } from '@/components/Providers';
 import { formatDateTime, Shell, useMe } from '@/components/Shell';
 import { api } from '@/lib/api';
 
+const STATE_TONE: Record<AiProviderState, string> = { NOT_CONFIGURED: 'warning', CONFIGURED: 'info', VERIFIED: 'success', DISABLED: 'neutral', ERROR: 'danger' };
+
 function Providers({ cc, canManage }: { cc: AiControlCentre; canManage: boolean }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const qc = useQueryClient();
   const [result, setResult] = useState<Record<string, string>>({});
+  const [disabling, setDisabling] = useState<{ code: string; reason: string } | null>(null);
   const check = useMutation({
     mutationFn: (v: { code: string; modelId: string }) => api.aiAdmin.healthCheck(v.code, v.modelId),
-    onSuccess: (r) => setResult((m) => ({ ...m, [r.provider]: r.ok ? t('aiAdmin.healthOk') : t('aiAdmin.healthFailed', { detail: r.detail }) })),
+    onSuccess: async (r) => {
+      setResult((m) => ({ ...m, [r.provider]: r.ok ? t('aiAdmin.healthOk') : t('aiAdmin.healthFailed', { detail: r.detail }) }));
+      await qc.invalidateQueries({ queryKey: AI_KEY });
+    },
+  });
+  const toggle = useMutation({
+    mutationFn: (v: { code: string; enabled: boolean; reason?: string }) => api.aiAdmin.providerControl(v.code, { enabled: v.enabled, ...(v.reason ? { reason: v.reason } : {}) }),
+    onSuccess: (next) => {
+      setDisabling(null);
+      qc.setQueryData(AI_KEY, next);
+    },
   });
   return (
     <section className="card tight" data-testid="ai-providers">
       <h2 style={{ padding: '12px 16px 0' }}>{t('aiAdmin.providers')}</h2>
+      <p className="subtle" style={{ padding: '0 16px' }}>{t('aiAdmin.stateNote')}</p>
       <table className="table">
-        <thead><tr><th>{t('aiAdmin.provider')}</th><th>{t('aiAdmin.status')}</th><th>{t('aiAdmin.envVar')}</th><th /></tr></thead>
+        <thead><tr><th scope="col">{t('aiAdmin.provider')}</th><th scope="col">{t('aiAdmin.status')}</th><th scope="col">{t('aiAdmin.envVar')}</th><th scope="col" /></tr></thead>
         <tbody>
           {cc.providers.map((p) => {
             const model = cc.models.find((m) => m.provider === p.code);
@@ -28,7 +43,16 @@ function Providers({ cc, canManage }: { cc: AiControlCentre; canManage: boolean 
               <tr key={p.code} data-testid={`ai-provider-${p.code}`}>
                 <td className="mono">{p.code}</td>
                 <td>
-                  <span className={`badge tone-${p.configured ? 'success' : 'warning'}`}>{p.configured ? t('aiAdmin.configured') : t('aiAdmin.notConfigured')}</span>
+                  <span className={`badge tone-${STATE_TONE[p.state]}`} data-testid={`ai-provider-state-${p.code}`} data-state={p.state}>
+                    {p.state === 'NOT_CONFIGURED' ? t('aiAdmin.notConfigured') : t(`aiAdmin.pstate_${p.state}`)}
+                  </span>
+                  {p.disabledReason ? <div className="subtle">{t('aiAdmin.disabledBecause', { reason: p.disabledReason })}</div> : null}
+                  {p.lastCheck ? (
+                    <div className="subtle" data-testid={`ai-provider-check-${p.code}`}>
+                      {t('aiAdmin.lastCheck', { when: formatDateTime(p.lastCheck.checkedAt, locale), result: p.lastCheck.ok ? t('aiAdmin.lastCheckOk') : t('aiAdmin.lastCheckFailed', { detail: p.lastCheck.detail }), model: p.lastCheck.modelId })}
+                      {!p.lastCheck.currentKey ? <div>{t('aiAdmin.keyChanged')}</div> : null}
+                    </div>
+                  ) : null}
                   {!p.productionAllowed ? <div className="subtle">{t('aiAdmin.devOnly')}</div> : null}
                   <div className="subtle" data-testid={`ai-provider-realtime-${p.code}`}>
                     {t('aiAdmin.realtime')}: {p.realtimeAdapter ? (p.realtimeConfigured ? t('aiAdmin.configured') : t('aiAdmin.notConfigured')) : t('aiAdmin.realtimeNoAdapter')}
@@ -36,8 +60,33 @@ function Providers({ cc, canManage }: { cc: AiControlCentre; canManage: boolean 
                 </td>
                 <td className="mono">{p.envVars.length ? p.envVars.join(' + ') : '—'}</td>
                 <td>
-                  {canManage && p.configured && model ? (
-                    <button className="btn btn-sm btn-secondary" disabled={check.isPending} onClick={() => check.mutate({ code: p.code, modelId: model.modelId })}>{t('aiAdmin.healthCheck')}</button>
+                  <div className="row" style={{ gap: 8 }}>
+                    {canManage && p.configured && model && p.state !== 'DISABLED' ? (
+                      <button className="btn btn-sm btn-secondary" disabled={check.isPending} onClick={() => check.mutate({ code: p.code, modelId: model.modelId })}>{t('aiAdmin.healthCheck')}</button>
+                    ) : null}
+                    {canManage && p.state !== 'NOT_CONFIGURED' ? (
+                      p.state === 'DISABLED' ? (
+                        <button className="btn btn-sm btn-secondary" disabled={toggle.isPending} data-testid={`ai-provider-enable-${p.code}`} onClick={() => toggle.mutate({ code: p.code, enabled: true })}>{t('aiAdmin.enableProvider')}</button>
+                      ) : (
+                        <button className="btn btn-sm btn-secondary" data-testid={`ai-provider-disable-${p.code}`} onClick={() => setDisabling({ code: p.code, reason: '' })}>{t('aiAdmin.disableProvider')}</button>
+                      )
+                    ) : null}
+                  </div>
+                  {disabling?.code === p.code ? (
+                    <form
+                      className="stack"
+                      style={{ marginTop: 8 }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        toggle.mutate({ code: p.code, enabled: false, reason: disabling.reason });
+                      }}
+                    >
+                      <div className="field">
+                        <label htmlFor={`disable-reason-${p.code}`}>{t('aiAdmin.disableReasonLabel', { code: p.code })}</label>
+                        <input id={`disable-reason-${p.code}`} className="input" required minLength={3} maxLength={300} value={disabling.reason} data-testid={`ai-provider-disable-reason-${p.code}`} onChange={(e) => setDisabling({ code: p.code, reason: e.target.value })} />
+                      </div>
+                      <div><button className="btn btn-sm btn-primary" type="submit" disabled={toggle.isPending} data-testid={`ai-provider-disable-confirm-${p.code}`}>{t('aiAdmin.disableConfirm')}</button></div>
+                    </form>
                   ) : null}
                   {result[p.code] ? <div className="subtle" data-testid={`ai-health-${p.code}`}>{result[p.code]}</div> : null}
                 </td>
@@ -49,7 +98,7 @@ function Providers({ cc, canManage }: { cc: AiControlCentre; canManage: boolean 
       <div className="notice info" style={{ margin: 16 }} data-testid="ai-setup-instructions">
         <div><strong>{t('aiAdmin.setupTitle')}</strong><div>{t('aiAdmin.setupBody')}</div><div className="subtle">{t('aiAdmin.healthNote')}</div></div>
       </div>
-      <ErrorNotice error={check.error} />
+      <ErrorNotice error={check.error ?? toggle.error} />
     </section>
   );
 }
