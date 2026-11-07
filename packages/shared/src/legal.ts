@@ -19,6 +19,7 @@ export type LegalDocument = { id: LegalDocId; version: string; status: typeof LE
 const CONTROLLER_EN = '[Legal entity name of Alia Group — to be confirmed], Arab Republic of Egypt';
 const CONTROLLER_AR = '[الاسم القانوني لكيان Alia Group — يُؤكَّد لاحقاً]، جمهورية مصر العربية';
 const CONTACT = '[privacy contact email — to be confirmed]';
+const CONTACT_AR = '[البريد الإلكتروني لمسؤول الخصوصية — يُؤكَّد لاحقاً]';
 
 export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
   privacy: {
@@ -82,7 +83,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
       title: 'سياسة الخصوصية',
       summary: 'ما الذي يجمعه غير لي، ولماذا، ومن يمكنه رؤيته، ومدة الاحتفاظ به، وكيف تحذفه.',
       sections: [
-        { heading: 'من نحن', paragraphs: [`يُشغِّل تطبيق غير لي (Dress My Wound) ${CONTROLLER_AR} ("نحن"). للتواصل: ${CONTACT}.`] },
+        { heading: 'من نحن', paragraphs: [`يُشغِّل تطبيق غير لي (Dress My Wound) ${CONTROLLER_AR} ("نحن"). للتواصل: ${CONTACT_AR}.`] },
         {
           heading: 'ما الذي نجمعه',
           paragraphs: [

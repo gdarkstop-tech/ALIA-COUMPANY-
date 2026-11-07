@@ -30,6 +30,16 @@ const warnings: string[] = [];
 const submission = process.argv.includes('--submission');
 const check = (name: string, pass: boolean, detail = '') => (pass ? ok.push(name) : failures.push(`${name}${detail ? ` — ${detail}` : ''}`));
 /** Fails only with --submission; otherwise reported as a warning. */
+/**
+ * Every placeholder in the human-readable strings of a document. Strings are tested one by one:
+ * testing JSON text would also match array brackets around any sentence containing an em dash.
+ */
+function placeholders(value: unknown): string[] {
+  const strings = (v: unknown): string[] => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.flatMap(strings) : v && typeof v === 'object' ? Object.values(v).flatMap(strings) : []);
+  const all = new RegExp(PLACEHOLDER_PATTERN.source, 'gi');
+  return [...new Set(strings(value).flatMap((t) => t.match(all) ?? []))];
+}
+
 const gate = (name: string, pass: boolean, detail = '') => (pass ? ok.push(name) : (submission ? failures : warnings).push(`${name}${detail ? ` — ${detail}` : ''}`));
 
 // ---------------------------------------------------------------- 1. brand spelling
@@ -71,12 +81,13 @@ for (const lang of ['en', 'ar']) {
     const hit = listing.match(claim.pattern);
     check(`${lang} listing does not advertise ${claim.flag} (off)`, enabled.includes(claim.flag) || !hit, hit?.[0]);
   }
-  gate(`${lang} listing has no placeholders`, !PLACEHOLDER_PATTERN.test(JSON.stringify(m)), JSON.stringify(m).match(PLACEHOLDER_PATTERN)?.[0]);
+  const listingHoles = placeholders(m);
+  gate(`${lang} listing has no placeholders`, !listingHoles.length, listingHoles.join(' | '));
 }
 for (const doc of Object.values(LEGAL_DOCUMENTS)) {
   for (const lang of ['en', 'ar'] as const) {
-    const text = JSON.stringify(doc[lang]);
-    gate(`${doc.id} (${lang}) has no placeholders`, !PLACEHOLDER_PATTERN.test(text), text.match(PLACEHOLDER_PATTERN)?.[0]);
+    const holes = placeholders(doc[lang]);
+    gate(`${doc.id} (${lang}) has no placeholders`, !holes.length, holes.join(' | '));
   }
 }
 
