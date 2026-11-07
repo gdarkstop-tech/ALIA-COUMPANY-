@@ -1,10 +1,10 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "dev": { "cache": false, "persistent": true },
-    "typecheck": { "dependsOn": ["^typecheck"], "outputs": [] },
-    "lint": { "outputs": [] },
-    "test": { "outputs": [], "cache": false },
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] }
+    "dev": {"cache": false, "persistent": true},
+    "typecheck": {"dependsOn": ["^typecheck"], "outputs": []},
+    "lint": {"outputs": []},
+    "test": {"outputs": [], "cache": false, "passThroughEnv": ["S3_TEST_ENDPOINT", "S3_TEST_ACCESS_KEY_ID", "S3_TEST_SECRET_ACCESS_KEY", "S3_TEST_ENFORCES_AUTH"]},
+    "build": {"dependsOn": ["^build"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"]}
   }
 }

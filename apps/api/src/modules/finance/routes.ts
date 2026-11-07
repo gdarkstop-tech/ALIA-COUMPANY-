@@ -75,7 +75,9 @@ async function overview(tx: Tx, days: number, env: { stores: { apple: { status: 
     from app.ai_usage where reserved_at >= ${since} and ${real}
     group by provider, model_id order by sum(cost_micros) desc nulls last, requests desc`);
 
+  // Sorted numerically by cost (the totals are returned as text to keep bigint precision).
   const byFeature = await tx.execute<{ feature: string; description: string; metric: AiMetric | 'EVALUATION'; requests: number; units: string; cost: string }>(sql`
+    select * from (
     select u.route_key as feature, r.description, r.metric::text as metric, count(*)::int as requests,
            coalesce(sum(u.units), 0)::text as units, coalesce(sum(u.cost_micros) filter (where ${real}), 0)::text as cost
     from app.ai_usage u join app.ai_routes r on r.key = u.route_key
@@ -84,7 +86,7 @@ async function overview(tx: Tx, days: number, env: { stores: { apple: { status: 
     select 'evaluation', 'Company evaluation runs (testing models before approval)', 'EVALUATION', count(*)::int, count(*)::text,
            coalesce(sum(r.cost_micros) filter (where m.provider <> 'SIMULATED'), 0)::text
     from app.ai_eval_runs r join app.ai_models m on m.id = r.model where r.started_at >= ${since}
-    order by 6 desc, 4 desc`);
+    ) f order by f.cost::bigint desc, f.requests desc`);
 
   const byPlan = await tx.execute<{ plan: PlanCode | 'NONE'; users: number; requests: number; cost: string }>(sql`
     select coalesce(plan_code::text, 'NONE') as plan, count(distinct user_id)::int as users, count(*)::int as requests,
@@ -95,7 +97,8 @@ async function overview(tx: Tx, days: number, env: { stores: { apple: { status: 
     select u.user_id, p.account_kind::text as kind, (array_agg(u.plan_code::text order by u.reserved_at desc))[1] as plan,
            count(*)::int as requests, coalesce(sum(u.cost_micros) filter (where u.provider is not null and u.provider <> 'SIMULATED'), 0)::text as cost
     from app.ai_usage u left join app.user_profiles p on p.user_id = u.user_id
-    where u.reserved_at >= ${since} group by u.user_id, p.account_kind order by 5 desc, 4 desc limit 10`);
+    where u.reserved_at >= ${since} group by u.user_id, p.account_kind
+    order by coalesce(sum(u.cost_micros) filter (where u.provider is not null and u.provider <> 'SIMULATED'), 0) desc, count(*) desc limit 10`);
 
   const daily = await tx.execute<{ date: string; requests: number; cost: string }>(sql`
     select (reserved_at at time zone ${CAIRO})::date::text as date, count(*)::int as requests,

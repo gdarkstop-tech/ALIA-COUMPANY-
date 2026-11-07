@@ -113,13 +113,25 @@ describe('AI costs', () => {
     const platinum = (o: AiFinanceOverview) => o.byPlan.find((p) => p.plan === 'PLATINUM')?.costMicros ?? 0;
     expect(platinum(after) - platinum(before)).toBe(4_000);
 
-    // Per-user rows are pseudonymous: an 8-character reference, no name, e-mail or full id.
-    const top = after.topUsers.find((u) => user.userId.startsWith(u.userRef));
-    expect(top?.userRef).toHaveLength(8);
+    // No name, e-mail or full account id anywhere in the overview.
     const body = JSON.stringify(after);
     expect(body).not.toContain('Mona Secret-Name');
     expect(body).not.toContain(user.email);
     expect(body).not.toContain(user.userId);
+  });
+
+  it('lists the highest-cost accounts by an 8-character pseudonymous reference only', async () => {
+    // Shared test database: cost above the current top account so this one is listed first.
+    const top = (await overview()).topUsers[0]?.costMicros ?? 0;
+    const heavy = await signUp(app, { role: 'PATIENT', name: 'Karim Heavy-User' });
+    await usage(heavy.userId, { provider: 'ANTHROPIC', model: 'claude-haiku-5-5', cost: top + 1_000_000 });
+    const o = await overview();
+    expect(o.topUsers[0]!.userRef).toBe(heavy.userId.slice(0, 8));
+    expect(o.topUsers.every((u) => u.userRef.length === 8)).toBe(true);
+    const body = JSON.stringify(o.topUsers);
+    expect(body).not.toContain(heavy.userId);
+    expect(body).not.toContain(heavy.email);
+    expect(body).not.toContain('Karim');
   });
 
   it('budget state follows the month spend, the limit and the straight-line projection', async () => {
