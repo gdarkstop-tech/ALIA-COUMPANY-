@@ -5,6 +5,8 @@ packages:
 onlyBuiltDependencies:
   - esbuild
 overrides:
-  # Security: Next.js < 16.4.1 has a critical unauthenticated RCE advisory. Also pins the copy that
-  # better-auth pulls in as an optional dependency.
-  next: 16.4.2
+  # Security: Next.js < 16.4.1 has a critical unauthenticated RCE advisory, and 16.0.0–16.4.4 have
+  # seven moderate advisories (cache leaks, HttpOnly cookie exposure, response injection — GHSA-mfr8,
+  # -vc7v, -7qx7, -f3mh, -pc58, -rhh4, -vvgp; fixed in 16.4.5). Also pins the copy that better-auth
+  # pulls in as an optional dependency.
+  next: 16.4.6
