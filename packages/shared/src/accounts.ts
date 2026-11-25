@@ -101,6 +101,9 @@ export type AdminUserDetail = AdminUserListItem & {
   appeals: Appeal[];
   /** Counts only — staff never get blanket access to medical records from this screen. */
   patientProfiles: number;
+  /** Future requested / confirmed bookings this person holds as a provider (count only): they must be
+   * handed over or cancelled (operations view) when the account is suspended or restricted. */
+  openBookingsAsProvider: number;
   isSelf: boolean;
 };
 

@@ -3,6 +3,7 @@
  * Request bodies are validated with these schemas on the server; response types are
  * inferred for the typed API client.
  */
+import type { BookingBlock, BookingOption } from './appointments';
 import type { ProductKnowledgeItem } from './products';
 import { z } from 'zod';
 import {
@@ -272,8 +273,10 @@ export type ProviderDetail = ProviderCard & {
   services: { serviceId: string; code: string; nameAr: string; nameEn: string; pricePiasters: number; durationMinutes: number }[];
   workingHours: { weekday: number; startMinute: number; endMinute: number }[];
   awayUntil: string | null;
-  bookingAvailable: false;
-  bookingUnavailableReason: 'BOOKING_NOT_YET_RELEASED';
+  /** Booking options computed from the provider's published offerings, schedule and the feature flags. */
+  bookingOptions: BookingOption[];
+  bookingAvailable: boolean;
+  bookingUnavailableReason: BookingBlock | null;
 };
 
 export type Credential = {

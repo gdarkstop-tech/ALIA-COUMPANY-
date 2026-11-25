@@ -149,6 +149,7 @@ export async function accountRoutes(app: FastifyInstance) {
       const actors = actorIds.length ? await tx.select({ id: userProfiles.userId, name: userProfiles.displayName }).from(userProfiles).where(inArray(userProfiles.userId, actorIds)) : [];
       const appeals = await tx.select().from(accountAppeals).where(eq(accountAppeals.userId, id)).orderBy(desc(accountAppeals.createdAt)).limit(50);
       const count = await tx.execute<{ n: number | null }>(sql`select app.user_patient_profile_count(${id}) as n`);
+      const open = await tx.execute<{ n: number | null }>(sql`select app.provider_open_bookings(${id}) as n`);
       // Looking up a person's account is itself audited.
       await audit(tx, { actorUserId: principal.userId, action: 'admin.user.viewed', entityType: 'user', entityId: id, requestId: request.id });
       return {
@@ -173,6 +174,7 @@ export async function accountRoutes(app: FastifyInstance) {
         ),
         appeals: appeals.map((a) => appealDto(a)),
         patientProfiles: count.rows[0]?.n ?? 0,
+        openBookingsAsProvider: open.rows[0]?.n ?? 0,
         isSelf: id === principal.userId,
       };
     });
@@ -188,7 +190,8 @@ export async function accountRoutes(app: FastifyInstance) {
       const r = await tx.execute<{ status: string }>(
         sql`select app.set_account_status(${id}, ${b.action}::app.status_action, ${b.reason}::app.status_reason, ${b.publicMessage ?? null}, ${b.staffNote}, ${b.suspendedUntil ?? null}::timestamptz, ${b.careContinuityNote ?? null}) as status`,
       );
-      return { status: r.rows[0]!.status };
+      const open = await tx.execute<{ n: number | null }>(sql`select app.provider_open_bookings(${id}) as n`);
+      return { status: r.rows[0]!.status, openBookingsAsProvider: open.rows[0]?.n ?? 0 };
     });
   });
 

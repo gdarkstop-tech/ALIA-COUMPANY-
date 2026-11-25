@@ -111,21 +111,17 @@ export class Notifier {
   async queue(tx: Tx, req: QueueRequest): Promise<void> {
     if (TEMPLATES[req.purpose].secret) throw new Error('Secret messages are never queued');
     const c = render(req.purpose, req.locale, req.vars);
+    const at = (req.sendAfter ?? new Date()).toISOString();
+    // Through a narrow database function: business actors may queue but never read the outbox.
     await tx.execute(sql`
-      insert into app.notifications (channel, purpose, locale, recipient, recipient_user_id, subject, body, send_after, next_attempt_at, expires_at, related_type, related_id, dedupe_key)
-      values (${req.channel}::app.notification_channel, ${req.purpose}, ${req.locale}, ${req.to}, ${req.userId ?? null},
-              ${req.channel === 'EMAIL' ? c.subject : null}, ${req.channel === 'EMAIL' ? c.text : c.sms},
-              ${(req.sendAfter ?? new Date()).toISOString()}::timestamptz, ${(req.sendAfter ?? new Date()).toISOString()}::timestamptz,
-              ${req.expiresAt?.toISOString() ?? null}::timestamptz, ${req.related?.type ?? null}, ${req.related?.id ?? null}::uuid, ${req.dedupeKey ?? null})
-      on conflict (dedupe_key) do nothing`);
+      select app.notification_enqueue(${req.channel}::app.notification_channel, ${req.purpose}, ${req.locale}, ${req.to}, ${req.userId ?? null},
+        ${req.channel === 'EMAIL' ? c.subject : null}, ${req.channel === 'EMAIL' ? c.text : c.sms}, ${at}::timestamptz,
+        ${req.expiresAt?.toISOString() ?? null}::timestamptz, ${req.related?.type ?? null}, ${req.related?.id ?? null}::uuid, ${req.dedupeKey ?? null})`);
   }
 
   /** Cancels messages not yet sent for an event that no longer happens (e.g. reminders of a cancelled appointment). */
   async cancelRelated(tx: Tx, type: string, id: string, purposes?: string[]): Promise<void> {
-    await tx.execute(sql`
-      update app.notifications set status = 'CANCELLED', updated_at = clock_timestamp()
-      where related_type = ${type} and related_id = ${id}::uuid and status = 'QUEUED'
-        ${purposes ? sql`and purpose = any(${`{${purposes.join(',')}}`}::text[])` : sql``}`);
+    await tx.execute(sql`select app.notifications_cancel_related(${type}, ${id}::uuid, ${purposes ? `{${purposes.join(',')}}` : null}::text[])`);
   }
 
   /** Deletes message history past its retention (30 days for sign-in metadata, 180 days otherwise). */

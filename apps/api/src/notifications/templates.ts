@@ -58,6 +58,11 @@ export const TEMPLATES = {
     ar: { subject: `تغيّر موعد الحجز — ${AR}`, body: `تغيّر الموعد ({type}) إلى يوم {date} الساعة {time} بتوقيت القاهرة. رقم الحجز: {reference}.`, sms: `${AR}: الموعد الجديد {date} {time} (رقم {reference}).` },
     en: { subject: `Appointment rescheduled — ${EN}`, body: `The appointment ({type}) is now on {date} at {time} Cairo time. Booking reference: {reference}.`, sms: `${EN}: appointment moved to {date} {time} (ref {reference}).` },
   },
+  'booking.expired': {
+    secret: false,
+    ar: { subject: `لم يصل رد على طلب الحجز — ${AR}`, body: `لم يرد {provider} على طلبك ليوم {date} الساعة {time}، فأُلغي الطلب تلقائياً. لم يُخصم أي مبلغ. يمكنك اختيار موعد أو مقدم خدمة آخر من التطبيق.\nرقم الحجز: {reference}.`, sms: `${AR}: لم يصل رد على طلب الحجز {reference}. اختر موعداً آخر من التطبيق.` },
+    en: { subject: `Booking request not answered — ${EN}`, body: `{provider} did not answer your request for {date} at {time}, so it was closed automatically. Nothing was charged. You can choose another time or provider in the app.\nBooking reference: {reference}.`, sms: `${EN}: booking request {reference} was not answered. Please choose another time in the app.` },
+  },
   'booking.reminder': {
     secret: false,
     ar: { subject: `تذكير بموعدك — ${AR}`, body: `تذكير: موعدك مع {provider} ({type}) يوم {date} الساعة {time} بتوقيت القاهرة.`, sms: `${AR}: تذكير بموعدك مع {provider} {date} {time}.` },

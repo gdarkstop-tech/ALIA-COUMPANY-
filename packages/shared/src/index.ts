@@ -18,3 +18,4 @@ export * from './clinical';
 export * from './products';
 export * from './wounds';
 export * from './finance';
+export * from './appointments';

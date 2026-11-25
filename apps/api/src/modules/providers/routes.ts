@@ -36,6 +36,7 @@ import { forbidden, notFound, unprocessable } from '../../lib/errors';
 import { inContext, requirePrincipal, requireRole, type Principal } from '../../lib/principal';
 import { parse } from '../../lib/validate';
 import { serviceToDto } from '../services/routes';
+import { bookingOptions } from '../appointments/routes';
 
 const ACCEPTING: AvailabilityStatus[] = ['ACCEPTING_NEW_PATIENTS', 'LIMITED_AVAILABILITY', 'AVAILABLE_NOW', 'AVAILABLE_TODAY', 'SCHEDULED_ONLY'];
 
@@ -260,7 +261,7 @@ export async function providerRoutes(app: FastifyInstance) {
         .where(eq(publicProviderCredentials.providerUserId, userId))
         .orderBy(asc(publicProviderCredentials.kind));
       const services = await tx
-        .select({ s: nursingServices, price: providerServices.pricePiasters })
+        .select({ s: nursingServices })
         .from(providerServices)
         .innerJoin(nursingServices, eq(nursingServices.id, providerServices.serviceId))
         .where(eq(providerServices.providerUserId, userId))
@@ -270,6 +271,7 @@ export async function providerRoutes(app: FastifyInstance) {
         .from(providerWorkingHours)
         .where(eq(providerWorkingHours.providerUserId, userId))
         .orderBy(asc(providerWorkingHours.weekday), asc(providerWorkingHours.startMinute));
+      const options = await bookingOptions(tx, userId);
       return {
         ...toCard(row.p, row.verified),
         subspecialty: row.p.subspecialty,
@@ -278,18 +280,20 @@ export async function providerRoutes(app: FastifyInstance) {
         previousExperience: row.p.previousExperience,
         skills: row.p.skills,
         verifiedCredentials: creds.map((c) => ({ kind: c.kind, issuer: c.issuer, verifiedAt: c.verifiedAt })),
-        services: services.map(({ s, price }) => ({
+        services: services.map(({ s }) => ({
           serviceId: s.id,
           code: s.code,
           nameAr: s.nameAr,
           nameEn: s.nameEn,
-          pricePiasters: price ?? s.basePricePiasters,
+          // Patients pay the catalogue's approved price; a nurse's own figure is not used for booking.
+          pricePiasters: s.basePricePiasters,
           durationMinutes: s.durationMinutes,
         })),
         workingHours: hours,
         awayUntil: row.p.awayUntil,
-        bookingAvailable: false,
-        bookingUnavailableReason: 'BOOKING_NOT_YET_RELEASED',
+        bookingOptions: options,
+        bookingAvailable: options.some((o) => o.bookable),
+        bookingUnavailableReason: options.some((o) => o.bookable) ? null : (options[0]?.blockedReason ?? 'NOT_OFFERED'),
       };
     });
   });

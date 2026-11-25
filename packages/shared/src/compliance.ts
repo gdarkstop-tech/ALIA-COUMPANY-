@@ -53,6 +53,7 @@ export const FEATURE_KEYS = [
   'ai.assistant',
   'ai.wound_assessment',
   'clinical.diagnostic_suggestions',
+  'care.clinic_booking',
   'care.home_visit_booking',
   'care.video_consultation',
   'commerce.checkout',

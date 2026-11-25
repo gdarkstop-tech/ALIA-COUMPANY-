@@ -44,6 +44,7 @@ import { startWoundMaintenance, woundRoutes } from './modules/wounds/routes';
 import { woundStaffRoutes } from './modules/wounds/staff';
 import { financeRoutes } from './modules/finance/routes';
 import { notificationRoutes, startNotificationWorker } from './notifications/routes';
+import { appointmentRoutes, startAppointmentWorker } from './modules/appointments/routes';
 import { devRoutes } from './modules/dev/routes';
 import { meRoutes } from './modules/me/routes';
 import { patientRoutes } from './modules/patients/routes';
@@ -259,8 +260,10 @@ export async function buildServer(
   await app.register(woundStaffRoutes, { prefix: '/v1/admin/wounds' });
   await app.register(financeRoutes, { prefix: '/v1/admin/finance' });
   await app.register(notificationRoutes, { prefix: '/v1' });
+  await app.register(appointmentRoutes, { prefix: '/v1' });
   if (env.NODE_ENV !== 'test') startWoundMaintenance(app);
   if (env.NODE_ENV !== 'test') startNotificationWorker(app);
+  if (env.NODE_ENV !== 'test') startAppointmentWorker(app);
   await app.register(adminRoutes, { prefix: '/v1/admin' });
   await app.register(adminCatalogRoutes, { prefix: '/v1/admin/catalog' });
   if (env.DEV_TOOLS_ENABLED && env.NODE_ENV !== 'production') await app.register(devRoutes, { prefix: '/dev' });
