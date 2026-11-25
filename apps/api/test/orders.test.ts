@@ -415,6 +415,12 @@ describe('commerce operations', () => {
     expect(failed.json.refundedPiasters).toBe(5000);
     expect((await owner.query("select count(*)::int as n from app.ops_incidents where kind = 'REFUND_FAILED' and domain = 'COMMERCE'")).rows[0].n).toBeGreaterThanOrEqual(1);
     expect((await owner.query("select count(*)::int as n from app.audit_log where action like 'payments.refund.%' and entity_id = $1", [paidOrder.id])).rows[0].n).toBeGreaterThanOrEqual(3);
+    // Refund queue: payments.read (commerce staff see it; customers do not).
+    expect((await customer.req({ method: 'GET', url: '/v1/admin/ops/refunds' })).status).toBe(403);
+    const open = await commerce.req({ method: 'GET', url: '/v1/admin/ops/refunds?status=OPEN' });
+    expect(open.status).toBe(200);
+    expect(open.json.some((f: { orderId: string; status: string }) => f.orderId === paidOrder.id && f.status === 'FAILED')).toBe(true);
+    expect(open.json.every((f: { status: string }) => f.status !== 'SUCCEEDED')).toBe(true);
   });
 
   it('payments view: payments.read only; customers cannot reconcile', async () => {

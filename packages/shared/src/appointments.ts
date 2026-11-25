@@ -193,6 +193,28 @@ export type OpsAppointment = {
   cancelledBy: string | null;
   createdAt: string;
 };
+/** Operations view of a provider's bookable setup (no clinical data, no patient details). */
+export type OpsSchedule = {
+  userId: string;
+  providerType: 'DOCTOR' | 'NURSE';
+  nameAr: string;
+  nameEn: string;
+  governorate: string | null;
+  city: string | null;
+  availabilityStatus: string;
+  temporarilyUnavailable: boolean;
+  maxDailyAppointments: number | null;
+  /** Why the provider cannot be booked right now, or null when bookable. */
+  bookingBlock: BookingBlock | null;
+  weeklyMinutes: number;
+  workingDays: number;
+  offerings: { kind: AppointmentKind; durationMinutes: number; pricePiasters: number; active: boolean }[];
+  nursingServices: number;
+  coverageAreas: number;
+  timeOffNext14Days: number;
+  requestedOpen: number;
+  bookedNext7Days: number;
+};
 export const INCIDENT_KINDS = ['VISIT_FAILED', 'PROVIDER_NO_SHOW', 'PATIENT_REPORTED_ISSUE', 'PAYMENT_MISMATCH', 'PAYMENT_WEBHOOK_REJECTED', 'REFUND_FAILED', 'ORDER_ISSUE', 'NOTIFICATION_FAILURES', 'OTHER'] as const;
 export type IncidentKind = (typeof INCIDENT_KINDS)[number];
 export type OpsIncident = {

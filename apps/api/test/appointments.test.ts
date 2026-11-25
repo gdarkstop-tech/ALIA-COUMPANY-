@@ -487,6 +487,24 @@ describe('operations oversight', () => {
     expect((await patient.req({ method: 'GET', url: '/v1/admin/ops/incidents' })).status).toBe(403);
   });
 
+  it('provider schedules: setup and load per provider, for care operations only, without patient data', async () => {
+    expect((await commerce.req({ method: 'GET', url: '/v1/admin/ops/schedules' })).status).toBe(403);
+    expect((await patient.req({ method: 'GET', url: '/v1/admin/ops/schedules' })).status).toBe(403);
+    const r = await admin.req({ method: 'GET', url: '/v1/admin/ops/schedules' });
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    const d = r.json.find((x: { userId: string }) => x.userId === doctor.userId);
+    expect(d).toMatchObject({ providerType: 'DOCTOR', bookingBlock: null, workingDays: 7, weeklyMinutes: 7 * 240 });
+    expect(d.offerings.some((o: { kind: string; active: boolean }) => o.kind === 'DOCTOR_CLINIC' && o.active)).toBe(true);
+    const n = r.json.find((x: { userId: string }) => x.userId === nurse.userId);
+    expect(n.providerType).toBe('NURSE');
+    expect(n.nursingServices).toBeGreaterThan(0);
+    const booked = (await owner.query("select count(*)::int as n from app.appointments where provider_user_id = $1 and status in ('REQUESTED','CONFIRMED','IN_PROGRESS') and starts_at >= now() and starts_at < now() + interval '7 days'", [doctor.userId])).rows[0].n;
+    expect(d.bookedNext7Days).toBe(booked);
+    expect(JSON.stringify(r.json)).not.toMatch(/knee|Gate code|patientId|patientDisplayName|visitAddress|contactPhone/i);
+    const nurses = await admin.req({ method: 'GET', url: '/v1/admin/ops/schedules?type=NURSE' });
+    expect(nurses.json.every((x: { providerType: string }) => x.providerType === 'NURSE')).toBe(true);
+  });
+
   it('home-care launch areas are managed by operations (audited)', async () => {
     expect((await commerce.req({ method: 'PUT', url: '/v1/admin/ops/home-care-regions/GIZA', body: { active: true } })).status).toBe(403);
     expect((await admin.req({ method: 'PUT', url: '/v1/admin/ops/home-care-regions/GIZA', body: { active: true, note: 'Pilot' } })).status).toBe(200);

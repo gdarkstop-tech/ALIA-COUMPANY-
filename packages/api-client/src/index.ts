@@ -1,4 +1,6 @@
 import type {
+  OpsRefund,
+  OpsSchedule,
   DeliveryZone,
   OpsOrder,
   OpsPayment,
@@ -310,6 +312,7 @@ export function createApiClient(options: ApiClientOptions) {
       incidents: (q: { status?: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'UNRESOLVED'; domain?: 'CARE' | 'COMMERCE' | 'PLATFORM' } = {}) => get<OpsIncident[]>('/v1/admin/ops/incidents', q),
       acknowledgeIncident: (id: string) => post<{ ok: true }>(`/v1/admin/ops/incidents/${id}/acknowledge`),
       resolveIncident: (id: string, resolution: string) => post<{ ok: true }>(`/v1/admin/ops/incidents/${id}/resolve`, { resolution }),
+      schedules: (q: { type?: 'DOCTOR' | 'NURSE'; blockedOnly?: boolean } = {}) => get<OpsSchedule[]>('/v1/admin/ops/schedules', q),
       homeCareRegions: () => get<{ governorate: string; active: boolean; note: string | null; updated_at: string }[]>('/v1/admin/ops/home-care-regions'),
       setHomeCareRegion: (governorate: string, active: boolean, note?: string | null) => put<{ ok: true }>(`/v1/admin/ops/home-care-regions/${governorate}`, { active, note }),
       notifications: (q: { status?: string; limit?: number } = {}) =>
@@ -326,6 +329,7 @@ export function createApiClient(options: ApiClientOptions) {
       payments: (q: { status?: string; limit?: number } = {}) =>
         get<{ gateway: { status: string; mode: string | null; reason: string | null; inquiry: string }; last30Days: { status: string; n: number; amount: number }[]; payments: OpsPayment[] }>('/v1/admin/ops/payments', q),
       reconcilePayments: () => post<ReconcileResult>('/v1/admin/ops/payments/reconcile'),
+      refunds: (q: { status?: 'REQUESTED' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'OPEN' } = {}) => get<OpsRefund[]>('/v1/admin/ops/refunds', q),
     },
     provider: {
       me: () => get<MyProviderProfile>('/v1/provider/me'),

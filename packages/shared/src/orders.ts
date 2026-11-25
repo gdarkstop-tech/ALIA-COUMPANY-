@@ -105,3 +105,16 @@ export type OpsPayment = {
   createdAt: string;
 };
 export type ReconcileResult = { checked: number; applied: number; unchanged: number; mismatches: number; errors: number; inquiry: 'AVAILABLE' | 'NOT_CONFIGURED' };
+export type OpsRefund = {
+  id: string;
+  orderId: string;
+  orderReference: string;
+  amountPiasters: number;
+  reason: string;
+  restock: boolean;
+  status: OrderRefund['status'];
+  failureCode: string | null;
+  providerReference: string | null;
+  createdAt: string;
+  updatedAt: string;
+};

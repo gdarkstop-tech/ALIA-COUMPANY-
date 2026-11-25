@@ -9,6 +9,7 @@ import {
   type DeliveryZone,
   type OpsOrder,
   type OpsPayment,
+  type OpsRefund,
   type Order,
   type OrderStatus,
   type PaymentStatus,
@@ -491,6 +492,30 @@ export async function orderRoutes(app: FastifyInstance) {
           }),
         ),
       };
+    });
+  });
+
+  app.get('/admin/ops/refunds', async (request): Promise<OpsRefund[]> => {
+    const principal = await requirePermission(request, 'payments.read');
+    const q = parse(z.object({ status: z.enum(['REQUESTED', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'OPEN']).optional() }), request.query);
+    return inContext(request, principal, async (tx) => {
+      const where = q.status === 'OPEN' ? sql`where f.status <> 'SUCCEEDED'` : q.status ? sql`where f.status = ${q.status}` : sql``;
+      const rows = await tx.execute(sql`select f.id, f.order_id, o.reference, f.amount_piasters, f.reason, f.restock, f.status, f.failure_code, f.provider_reference,
+          f.created_at::text as c_at, f.updated_at::text as u_at
+        from app.refunds f join app.orders o on o.id = f.order_id ${where} order by f.created_at desc limit 200`);
+      return (rows.rows as Record<string, unknown>[]).map((r) => ({
+        id: r.id as string,
+        orderId: r.order_id as string,
+        orderReference: r.reference as string,
+        amountPiasters: r.amount_piasters as number,
+        reason: r.reason as string,
+        restock: r.restock as boolean,
+        status: r.status as OpsRefund['status'],
+        failureCode: (r.failure_code as string | null) ?? null,
+        providerReference: (r.provider_reference as string | null) ?? null,
+        createdAt: iso(r.c_at as string)!,
+        updatedAt: iso(r.u_at as string)!,
+      }));
     });
   });
 

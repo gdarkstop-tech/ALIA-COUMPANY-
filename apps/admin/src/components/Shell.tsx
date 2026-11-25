@@ -9,11 +9,13 @@ import { authClient } from '@/lib/auth-client';
 import { DmwWordmark } from './brand';
 import { useI18n } from './Providers';
 
-type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav' | 'aiAdmin.nav' | 'woundAdmin.nav' | 'finance.nav';
+type NavKey = 'admin.overview' | 'admin.verification' | 'admin.users' | 'admin.audit' | 'admin.features' | 'admin.security' | 'catalog.nav' | 'aiAdmin.nav' | 'woundAdmin.nav' | 'finance.nav' | 'opsAdmin.nav';
 // `permissions`: shown when the account holds ANY of them (the API and the database enforce each action).
 const NAV: { href: string; key: NavKey; icon: string; permissions?: Permission[] }[] = [
   { href: '/', key: 'admin.overview', icon: '◎', permissions: ['provider.verification.review'] },
   { href: '/verification', key: 'admin.verification', icon: '✓', permissions: ['provider.verification.review'] },
+  // Operations Center: care sections need ops.read; commerce sections need orders.manage / payments.read.
+  { href: '/ops', key: 'opsAdmin.nav', icon: '◷', permissions: ['ops.read', 'orders.manage', 'payments.read'] },
   { href: '/catalog', key: 'catalog.nav', icon: '▦', permissions: ['catalog.tetrasol.manage', 'catalog.content.approve'] },
   { href: '/users', key: 'admin.users', icon: '◍', permissions: ['users.read'] },
   { href: '/audit', key: 'admin.audit', icon: '≡', permissions: ['audit.read'] },

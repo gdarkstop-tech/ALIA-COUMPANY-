@@ -21,6 +21,7 @@ import {
   type DoctorOffering,
   type OpsAppointment,
   type OpsIncident,
+  type OpsSchedule,
   type TimeOff,
 } from '@ghayarly/shared';
 import { sql } from 'drizzle-orm';
@@ -575,6 +576,57 @@ export async function appointmentRoutes(app: FastifyInstance) {
         return { ok: true };
       }),
     );
+  });
+
+  /** Bookable setup of every approved provider: hours, offerings, coverage, time off, load. Read-only. */
+  app.get('/admin/ops/schedules', async (request): Promise<OpsSchedule[]> => {
+    const principal = await requirePermission(request, 'ops.read');
+    const q = parse(z.object({ type: z.enum(['DOCTOR', 'NURSE']).optional(), blockedOnly: z.coerce.boolean().default(false) }), request.query);
+    return inContext(request, principal, async (tx) => {
+      const rows = await tx.execute<{
+        user_id: string; provider_type: 'DOCTOR' | 'NURSE'; name_ar: string; name_en: string; governorate: string | null; city: string | null; availability_status: string;
+        temporarily_unavailable: boolean; max_daily: number | null; block: BookingBlock | null; weekly_minutes: number; working_days: number;
+        offerings: OpsSchedule['offerings'] | null; nursing_services: number; coverage_areas: number; time_off: number; requested_open: number; booked_7d: number;
+      }>(sql`
+        select p.user_id, p.provider_type::text as provider_type, p.display_name_ar as name_ar, p.display_name_en as name_en, p.governorate::text, p.city,
+               p.availability_status::text, p.temporarily_unavailable, p.max_daily_appointments as max_daily, app.provider_booking_block(p.user_id) as block,
+               coalesce((select sum(h.end_minute - h.start_minute) from app.provider_working_hours h where h.provider_user_id = p.user_id), 0)::int as weekly_minutes,
+               (select count(distinct h.weekday) from app.provider_working_hours h where h.provider_user_id = p.user_id)::int as working_days,
+               (select jsonb_agg(jsonb_build_object('kind', o.kind, 'durationMinutes', o.duration_minutes, 'pricePiasters', o.price_piasters, 'active', o.active) order by o.kind)
+                  from app.doctor_offerings o where o.provider_user_id = p.user_id) as offerings,
+               (select count(*) from app.provider_services s where s.provider_user_id = p.user_id)::int as nursing_services,
+               (select count(*) from app.provider_coverage c where c.provider_user_id = p.user_id)::int as coverage_areas,
+               (select count(*) from app.provider_time_off t where t.provider_user_id = p.user_id and t.period && tstzrange(now(), now() + interval '14 days'))::int as time_off,
+               (select count(*) from app.appointments a where a.provider_user_id = p.user_id and a.status = 'REQUESTED')::int as requested_open,
+               (select count(*) from app.appointments a where a.provider_user_id = p.user_id and a.status in ('REQUESTED', 'CONFIRMED', 'IN_PROGRESS')
+                  and a.starts_at >= now() and a.starts_at < now() + interval '7 days')::int as booked_7d
+        from app.provider_profiles p
+        where p.verification_status = 'APPROVED' and p.provider_type in ('DOCTOR', 'NURSE')
+          ${q.type ? sql`and p.provider_type = ${q.type}::app.provider_type` : sql``}
+        order by p.provider_type, p.display_name_en limit 500`);
+      return rows.rows
+        .map((r): OpsSchedule => ({
+          userId: r.user_id,
+          providerType: r.provider_type,
+          nameAr: r.name_ar,
+          nameEn: r.name_en,
+          governorate: r.governorate,
+          city: r.city,
+          availabilityStatus: r.availability_status,
+          temporarilyUnavailable: r.temporarily_unavailable,
+          maxDailyAppointments: r.max_daily,
+          bookingBlock: r.block,
+          weeklyMinutes: r.weekly_minutes,
+          workingDays: r.working_days,
+          offerings: r.offerings ?? [],
+          nursingServices: r.nursing_services,
+          coverageAreas: r.coverage_areas,
+          timeOffNext14Days: r.time_off,
+          requestedOpen: r.requested_open,
+          bookedNext7Days: r.booked_7d,
+        }))
+        .filter((r) => !q.blockedOnly || r.bookingBlock !== null);
+    });
   });
 
   // ------------------------------------------------------------ incidents (care: ops.*; commerce: also orders.manage)
