@@ -92,7 +92,7 @@ export default function OpsPayments() {
       <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Filter label={t('opsAdmin.filterStatus')} value={status} onChange={setStatus} options={PAYMENT_STATUSES.map((s) => ({ value: s, label: t(`orders.pay_${s}`) }))} testId="ops-payments-status" />
       </div>
-      <div className="card tight" style={{ overflowX: 'auto' }} data-testid="ops-payments">
+      <div className="card tight" style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label={t('opsAdmin.payments')} data-testid="ops-payments">
         {q.isPending ? <div className="skeleton" style={{ height: 160 }} /> : null}
         {q.data && !rows.length ? <Empty /> : null}
         {rows.length ? (

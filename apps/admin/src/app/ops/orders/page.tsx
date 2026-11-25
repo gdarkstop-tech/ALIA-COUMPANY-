@@ -32,7 +32,7 @@ export default function OpsOrders() {
       </div>
       <ErrorNotice error={q.error} />
       <div className="grid" style={{ gridTemplateColumns: selected ? 'minmax(0, 1.1fr) minmax(0, 1fr)' : '1fr', gap: 16, alignItems: 'start' }}>
-        <div className="card tight" style={{ overflowX: 'auto' }} data-testid="ops-orders">
+        <div className="card tight" style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label={t('opsAdmin.tab_orders')} data-testid="ops-orders">
           {q.isPending ? <div className="skeleton" style={{ height: 160 }} /> : null}
           {q.data && !rows.length ? <Empty /> : null}
           {rows.length ? (

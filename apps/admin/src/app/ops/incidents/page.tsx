@@ -51,7 +51,7 @@ export default function OpsIncidents() {
         <Filter label={t('opsAdmin.filterDomain')} value={domain} onChange={setDomain} options={domains.map((d) => ({ value: d, label: t(`opsAdmin.domain_${d}`) }))} testId="ops-incidents-domain" />
       </div>
       <ErrorNotice error={q.error ?? ack.error} />
-      <div className="card tight" style={{ overflowX: 'auto' }} data-testid="ops-incidents">
+      <div className="card tight" style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label={t('opsAdmin.tab_incidents')} data-testid="ops-incidents">
         {q.isPending ? <div className="skeleton" style={{ height: 160 }} /> : null}
         {q.data && !rows.length ? <Empty /> : null}
         {rows.length ? (

@@ -42,7 +42,7 @@ export default function OpsNotifications() {
         <Filter label={t('opsAdmin.filterStatus')} value={status} onChange={setStatus} options={STATUSES.map((s) => ({ value: s, label: t(`opsAdmin.ns_${s}`) }))} testId="ops-notifications-status" />
       </div>
       <ErrorNotice error={q.error ?? retry.error} />
-      <div className="card tight" style={{ overflowX: 'auto' }} data-testid="ops-notifications">
+      <div className="card tight" style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label={t('opsAdmin.tab_notifications')} data-testid="ops-notifications">
         {q.isPending ? <div className="skeleton" style={{ height: 160 }} /> : null}
         {q.data && !rows.length ? <Empty /> : null}
         {rows.length ? (

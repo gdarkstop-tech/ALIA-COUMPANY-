@@ -33,7 +33,7 @@ export default function OpsSchedules() {
         </label>
       </div>
       <ErrorNotice error={q.error} />
-      <div className="card tight" style={{ overflowX: 'auto' }} data-testid="ops-schedules">
+      <div className="card tight" style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label={t('opsAdmin.tab_schedules')} data-testid="ops-schedules">
         {q.isPending ? <div className="skeleton" style={{ height: 160 }} /> : null}
         {q.data && !rows.length ? <Empty /> : null}
         {rows.length ? (

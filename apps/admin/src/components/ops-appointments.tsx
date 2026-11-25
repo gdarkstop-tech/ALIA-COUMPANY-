@@ -42,7 +42,7 @@ export function AppointmentsTable({ fixedKind, testId }: { fixedKind?: Appointme
         {fixedKind ? null : <Filter label={t('opsAdmin.filterKind')} value={kind} onChange={setKind} options={APPOINTMENT_KINDS.map((k) => ({ value: k, label: t(`booking.kind_${k}`) }))} testId={`${testId}-kind`} />}
       </div>
       <ErrorNotice error={q.error} />
-      <div className="card tight" style={{ overflowX: 'auto' }}>
+      <div className="card tight" style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label={fixedKind ? t('opsAdmin.tab_homeVisits') : t('opsAdmin.tab_appointments')}>
         {q.isPending ? <div className="skeleton" style={{ height: 160 }} /> : null}
         {q.data && !rows.length ? <Empty /> : null}
         {rows.length ? (

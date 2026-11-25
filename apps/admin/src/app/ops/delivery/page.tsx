@@ -38,7 +38,7 @@ export default function OpsDelivery() {
     <OpsPage href="/ops/delivery">
       <div className="notice info">{t('opsAdmin.deliveryHint')}</div>
       <ErrorNotice error={q.error ?? save.error} />
-      <div className="card tight" style={{ overflowX: 'auto' }} data-testid="ops-zones">
+      <div className="card tight" style={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label={t('opsAdmin.tab_delivery')} data-testid="ops-zones">
         {q.isPending ? <div className="skeleton" style={{ height: 160 }} /> : null}
         <table className="table">
           <thead>
