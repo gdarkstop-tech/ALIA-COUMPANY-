@@ -110,6 +110,10 @@ beforeAll(async () => {
   await grantRole(commerce.userId, 'COMMERCE_MANAGER');
 });
 afterAll(async () => {
+  // Leave the shared test database as found: regulated features off, no launch areas.
+  await flag('care.clinic_booking', false);
+  await flag('care.home_visit_booking', false);
+  await owner.query('update app.home_care_regions set active = false');
   await app.close();
   await owner.end();
 });
