@@ -103,5 +103,8 @@ test('Flow A — patient journey with family management and discovery', async ({
   await expect(byId(page, 'provider-name')).not.toBeEmpty();
   await shot(page, 'A10-doctor-profile');
   await byId(page, 'book-now').click();
-  await expect(byId(page, 'booking-sheet')).toContainText('Nothing has been booked or charged');
+  // Booking is switched off in development data and the demo doctor has no consultation types, so
+  // the sheet states the real reason (ADR 0021) and offers no slots — nothing can be booked.
+  await expect(byId(page, 'booking-unavailable-reason')).toContainText(/Booking is not open yet|No bookable services yet|has not published hours/);
+  await expect(page.getByTestId('booking-submit')).toHaveCount(0);
 });
