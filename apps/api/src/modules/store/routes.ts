@@ -364,9 +364,9 @@ export async function storeRoutes(app: FastifyInstance) {
    */
   app.post('/store/checkout/preview', async (request): Promise<CheckoutPreview> => {
     const principal = await requirePrincipal(request);
-    const { discountCode } = parse(checkoutPreviewBody, request.body ?? {});
+    const { discountCode, governorate } = parse(checkoutPreviewBody, request.body ?? {});
     const code = discountCode?.trim().toUpperCase() || null;
-    const { cart, discount } = await inContext(request, principal, async (tx) => {
+    const { cart, discount, deliveryFee, checkoutOn } = await inContext(request, principal, async (tx) => {
       const meta = await loadCartMeta(tx, principal.userId);
       const cart = summarise(meta);
       const candidates = (await tx.execute<DiscountRow>(sql`select id, name_ar, name_en, code, kind::text, value, scope::text, target_id, min_subtotal_piasters from app.applicable_discounts(${code})`)).rows;
@@ -376,7 +376,14 @@ export async function storeRoutes(app: FastifyInstance) {
         if (amount > 0 && (!best || amount > best.amount)) best = { d, amount };
       }
       if (cart.lines.length) await recordEvent(tx, 'CHECKOUT_PREVIEW', { amount: cart.subtotalPiasters - (best?.amount ?? 0) });
-      return { cart, discount: best };
+      // Delivery fee from the configured zone (same rule as order placement); null = not delivered there.
+      const zone = governorate
+        ? (await tx.execute<{ active: boolean; fee: number | null; free_over: number | null }>(sql`select active, fee_piasters as fee, free_over_piasters as free_over from app.delivery_zones where governorate = ${governorate}::app.governorate`)).rows[0]
+        : undefined;
+      const afterDiscount = cart.subtotalPiasters - (best?.amount ?? 0);
+      const deliveryFee = zone?.active && zone.fee !== null ? (zone.free_over !== null && afterDiscount >= zone.free_over ? 0 : zone.fee) : null;
+      const checkoutOn = (await tx.execute<{ on: boolean }>(sql`select app.flag_on('commerce.checkout') as on`)).rows[0]!.on;
+      return { cart, discount: best, deliveryFee, checkoutOn };
     });
     const configured = payments.status === 'CONFIGURED';
     const notices = ['PAYMENT_NOT_CONFIGURED_SIMULATION_ONLY'];
@@ -387,10 +394,11 @@ export async function storeRoutes(app: FastifyInstance) {
       subtotalPiasters: cart.subtotalPiasters,
       discount: discount ? { nameAr: discount.d.name_ar, nameEn: discount.d.name_en, amountPiasters: discount.amount, code: discount.d.code } : null,
       discountCodeRejected: Boolean(code) && discount?.d.code !== code,
-      deliveryFeePiasters: null,
-      totalPiasters: cart.subtotalPiasters - discountTotal,
+      deliveryFeePiasters: deliveryFee,
+      totalPiasters: cart.subtotalPiasters - discountTotal + (deliveryFee ?? 0),
       currency: 'EGP',
-      payment: { provider: payments.name, status: payments.status, simulated: !configured, canPlaceRealOrder: false },
+      // A real order needs the checkout switched on, a configured gateway and a delivery zone.
+      payment: { provider: payments.name, status: payments.status, simulated: !configured, canPlaceRealOrder: configured && checkoutOn && deliveryFee !== null && cart.lines.length > 0 },
       notices: configured ? notices.filter((n) => n !== 'PAYMENT_NOT_CONFIGURED_SIMULATION_ONLY') : notices,
     };
   });

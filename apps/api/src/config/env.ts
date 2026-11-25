@@ -62,9 +62,20 @@ const schema = z.object({
   DEMO_MODE: bool(false),
   DEV_TOOLS_ENABLED: bool(false),
 
-  PAYMOB_API_KEY: z.string().optional(),
-  PAYMOB_HMAC_SECRET: z.string().optional(),
-  PAYMOB_INTEGRATION_ID: z.string().optional(),
+  /**
+   * Paymob (ADR 0022) — physical TetraSol orders only, never digital subscriptions. Unified Checkout
+   * via the Intention API: secret key (server only), public key (checkout URL), HMAC secret
+   * (callbacks), integration IDs (card / wallet). PAYMOB_API_KEY enables transaction inquiry for
+   * verification and reconciliation. Live keys are refused unless PAYMOB_LIVE_APPROVED=true.
+   */
+  PAYMOB_SECRET_KEY: z.string().regex(/^(egy_)?sk_(test|live)_[A-Za-z0-9]+$/, 'PAYMOB_SECRET_KEY looks like sk_test_… / sk_live_…').optional(),
+  PAYMOB_PUBLIC_KEY: z.string().regex(/^(egy_)?pk_(test|live)_[A-Za-z0-9]+$/, 'PAYMOB_PUBLIC_KEY looks like pk_test_… / pk_live_…').optional(),
+  PAYMOB_HMAC_SECRET: z.string().min(16).optional(),
+  PAYMOB_INTEGRATION_IDS: z.string().regex(/^\d{1,12}(,\d{1,12})*$/, 'PAYMOB_INTEGRATION_IDS is a comma-separated list of integration IDs').optional(),
+  PAYMOB_API_KEY: z.string().min(16).optional(),
+  PAYMOB_BASE_URL: z.string().url().default('https://accept.paymob.com'),
+  PAYMOB_CHECKOUT_URL: z.string().url().default('https://eg.checkout.paymob.com'),
+  PAYMOB_LIVE_APPROVED: bool(false),
   /**
    * E-mail and SMS delivery (ADR 0020). A provider is used only when its credentials AND sender
    * identity are set. EMAIL_SMTP_URL: smtps://user:pass@host:465 (or smtp:// with STARTTLS, which is
@@ -170,6 +181,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (/change-me|dev-only/i.test(env.BETTER_AUTH_SECRET)) problems.push('BETTER_AUTH_SECRET looks like a development placeholder');
     if (!env.MEDIA_LINK_SECRET) problems.push('MEDIA_LINK_SECRET is required in production (signs medical image links)');
     if (env.S3_ENDPOINT && !env.S3_ENDPOINT.startsWith('https://')) problems.push('S3_ENDPOINT must use https in production (medical images in transit)');
+    if (env.PAYMOB_SECRET_KEY && !env.PAYMOB_BASE_URL.startsWith('https://')) problems.push('PAYMOB_BASE_URL must use https in production');
     if (env.SMS_PROVIDERS.includes('vonage') && env.VONAGE_API_KEY && !env.VONAGE_WEBHOOK_TOKEN) problems.push('VONAGE_WEBHOOK_TOKEN is required in production (delivery receipts are otherwise unauthenticated)');
     if (env.VONAGE_WEBHOOK_TOKEN && `${env.API_PUBLIC_URL.replace(/\/$/, '')}/v1/webhooks/vonage/dlr/${env.VONAGE_WEBHOOK_TOKEN}`.length > 100) problems.push('The Vonage receipt URL must be ≤ 100 characters (shorten VONAGE_WEBHOOK_TOKEN)');
     for (const [name, url] of [['AI_QWEN_BASE_URL', env.AI_QWEN_BASE_URL], ['AI_GROK_BASE_URL', env.AI_GROK_BASE_URL], ['AI_KIMI_BASE_URL', env.AI_KIMI_BASE_URL], ['AI_MEDGEMMA_BASE_URL', env.AI_MEDGEMMA_BASE_URL]] as const) {

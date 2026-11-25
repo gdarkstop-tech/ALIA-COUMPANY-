@@ -1,4 +1,11 @@
 import type {
+  DeliveryZone,
+  OpsOrder,
+  OpsPayment,
+  Order,
+  PlaceOrderBody,
+  ReconcileResult,
+  StartPaymentResponse,
   Appointment,
   AvailabilityQuery,
   AvailabilityResponse,
@@ -308,6 +315,17 @@ export function createApiClient(options: ApiClientOptions) {
       notifications: (q: { status?: string; limit?: number } = {}) =>
         get<{ delivery: { email: string; sms: string }; last7Days: Record<string, number>; messages: { id: string; channel: string; purpose: string; locale: string; recipient: string; status: string; attempts: number; last_error: string | null; provider: string | null; related_type: string | null; createdAt: string; sentAt: string | null; deliveredAt: string | null }[] }>('/v1/admin/ops/notifications', q),
       retryNotification: (id: string) => post<{ ok: true }>(`/v1/admin/ops/notifications/${id}/retry`),
+      orders: (q: { status?: string; limit?: number } = {}) => get<{ last30Days: Record<string, number>; orders: OpsOrder[] }>('/v1/admin/ops/orders', q),
+      order: (id: string) => get<Order>(`/v1/admin/ops/orders/${id}`),
+      fulfilOrder: (id: string, action: 'PROCESS' | 'SHIP' | 'DELIVER', trackingReference?: string) => post<Order>(`/v1/admin/ops/orders/${id}/fulfil`, { action, trackingReference }),
+      cancelOrder: (id: string, reason: string) => post<Order>(`/v1/admin/ops/orders/${id}/cancel`, { reason }),
+      refundOrder: (id: string, body: { amountPiasters: number; reason: string; restock?: boolean }) => post<Order>(`/v1/admin/ops/orders/${id}/refunds`, body),
+      deliveryZones: () => get<DeliveryZone[]>('/v1/admin/ops/delivery-zones'),
+      setDeliveryZone: (governorate: string, body: { active: boolean; feePiasters: number | null; freeOverPiasters?: number | null; etaMinDays?: number | null; etaMaxDays?: number | null }) =>
+        put<{ ok: true }>(`/v1/admin/ops/delivery-zones/${governorate}`, body),
+      payments: (q: { status?: string; limit?: number } = {}) =>
+        get<{ gateway: { status: string; mode: string | null; reason: string | null; inquiry: string }; last30Days: { status: string; n: number; amount: number }[]; payments: OpsPayment[] }>('/v1/admin/ops/payments', q),
+      reconcilePayments: () => post<ReconcileResult>('/v1/admin/ops/payments/reconcile'),
     },
     provider: {
       me: () => get<MyProviderProfile>('/v1/provider/me'),
@@ -329,7 +347,12 @@ export function createApiClient(options: ApiClientOptions) {
       addToCart: (body: AddCartItemBody) => post<CartResponse>('/v1/store/cart/items', body),
       updateCartItem: (id: string, quantity: number) => patch<CartResponse>(`/v1/store/cart/items/${id}`, { quantity }),
       removeCartItem: (id: string) => del<CartResponse>(`/v1/store/cart/items/${id}`),
-      checkoutPreview: (body: { discountCode?: string } = {}) => post<CheckoutPreview>('/v1/store/checkout/preview', body),
+      checkoutPreview: (body: { discountCode?: string; governorate?: string } = {}) => post<CheckoutPreview>('/v1/store/checkout/preview', body),
+      placeOrder: (body: PlaceOrderBody) => post<Order>('/v1/store/orders', body),
+      orders: () => get<Order[]>('/v1/store/orders'),
+      order: (id: string) => get<Order>(`/v1/store/orders/${id}`),
+      cancelOrder: (id: string) => post<Order>(`/v1/store/orders/${id}/cancel`),
+      payOrder: (id: string) => post<StartPaymentResponse>(`/v1/store/orders/${id}/pay`),
       bundles: () => get<StoreBundle[]>('/v1/store/bundles'),
       categories: () => get<StoreCategory[]>('/v1/store/categories'),
     },

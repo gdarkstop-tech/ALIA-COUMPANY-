@@ -441,7 +441,7 @@ export type CartLine = {
 
 export type CartResponse = { lines: CartLine[]; subtotalPiasters: number; itemCount: number };
 
-export const checkoutPreviewBody = z.object({ discountCode: z.string().trim().max(24).optional() }).default({});
+export const checkoutPreviewBody = z.object({ discountCode: z.string().trim().max(24).optional(), governorate: z.enum(GOVERNORATES).optional() }).default({});
 
 export type CheckoutPreview = {
   lines: CartLine[];
