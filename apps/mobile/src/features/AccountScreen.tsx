@@ -81,6 +81,8 @@ export function AccountScreen({ experience }: { experience: 'patient' | 'clinici
         <View style={{ paddingHorizontal: spacing.lg }}>
           {experience === 'patient' ? (
             <>
+              <ListRow icon="calendar" title={t('booking.myAppointments')} onPress={() => router.push('/patient/appointments')} testID="my-appointments-row" />
+              <Divider />
               <ListRow icon="users" title={t('family.title')} subtitle={t('family.subtitle')} onPress={() => router.push('/patient/family')} />
               <Divider />
               <ListRow

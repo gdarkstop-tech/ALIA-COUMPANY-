@@ -114,6 +114,13 @@ export default function ClinicianToday() {
               <EmptyState compact icon="calendar" title={isNurse ? t('provider.visitsEmpty') : t('provider.appointmentsEmpty')} body={t('app.comingNext')} />
             </Card>
           </Section>
+          <Card onPress={() => router.push('/clinician/appointments')} testID="open-appointments" accessibilityLabel={t('booking.myAppointments')}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <Icon name="calendar" color="primary" />
+              <Text variant="callout" weight="semibold" style={{ flex: 1 }}>{t('booking.myAppointments')}</Text>
+              <Icon name="chevron-right" size={18} color="textTertiary" />
+            </View>
+          </Card>
           <Card onPress={() => router.push('/clinician/patients')} testID="open-shared-records" accessibilityLabel={t('copilot.dashboardCard')}>
             <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
               <Icon name="mci:account-multiple-outline" color="primary" />

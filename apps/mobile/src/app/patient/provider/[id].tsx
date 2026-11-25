@@ -40,7 +40,12 @@ export default function ProviderProfile() {
             <Text variant="title3" tabular>{money(p.feePiasters, locale)}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Button testID="book-now" label={t('care.bookNow')} icon="calendar" onPress={() => setSheet('book')} />
+            <Button
+              testID="book-now"
+              label={t('care.bookNow')}
+              icon="calendar"
+              onPress={() => (p.bookingAvailable ? router.push({ pathname: '/patient/book/[id]', params: { id: p.userId } }) : setSheet('book'))}
+            />
           </View>
         </View>
       }
@@ -127,6 +132,25 @@ export default function ProviderProfile() {
         </Card>
       </Section>
 
+      {p.bookingOptions.some((o) => o.kind !== 'NURSE_HOME_VISIT') ? (
+        <Section title={t('booking.chooseType')}>
+          <Card padded={false}>
+            {p.bookingOptions.filter((o) => o.kind !== 'NURSE_HOME_VISIT').map((o, i) => (
+              <View key={o.offeringId} style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center', padding: spacing.lg, borderTopWidth: i ? 1 : 0, borderTopColor: colors.divider }}>
+                <Icon name={o.kind === 'DOCTOR_CLINIC' ? 'mci:hospital-building' : o.kind === 'DOCTOR_ONLINE' ? 'video' : 'home'} color={o.bookable ? 'primary' : 'textTertiary'} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="callout" weight="medium">{t(`booking.kind_${o.kind}`)}</Text>
+                  <Text variant="caption" color="textTertiary">
+                    {o.bookable ? t('common.minutes', { count: o.durationMinutes }) : t(`booking.block_${o.blockedReason ?? 'NOT_OFFERED'}` as 'booking.block_NOT_OFFERED')}
+                  </Text>
+                </View>
+                <Text variant="callout" weight="semibold" tabular>{money(o.pricePiasters, locale)}</Text>
+              </View>
+            ))}
+          </Card>
+        </Section>
+      ) : null}
+
       {p.services.length ? (
         <Section title={t('care.services')}>
           <Card padded={false}>
@@ -170,8 +194,9 @@ export default function ProviderProfile() {
 
       <Button testID="share-record" label={t('shares.shareRecord')} icon="share-2" variant="secondary" onPress={() => setSharing(true)} />
       <ShareSheet providerUserId={p.userId} providerName={name} visible={sharing} onClose={() => setSharing(false)} />
-      <Sheet visible={sheet !== null} onClose={() => setSheet(null)} title={sheet === 'book' ? t('care.bookingSoonTitle') : t('care.joinWaitlist')} testID="booking-sheet">
-        <Notice tone="info" icon="calendar" body={t('care.bookingSoonBody')} />
+      <Sheet visible={sheet !== null} onClose={() => setSheet(null)} title={sheet === 'book' ? t('care.bookNow') : t('care.joinWaitlist')} testID="booking-sheet">
+        {/* Honest reason when booking is not possible; nothing is booked or charged. */}
+        <Notice tone="info" icon="calendar" body={sheet === 'book' ? t(`booking.block_${p.bookingUnavailableReason ?? 'NOT_OFFERED'}` as 'booking.block_NOT_OFFERED') : t('care.bookingSoonBody')} testID="booking-unavailable-reason" />
         <Button label={t('common.close')} variant="secondary" onPress={() => setSheet(null)} />
       </Sheet>
     </Screen>
