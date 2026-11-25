@@ -37,5 +37,15 @@ test('Flow D — TetraSol-only store with simulated checkout', async ({ page }) 
   await expect(byId(page, 'simulated-notice')).toContainText('no payment will be taken');
   await expect(byId(page, 'payment-status')).toHaveText('Not configured');
   await expect(byId(page, 'place-order')).toHaveAttribute('aria-disabled', 'true');
+  // Delivery address is collected, but nothing can be ordered while Paymob is not configured.
+  await expect(byId(page, 'delivery-governorate')).toBeVisible();
+  await byId(page, 'delivery-address').fill('12 Example Street, Building 4, Floor 2');
+  await expect(byId(page, 'place-order')).toHaveAttribute('aria-disabled', 'true');
+  await expect(byId(page, 'place-order')).toContainText('disabled until payments are configured');
   await shot(page, 'D04-checkout-preview');
+
+  // Order history exists and is honest: no orders were created.
+  await page.goto('/patient/orders');
+  await expect(byId(page, 'orders-screen')).toBeVisible();
+  await expect(byId(page, 'orders-empty')).toBeVisible();
 });

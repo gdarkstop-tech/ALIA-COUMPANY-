@@ -4,7 +4,9 @@
   API** only. No Paymob account, test or live, exists yet: the gateway is `NOT_CONFIGURED`,
   `commerce.checkout` is off, every delivery zone is off, and no real or sandbox payment was made.
 - Code: migration `0032_orders_payments.sql`; `apps/api/src/integrations/payments.ts`;
-  `apps/api/src/modules/orders/routes.ts`; `apps/api/src/modules/store/routes.ts` (preview).
+  `apps/api/src/modules/orders/routes.ts`; `apps/api/src/modules/store/routes.ts` (preview); mobile
+  `src/app/patient/checkout.tsx`, `src/app/patient/orders/*`, `src/features/store/orders.tsx`;
+  operations screens in the admin console (ADR 0023).
 - Tests: `apps/api/test/orders.test.ts` (21).
 - Sources (fetched 2026-11-25): developers.paymob.com — Create Intention, Unified Checkout
   (Redirection), Transaction callbacks, HMAC Transaction Callback, Transaction Inquiry (by

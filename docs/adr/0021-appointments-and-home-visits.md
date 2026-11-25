@@ -7,7 +7,7 @@
   `notify.ts`); mobile `src/app/patient/book/[id].tsx`, `src/app/patient/appointments/*`,
   `src/app/clinician/appointments.tsx`, `src/app/clinician/appointment/[id].tsx`,
   `src/app/clinician/booking-settings.tsx`, `src/features/booking/*`.
-- Tests: `apps/api/test/appointments.test.ts` (30).
+- Tests: `apps/api/test/appointments.test.ts` (31).
 
 ## Context
 Doctors and nurses had verified profiles, working hours and services, but nothing was bookable. Phase 8
