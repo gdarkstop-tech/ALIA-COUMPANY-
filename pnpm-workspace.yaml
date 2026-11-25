@@ -10,3 +10,10 @@ overrides:
   # -vc7v, -7qx7, -f3mh, -pc58, -rhh4, -vvgp; fixed in 16.4.5). Also pins the copy that better-auth
   # pulls in as an optional dependency.
   next: 16.4.6
+  # Security (2026-11-25 audit): fast-uri is used at runtime by Fastify's ajv compiler — patched
+  # releases for both lines in use (GHSA-w74x-v6f9-j3xg, -wjr9-j795-jxcr, -xhq7-xmqj-769h,
+  # -333x-w4r6-6crp). node-forge is pulled in only by the Expo CLI (dev server certificates), not by
+  # the app — patched release (13 advisories fixed in 1.4.1–1.4.3; GHSA-86w9-cpqp-85rv has no fix yet).
+  "fast-uri@3": 3.1.9
+  "fast-uri@4": 4.2.3
+  "node-forge@1": 1.4.3
