@@ -83,6 +83,8 @@ export function AccountScreen({ experience }: { experience: 'patient' | 'clinici
             <>
               <ListRow icon="calendar" title={t('booking.myAppointments')} onPress={() => router.push('/patient/appointments')} testID="my-appointments-row" />
               <Divider />
+              <ListRow icon="shopping-bag" title={t('orders.myOrders')} onPress={() => router.push('/patient/orders')} testID="my-orders-row" />
+              <Divider />
               <ListRow icon="users" title={t('family.title')} subtitle={t('family.subtitle')} onPress={() => router.push('/patient/family')} />
               <Divider />
               <ListRow
