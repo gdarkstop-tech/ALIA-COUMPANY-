@@ -72,4 +72,6 @@ version), run `pnpm release:check --submission` (must show 0 blockers).
 1. ~~E-mail and SMS adapters~~ — implemented in Phase 8 M1 (needs company accounts to go live).
 2. ~~TetraSol orders + Paymob~~ — implemented in Phase 8 M4/M5 against a mock; next: a real Paymob **sandbox** run with the company's test account.
 3. ~~Doctor booking, then nurse home visits~~ — implemented in Phase 8 M2/M3 (flags off until policies and licensing are confirmed).
+   ~~Admin Operations Center~~ — implemented in Phase 8 M6 ([ADR 0023](../adr/0023-operations-center.md)).
+   Next after the owner provides accounts: one real send per e-mail / SMS channel, then a Paymob **sandbox** order end to end (callback to a public URL, inquiry, refund), recorded in `docs/release/`; then the Expo SDK 57 patch updates with a native rebuild.
 4. Store financial-report import for the Finance Center (store proceeds).
